@@ -104,30 +104,3 @@ on conflict (id) do update set
   title = excluded.title,
   body = excluded.body,
   updated_at = ((extract(epoch from clock_timestamp()) * 1000)::bigint);
-
-insert into public.profiles (
-  id,
-  display_name,
-  email,
-  role,
-  membership_tier,
-  currency,
-  created_at,
-  updated_at
-)
-select
-  id,
-  coalesce(raw_user_meta_data ->> 'display_name', split_part(email, '@', 1)),
-  email,
-  'admin',
-  'permanent',
-  'CNY',
-  ((extract(epoch from created_at) * 1000)::bigint),
-  ((extract(epoch from clock_timestamp()) * 1000)::bigint)
-from auth.users
-where lower(email) = 'admin@example.invalid'
-on conflict (id) do update set
-  email = excluded.email,
-  role = 'admin',
-  membership_tier = 'permanent',
-  updated_at = excluded.updated_at;

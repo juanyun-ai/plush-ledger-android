@@ -167,13 +167,13 @@ fun SoftChip(
     Surface(
         modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        color = if (selected) color.copy(alpha = 0.15f) else palette.surface,
-        border = BorderStroke(1.dp, if (selected) color else palette.border),
+        color = if (selected) palette.rose.copy(alpha = 0.82f) else palette.surface,
+        border = BorderStroke(1.dp, if (selected) palette.rose else palette.border),
         shadowElevation = if (selected) 6.dp else 1.dp
     ) {
         Text(
             text = text,
-            color = if (selected) color else palette.ink,
+            color = if (selected) Color.White else palette.ink,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             fontWeight = FontWeight.SemiBold,
             maxLines = 1

@@ -61,6 +61,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     private var ledgerJob: Job? = null
     private var cooldownJob: Job? = null
     private var lastAvatarKey: String? = null
+    private val tabHistory = ArrayDeque<AppTab>()
 
     var state = androidx.compose.runtime.mutableStateOf(UiState())
         private set
@@ -90,9 +91,20 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun selectTab(tab: AppTab) {
+        if (tab == state.value.selectedTab) return
+        tabHistory.addLast(state.value.selectedTab)
         state.value = state.value.copy(selectedTab = tab, message = null)
         if (tab == AppTab.MY) refreshMailbox()
     }
+
+    fun navigateBack(): Boolean {
+        val previous = tabHistory.removeLastOrNull() ?: return false
+        state.value = state.value.copy(selectedTab = previous, message = null)
+        if (previous == AppTab.MY) refreshMailbox()
+        return true
+    }
+
+    fun hasTabHistory(): Boolean = tabHistory.isNotEmpty()
 
     fun showAuthPage(page: AuthPage) {
         state.value = state.value.copy(authPage = page, message = null)
@@ -527,6 +539,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             message = syncWarning ?: message,
             selectedTab = AppTab.HOME
         )
+        tabHistory.clear()
         observeLedger(session.userId)
     }
 

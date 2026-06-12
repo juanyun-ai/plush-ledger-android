@@ -3,6 +3,7 @@ package com.plushledger
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
@@ -41,6 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -431,6 +433,9 @@ private fun LockScreen(biometricAvailable: Boolean, onUnlockPin: (String) -> Uni
 private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean) {
     val state by viewModel.state
     val palette = LocalPlushPalette.current
+    BackHandler(enabled = state.selectedTab != AppTab.HOME || viewModel.hasTabHistory()) {
+        viewModel.navigateBack()
+    }
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         bottomBar = {
@@ -440,7 +445,14 @@ private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean)
                         selected = state.selectedTab == item.tab,
                         onClick = { viewModel.selectTab(item.tab) },
                         icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label, maxLines = 1) }
+                        label = { Text(item.label, maxLines = 1) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = androidx.compose.ui.graphics.Color.White,
+                            selectedTextColor = palette.rose,
+                            indicatorColor = palette.rose.copy(alpha = 0.82f),
+                            unselectedIconColor = palette.muted,
+                            unselectedTextColor = palette.muted
+                        )
                     )
                 }
             }
@@ -450,6 +462,9 @@ private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean)
             when (state.selectedTab) {
                 AppTab.HOME -> HomeScreen(
                     state.ledger,
+                    state.selectedDate,
+                    viewModel::changeMonth,
+                    viewModel::selectStatsDate,
                     viewModel::deleteTransaction,
                     onRecord = { viewModel.selectTab(AppTab.RECORD) },
                     onBills = { viewModel.selectTab(AppTab.BILLS) }

@@ -1,5 +1,6 @@
 .gradle/
 .gradle-user/
+.kotlin/
 build/
 */build/
 local.properties
@@ -8,3 +9,5 @@ captures/
 *.jks
 *.keystore
 *.apk
+keystore.properties
+secrets.properties

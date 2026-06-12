@@ -1,6 +1,7 @@
 package com.plushledger.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -144,6 +145,7 @@ private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP }
 @Composable
 fun MyScreen(state: UiState, biometricAvailable: Boolean, viewModel: LedgerViewModel) {
     var page by rememberSaveable { mutableStateOf(MyPage.ROOT) }
+    BackHandler(enabled = page != MyPage.ROOT) { page = MyPage.ROOT }
     LaunchedEffect(state.ledger.profile?.avatarKey) { viewModel.refreshAvatar() }
     when (page) {
         MyPage.ROOT -> MyRoot(
@@ -197,16 +199,20 @@ private fun MyRoot(state: UiState, onProfile: () -> Unit, onInbox: () -> Unit, o
             }
         }
         item {
-            PlushCard(Modifier.fillMaxWidth().clickable(onClick = onInbox)) {
-                MenuRow(Icons.Default.Inbox, "消息与建议", "官方通知和写给开发者", palette.moss)
+            PlushCard(Modifier.fillMaxWidth(), padding = 8.dp) {
+                Box(Modifier.fillMaxWidth().clickable(onClick = onInbox).padding(8.dp)) {
+                    MenuRow(Icons.Default.Inbox, "消息与建议", "官方通知和写给开发者", palette.moss)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                Box(Modifier.fillMaxWidth().clickable(onClick = onMembership).padding(8.dp)) {
+                    MenuRow(Icons.Default.Star, "会员权益", "永久会员 0.01 元", palette.rose)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                Box(Modifier.fillMaxWidth().clickable(onClick = onSettings).padding(8.dp)) {
+                    MenuRow(Icons.Default.Settings, "设置", "隐私、安全、同步与账号", palette.blue)
+                }
             }
         }
-        item {
-            PlushCard(Modifier.fillMaxWidth().clickable(onClick = onMembership)) {
-                MenuRow(Icons.Default.Star, "会员权益", "永久会员 0.01 元", palette.rose)
-            }
-        }
-        item { PlushCard(Modifier.fillMaxWidth().clickable(onClick = onSettings)) { MenuRow(Icons.Default.Settings, "设置", "隐私、安全、同步与账号", palette.blue) } }
         item {
             PlushCard {
                 Text(if (state.session?.accessToken != null) "云端账号" else "本地账号", fontWeight = FontWeight.Bold, color = palette.ink)

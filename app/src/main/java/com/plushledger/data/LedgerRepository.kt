@@ -26,27 +26,16 @@ class LedgerRepository(
         val now = now()
         val existingProfile = dao.getProfile(userId)
         if (existingProfile == null) {
-            val isAdmin = email.equals(ADMIN_EMAIL, ignoreCase = true)
             dao.upsertProfile(
                 ProfileEntity(
                     id = userId,
                     displayName = displayName,
                     phone = phone,
                     email = email,
-                    role = if (isAdmin) "admin" else "user",
-                    membershipTier = if (isAdmin) "permanent" else "free",
+                    role = "user",
+                    membershipTier = "free",
                     createdAt = now,
                     updatedAt = now
-                )
-            )
-        } else if (email.equals(ADMIN_EMAIL, ignoreCase = true) && existingProfile.role != "admin") {
-            dao.upsertProfile(
-                existingProfile.copy(
-                    email = email,
-                    role = "admin",
-                    membershipTier = "permanent",
-                    updatedAt = now,
-                    syncState = SYNC_DIRTY
                 )
             )
         }
@@ -189,7 +178,7 @@ class LedgerRepository(
 
         val session = sessionStore.currentSession()
         val avatarKey = if (session?.accessToken != null) {
-            supabaseClient.uploadAvatar(session.accessToken, userId, jpegBytes)
+            withFreshAccessToken { token -> supabaseClient.uploadAvatar(token, userId, jpegBytes) }
         } else {
             "file:${localFile.absolutePath}"
         }
@@ -197,19 +186,42 @@ class LedgerRepository(
         return if (avatarKey.startsWith("file:")) {
             "file://${localFile.absolutePath}"
         } else {
-            supabaseClient.createAvatarSignedUrl(session!!.accessToken!!, avatarKey)
+            withFreshAccessToken { token -> supabaseClient.createAvatarSignedUrl(token, avatarKey) }
         }
     }
 
     suspend fun resolveAvatarUrl(avatarKey: String?): String? {
         if (avatarKey.isNullOrBlank() || avatarKey == "sunny") return null
         if (avatarKey.startsWith("file:")) return "file://${avatarKey.removePrefix("file:")}"
-        val token = sessionStore.currentSession()?.accessToken ?: return null
-        return runCatching { supabaseClient.createAvatarSignedUrl(token, avatarKey) }.getOrNull()
+        if (sessionStore.currentSession()?.accessToken == null) return null
+        return runCatching {
+            withFreshAccessToken { token -> supabaseClient.createAvatarSignedUrl(token, avatarKey) }
+        }.getOrNull()
     }
 
     suspend fun latestAppVersion(): AppVersionInfo? =
         if (supabaseClient.isConfigured) supabaseClient.fetchLatestAppVersion() else null
+
+    private suspend fun <T> withFreshAccessToken(block: suspend (String) -> T): T {
+        val session = sessionStore.currentSession() ?: error("登录状态已失效，请重新登录")
+        val token = session.accessToken ?: error("本地模式不需要云端凭证")
+        return runCatching { block(token) }.recoverCatching { error ->
+            val authExpired = error.message.orEmpty().let {
+                it.contains("401") || it.contains("403") || it.contains("exp", ignoreCase = true) ||
+                    it.contains("jwt", ignoreCase = true)
+            }
+            if (!authExpired) throw error
+            val refreshToken = session.refreshToken ?: error("登录已过期，请退出后重新登录")
+            val refreshed = supabaseClient.refreshSession(refreshToken)
+            val updated = session.copy(
+                userId = refreshed.userId,
+                accessToken = refreshed.accessToken,
+                refreshToken = refreshed.refreshToken
+            )
+            sessionStore.saveSession(updated)
+            block(refreshed.accessToken)
+        }.getOrThrow()
+    }
 
     suspend fun markAgreementAccepted(userId: String) {
         val current = dao.getProfile(userId) ?: return
@@ -460,7 +472,6 @@ data class OfficialMessage(
     val createdAt: Long
 )
 
-private const val ADMIN_EMAIL = "admin@example.invalid"
 private const val CURRENT_AGREEMENT_VERSION = "2026-06-12"
 
 private val expenseColors = listOf("#C86F7E", "#D99676", "#B86A77", "#E0A0A8", "#A86E89")
