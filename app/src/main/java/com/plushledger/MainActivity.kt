@@ -1,0 +1,454 @@
+package com.plushledger
+
+import android.os.Bundle
+import android.view.WindowManager
+import androidx.activity.compose.setContent
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.plushledger.ui.AppTab
+import com.plushledger.ui.AuthPage
+import com.plushledger.ui.FabricBackdrop
+import com.plushledger.ui.InboxScreen
+import com.plushledger.ui.LedgerViewModel
+import com.plushledger.ui.LocalPlushPalette
+import com.plushledger.ui.MyScreen
+import com.plushledger.ui.PlushButton
+import com.plushledger.ui.PlushCard
+import com.plushledger.ui.PlushLedgerTheme
+import com.plushledger.ui.RecordScreen
+import com.plushledger.ui.StatsScreen
+import com.plushledger.ui.HomeScreen
+import kotlinx.coroutines.delay
+
+class MainActivity : FragmentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            PlushLedgerApp(
+                biometricAvailable = isBiometricAvailable(),
+                requestBiometric = { onSuccess -> showBiometricPrompt(onSuccess) },
+                setSecure = { secure ->
+                    if (secure) {
+                        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                }
+            )
+        }
+    }
+
+    private fun isBiometricAvailable(): Boolean =
+        BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
+            BiometricManager.BIOMETRIC_SUCCESS
+
+    private fun showBiometricPrompt(onSuccess: () -> Unit) {
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onSuccess()
+            }
+        )
+        prompt.authenticate(
+            BiometricPrompt.PromptInfo.Builder()
+                .setTitle("解锁绒绒账本")
+                .setSubtitle("使用系统生物识别")
+                .setNegativeButtonText("取消")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                .build()
+        )
+    }
+}
+
+@Composable
+private fun PlushLedgerApp(
+    biometricAvailable: Boolean,
+    requestBiometric: (() -> Unit) -> Unit,
+    setSecure: (Boolean) -> Unit,
+    viewModel: LedgerViewModel = viewModel()
+) {
+    val state by viewModel.state
+    val snackbar = remember { SnackbarHostState() }
+
+    DisposableEffect(state.secureScreen) {
+        setSecure(state.secureScreen)
+        onDispose { }
+    }
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbar.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
+
+    PlushLedgerTheme(state.darkMode) {
+        Surface(Modifier.fillMaxSize(), color = LocalPlushPalette.current.background) {
+            Box(Modifier.fillMaxSize()) {
+                FabricBackdrop()
+                when {
+                    state.session == null -> AuthScreen(state, viewModel)
+                    state.locked -> LockScreen(
+                        biometricAvailable = biometricAvailable && state.biometricUnlock,
+                        onUnlockPin = viewModel::unlockWithPin,
+                        onBiometric = { requestBiometric { viewModel.unlockWithBiometric() } }
+                    )
+                    else -> LedgerShell(viewModel, biometricAvailable)
+                }
+                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewModel) {
+    state.passwordSetupSession?.let {
+        PasswordSetupScreen(
+            isRegistration = state.passwordSetupIsRegistration,
+            busy = state.isBusy,
+            onSave = viewModel::finishPasswordSetup
+        )
+        return
+    }
+
+    var mode by rememberSaveable { mutableStateOf("email") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var otp by rememberSaveable { mutableStateOf("") }
+    var localName by rememberSaveable { mutableStateOf("") }
+    var localPassword by rememberSaveable { mutableStateOf("") }
+    var showAgreement by rememberSaveable { mutableStateOf(false) }
+    var agreementRead by rememberSaveable { mutableStateOf(false) }
+    var agreementChecked by rememberSaveable { mutableStateOf(false) }
+    val palette = LocalPlushPalette.current
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        item {
+            Image(
+                painter = painterResource(R.drawable.brand_logo),
+                contentDescription = "绒绒记账",
+                modifier = Modifier.fillMaxWidth(0.76f).heightIn(max = 210.dp).clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Fit
+            )
+            Spacer(Modifier.height(14.dp))
+            Text("绒绒记账", fontSize = 30.sp, fontWeight = FontWeight.Black, color = palette.ink)
+            Spacer(Modifier.height(18.dp))
+            PlushCard(Modifier.fillMaxWidth()) {
+                TabRow(selectedTabIndex = if (mode == "email") 0 else 1) {
+                    Tab(mode == "email", { mode = "email" }, text = { Text("邮箱账号") })
+                    Tab(mode == "local", { mode = "local" }, text = { Text("本地模式") })
+                }
+                Spacer(Modifier.height(14.dp))
+                if (mode == "local") {
+                    OutlinedTextField(localName, { localName = it.take(32) }, label = { Text("用户名") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        localPassword,
+                        { localPassword = it.take(64) },
+                        label = { Text("密码") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password)
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    PlushButton("进入本地账本", Icons.Default.Lock, Modifier.fillMaxWidth()) {
+                        viewModel.signInLocal(localName, localPassword)
+                    }
+                } else {
+                    when (state.authPage) {
+                        AuthPage.LOGIN -> {
+                            OutlinedTextField(email, { email = it.trim() }, label = { Text("邮箱") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedTextField(
+                                password,
+                                { password = it.take(64) },
+                                label = { Text("密码") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation()
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            PlushButton("登录", Icons.Default.Lock, Modifier.fillMaxWidth(), enabled = !state.isBusy) {
+                                viewModel.signInWithPassword(email, password)
+                            }
+                            TextButton(onClick = { viewModel.showAuthPage(AuthPage.RESET) }, modifier = Modifier.fillMaxWidth()) { Text("忘记密码") }
+                            OutlinedButton(onClick = { viewModel.showAuthPage(AuthPage.REGISTER) }, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.size(8.dp))
+                                Text("注册新账号")
+                            }
+                            SocialLoginRow(viewModel)
+                        }
+                        AuthPage.REGISTER, AuthPage.RESET -> {
+                            val isReset = state.authPage == AuthPage.RESET
+                            Text(if (isReset) "重置密码" else "注册账号", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = palette.ink)
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedTextField(email, { email = it.trim() }, label = { Text("邮箱") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                            Spacer(Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(otp, { otp = it.filter(Char::isDigit).take(8) }, label = { Text("验证码") }, modifier = Modifier.weight(1f), singleLine = true)
+                                PlushButton(
+                                    text = when {
+                                        state.otpCooldown > 0 -> "${state.otpCooldown}s"
+                                        state.isBusy -> "发送中"
+                                        else -> "获取验证码"
+                                    },
+                                    icon = Icons.Default.Refresh,
+                                    modifier = Modifier.weight(0.8f),
+                                    enabled = state.otpCooldown == 0 && !state.isBusy
+                                ) { viewModel.sendRegistrationOtp(email, isReset) }
+                            }
+                            if (!isReset) {
+                                Spacer(Modifier.height(10.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = agreementChecked,
+                                        onCheckedChange = { if (agreementRead) agreementChecked = it },
+                                        enabled = agreementRead
+                                    )
+                                    TextButton(onClick = { showAgreement = true }) { Text("用户协议与隐私政策") }
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            PlushButton(
+                                text = if (isReset) "验证并重置密码" else "注册",
+                                icon = Icons.Default.Shield,
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !state.isBusy && (isReset || agreementChecked)
+                            ) { viewModel.verifyRegistrationOtp(email, otp, isReset) }
+                            TextButton(onClick = { viewModel.showAuthPage(AuthPage.LOGIN) }, modifier = Modifier.fillMaxWidth()) { Text("返回登录") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAgreement) {
+        AgreementDialog(
+            onDismiss = { showAgreement = false },
+            onAccepted = {
+                agreementRead = true
+                agreementChecked = true
+                showAgreement = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun SocialLoginRow(viewModel: LedgerViewModel) {
+    Spacer(Modifier.height(14.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        OutlinedButton(onClick = { viewModel.socialLogin("微信") }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Default.ChatBubble, contentDescription = null)
+            Spacer(Modifier.size(6.dp))
+            Text("微信")
+        }
+        OutlinedButton(onClick = { viewModel.socialLogin("QQ") }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Default.AlternateEmail, contentDescription = null)
+            Spacer(Modifier.size(6.dp))
+            Text("QQ")
+        }
+    }
+}
+
+@Composable
+private fun AgreementDialog(onDismiss: () -> Unit, onAccepted: () -> Unit) {
+    var seconds by remember { mutableIntStateOf(3) }
+    LaunchedEffect(Unit) {
+        while (seconds > 0) {
+            delay(1_000)
+            seconds--
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("用户协议与隐私政策", fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item { Text("1. 云端账号的数据将存储于 Supabase 托管数据库；本地模式的数据仅保存在当前设备。") }
+                item { Text("2. 我们处理邮箱、昵称、账目、预算和设备同步所必需的信息，不用于广告画像。") }
+                item { Text("3. 用户可导出数据、退出登录或申请注销；注销后云端数据将删除且无法恢复。") }
+                item { Text("4. 用户应妥善保护密码和验证码，不得利用本应用从事违法活动。") }
+                item { Text("5. 邮件服务商会处理验证码投递信息，但不会获得账目内容。") }
+                item { Text("6. 服务和条款发生重要变化时，将通过应用信箱通知。") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = {
+            TextButton(onClick = onAccepted, enabled = seconds == 0) {
+                Text(if (seconds == 0) "我已知晓" else "我已知晓（${seconds}s）")
+            }
+        }
+    )
+}
+
+@Composable
+private fun PasswordSetupScreen(isRegistration: Boolean, busy: Boolean, onSave: (String, String) -> Unit) {
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmation by rememberSaveable { mutableStateOf("") }
+    val palette = LocalPlushPalette.current
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        PlushCard(Modifier.fillMaxWidth()) {
+            Text(if (isRegistration) "设置登录密码" else "设置新密码", fontWeight = FontWeight.Black, fontSize = 24.sp, color = palette.ink)
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(password, { password = it.take(64) }, label = { Text("8-64 位字母与数字") }, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation(), singleLine = true)
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(confirmation, { confirmation = it.take(64) }, label = { Text("再次输入密码") }, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation(), singleLine = true)
+            Spacer(Modifier.height(14.dp))
+            PlushButton("保存密码", Icons.Default.Lock, Modifier.fillMaxWidth(), enabled = !busy) { onSave(password, confirmation) }
+        }
+    }
+}
+
+@Composable
+private fun LockScreen(biometricAvailable: Boolean, onUnlockPin: (String) -> Unit, onBiometric: () -> Unit) {
+    var pin by rememberSaveable { mutableStateOf("") }
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        PlushCard(Modifier.fillMaxWidth()) {
+            Text("账本已锁定", fontWeight = FontWeight.Black, fontSize = 26.sp)
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(12) }, label = { Text("PIN") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation())
+            Spacer(Modifier.height(14.dp))
+            PlushButton("解锁", Icons.Default.Lock, Modifier.fillMaxWidth()) { onUnlockPin(pin) }
+            if (biometricAvailable) TextButton(onClick = onBiometric, modifier = Modifier.fillMaxWidth()) { Text("使用生物识别") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean) {
+    val state by viewModel.state
+    val palette = LocalPlushPalette.current
+    val title = when (state.selectedTab) {
+        AppTab.HOME -> "绒绒记账"
+        AppTab.RECORD -> "记账"
+        AppTab.STATS -> "统计"
+        AppTab.INBOX -> "信箱"
+        AppTab.MY -> "我的"
+    }
+    Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(title, fontWeight = FontWeight.Black, color = palette.ink) }
+            )
+        },
+        bottomBar = {
+            NavigationBar(containerColor = palette.surface) {
+                navItems.forEach { item ->
+                    NavigationBarItem(
+                        selected = state.selectedTab == item.tab,
+                        onClick = { viewModel.selectTab(item.tab) },
+                        icon = { Icon(item.icon, contentDescription = item.label) },
+                        label = { Text(item.label, maxLines = 1) }
+                    )
+                }
+            }
+        }
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            when (state.selectedTab) {
+                AppTab.HOME -> HomeScreen(state.ledger, viewModel::deleteTransaction)
+                AppTab.RECORD -> RecordScreen(
+                    state = state,
+                    onAdd = viewModel::addTransaction,
+                    onBudget = viewModel::setBudget,
+                    onAddAccount = viewModel::addAccount,
+                    onDeleteAccount = viewModel::deleteAccount,
+                    onAddCategory = viewModel::addCategory,
+                    onDeleteCategory = viewModel::deleteCategory,
+                    onDeleteTransaction = viewModel::deleteTransaction
+                )
+                AppTab.STATS -> StatsScreen(state.ledger, state.selectedDate, viewModel::changeMonth, viewModel::selectStatsDate)
+                AppTab.INBOX -> InboxScreen(state.officialMessages, state.isBusy, viewModel::submitFeedback)
+                AppTab.MY -> MyScreen(state, biometricAvailable, viewModel)
+            }
+        }
+    }
+}
+
+private data class NavItem(val tab: AppTab, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
+private val navItems = listOf(
+    NavItem(AppTab.HOME, "首页", Icons.Default.Home),
+    NavItem(AppTab.RECORD, "记账", Icons.Default.Add),
+    NavItem(AppTab.STATS, "统计", Icons.Default.PieChart),
+    NavItem(AppTab.INBOX, "信箱", Icons.Default.Inbox),
+    NavItem(AppTab.MY, "我的", Icons.Default.Person)
+)
