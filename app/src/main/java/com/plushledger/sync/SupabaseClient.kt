@@ -22,6 +22,16 @@ data class RemoteSession(
     val refreshToken: String?
 )
 
+data class AppVersionInfo(
+    val versionCode: Int,
+    val versionName: String,
+    val apkUrl: String,
+    val sha256: String,
+    val fileSizeBytes: Long,
+    val releaseNotes: String,
+    val isMandatory: Boolean
+)
+
 class SupabaseClient {
     private val baseUrl = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
     private val anonKey = BuildConfig.SUPABASE_ANON_KEY.trim()
@@ -108,6 +118,48 @@ class SupabaseClient {
     suspend fun fetchOfficialMessages(accessToken: String): List<JSONObject> =
         fetchRows("official_messages", accessToken)
 
+    suspend fun fetchLatestAppVersion(): AppVersionInfo? {
+        val text = request(
+            method = "GET",
+            path = "/rest/v1/app_versions?select=version_code,version_name,apk_url,sha256,file_size_bytes,release_notes,is_mandatory&platform=eq.android&active=eq.true&order=version_code.desc&limit=1"
+        )
+        val rows = if (text.isBlank()) JSONArray() else JSONArray(text)
+        if (rows.length() == 0) return null
+        return rows.getJSONObject(0).let {
+            AppVersionInfo(
+                versionCode = it.getInt("version_code"),
+                versionName = it.getString("version_name"),
+                apkUrl = it.getString("apk_url"),
+                sha256 = it.getString("sha256"),
+                fileSizeBytes = it.getLong("file_size_bytes"),
+                releaseNotes = it.optString("release_notes"),
+                isMandatory = it.optBoolean("is_mandatory", false)
+            )
+        }
+    }
+
+    suspend fun uploadAvatar(accessToken: String, userId: String, bytes: ByteArray): String {
+        val path = "$userId/avatar.jpg"
+        uploadBinary(
+            path = "/storage/v1/object/avatars/$path",
+            bytes = bytes,
+            contentType = "image/jpeg",
+            accessToken = accessToken
+        )
+        return path
+    }
+
+    suspend fun createAvatarSignedUrl(accessToken: String, path: String): String {
+        val json = requestObject(
+            method = "POST",
+            path = "/storage/v1/object/sign/avatars/$path",
+            body = JSONObject().put("expiresIn", 3600),
+            accessToken = accessToken
+        )
+        val signed = json.optString("signedURL").ifBlank { json.getString("signedUrl") }
+        return "$baseUrl/storage/v1$signed"
+    }
+
     suspend fun upsertRows(table: String, rows: List<*>, accessToken: String) {
         val payload = JSONArray()
         rows.filterNotNull().forEach { payload.put(it.toJson()) }
@@ -171,6 +223,32 @@ class SupabaseClient {
         }
         if (code !in 200..299) error("Supabase 请求失败 $code: $text")
         text
+    }
+
+    private suspend fun uploadBinary(
+        path: String,
+        bytes: ByteArray,
+        contentType: String,
+        accessToken: String
+    ) = withContext(Dispatchers.IO) {
+        check(isConfigured) { "Supabase 未配置" }
+        val connection = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 20_000
+            readTimeout = 30_000
+            doOutput = true
+            setRequestProperty("apikey", anonKey)
+            setRequestProperty("Authorization", "Bearer $accessToken")
+            setRequestProperty("Content-Type", contentType)
+            setRequestProperty("x-upsert", "true")
+            setFixedLengthStreamingMode(bytes.size)
+        }
+        connection.outputStream.use { it.write(bytes) }
+        val code = connection.responseCode
+        if (code !in 200..299) {
+            val text = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            error("头像上传失败 $code: $text")
+        }
     }
 }
 

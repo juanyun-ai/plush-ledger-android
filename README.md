@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-`v0.5.0`，Android 8.0 及以上。
+`v0.6.0`，Android 8.0 及以上。
 
 ## 当前交付
 
@@ -14,6 +14,8 @@
 - PIN 使用 PBKDF2 salted hash 保存，登录 token 使用 Android Keystore 加密。
 - 支持可选隐私防截图、可选 PIN/生物识别解锁、CSV 导出、后台同步和 Supabase RLS。
 - 已加入“我的”、个人资料、日夜模式、应用信箱、用户建议、永久会员入口和管理员铭牌。
+- 支持启动时自动检查新版本，校验 SHA-256 后下载并交给 Android 系统安装器更新。
+- 支持从系统相册选择头像；云端账号的头像保存在用户隔离的 Supabase 私有桶中。
 - 当前已绑定 Supabase 项目：`plush-ledger` (`YOUR_PROJECT_ID`)。
 
 ## 数据保存逻辑
@@ -87,11 +89,12 @@ https://help.aliyun.com/zh/direct-mail/billing-methods
 
 - 官方消息保存在 Supabase 的 `official_messages` 表。
 - 用户建议保存在 `feedback` 表，项目所有者可在 Supabase Table Editor 查看；目前不会自动转发到邮箱。
+- 后台入口：打开 Supabase 项目，进入 `Table Editor`，选择 `feedback` 表即可查看邮箱、内容、提交时间和处理状态。
 - `admin@example.invalid` 已在云端设置为 `admin` 和 `permanent`，客户端不能自行把普通账号升级为管理员或会员。
 
 ## 版本状态
 
-`v0.5.0` 已完成邮箱密码登录、本地模式、Room 本地存储、Supabase 云同步、统计、预算、分类与账户管理、信箱和账号注销。
+`v0.6.0` 在 v0.5 基础上新增应用内更新、相册头像、独立账单页，并按 3D 毛绒参考图重构首页、记账、统计、我的和五项底部导航。
 
 微信/QQ 登录、微信/支付宝支付和支付账单自动导入需要开放平台及商户资质，目前只保留入口和安全提示，不会伪造登录或扣款结果。
 
@@ -119,3 +122,11 @@ app/build/outputs/apk/debug/app-debug.apk
 - `supabase/migrations/`：数据库结构和安全迁移。
 - `supabase/functions/`：账号注销等云端函数。
 - `CHANGELOG.md`：版本更新记录。
+
+## 应用内更新
+
+- 版本信息保存在 Supabase `app_versions` 表。
+- APK 文件保存在公开的 `app-releases` Storage bucket；公开内容仅为安装包，不包含源码和用户数据。
+- App 下载完成后会核对版本表中的 SHA-256，校验失败不会打开安装器。
+- Android 不允许普通 App 静默安装，用户仍需在系统安装器中确认。
+- 所有可覆盖安装的 APK 必须使用同一签名密钥；正式上架前需要改用长期保存的 release keystore。

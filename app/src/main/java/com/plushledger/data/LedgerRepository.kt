@@ -2,6 +2,7 @@ package com.plushledger.data
 
 import android.content.Context
 import com.plushledger.auth.SessionStore
+import com.plushledger.sync.AppVersionInfo
 import com.plushledger.sync.SupabaseClient
 import java.io.File
 import java.time.Instant
@@ -179,6 +180,36 @@ class LedgerRepository(
         )
         sessionStore.updateDisplayName(displayName.trim().ifBlank { current.displayName })
     }
+
+    suspend fun saveAvatar(userId: String, jpegBytes: ByteArray): String {
+        val profile = dao.getProfile(userId) ?: error("用户资料不存在")
+        val avatarDir = File(context.filesDir, "avatars").apply { mkdirs() }
+        val localFile = File(avatarDir, "$userId.jpg")
+        withContext(Dispatchers.IO) { localFile.writeBytes(jpegBytes) }
+
+        val session = sessionStore.currentSession()
+        val avatarKey = if (session?.accessToken != null) {
+            supabaseClient.uploadAvatar(session.accessToken, userId, jpegBytes)
+        } else {
+            "file:${localFile.absolutePath}"
+        }
+        updateProfile(userId, profile.displayName, avatarKey)
+        return if (avatarKey.startsWith("file:")) {
+            "file://${localFile.absolutePath}"
+        } else {
+            supabaseClient.createAvatarSignedUrl(session!!.accessToken!!, avatarKey)
+        }
+    }
+
+    suspend fun resolveAvatarUrl(avatarKey: String?): String? {
+        if (avatarKey.isNullOrBlank() || avatarKey == "sunny") return null
+        if (avatarKey.startsWith("file:")) return "file://${avatarKey.removePrefix("file:")}"
+        val token = sessionStore.currentSession()?.accessToken ?: return null
+        return runCatching { supabaseClient.createAvatarSignedUrl(token, avatarKey) }.getOrNull()
+    }
+
+    suspend fun latestAppVersion(): AppVersionInfo? =
+        if (supabaseClient.isConfigured) supabaseClient.fetchLatestAppVersion() else null
 
     suspend fun markAgreementAccepted(userId: String) {
         val current = dao.getProfile(userId) ?: return

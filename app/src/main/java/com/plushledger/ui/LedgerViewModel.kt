@@ -1,8 +1,12 @@
 package com.plushledger.ui
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.plushledger.BuildConfig
 import com.plushledger.PlushLedgerApplication
 import com.plushledger.auth.AuthChannel
 import com.plushledger.auth.AuthOutcome
@@ -10,6 +14,8 @@ import com.plushledger.auth.UserSession
 import com.plushledger.data.LedgerState
 import com.plushledger.data.Money
 import com.plushledger.data.OfficialMessage
+import com.plushledger.sync.AppVersionInfo
+import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -18,7 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-enum class AppTab { HOME, RECORD, STATS, INBOX, MY }
+enum class AppTab { HOME, BILLS, RECORD, STATS, MY }
 enum class AuthPage { LOGIN, REGISTER, RESET }
 
 data class UiState(
@@ -33,6 +39,9 @@ data class UiState(
     val selectedDate: LocalDate = LocalDate.now(),
     val ledger: LedgerState = LedgerState(),
     val officialMessages: List<OfficialMessage> = emptyList(),
+    val avatarUrl: String? = null,
+    val availableUpdate: AppVersionInfo? = null,
+    val isCheckingUpdate: Boolean = false,
     val message: String? = null,
     val syncLabel: String = "本地保存",
     val secureScreen: Boolean = false,
@@ -51,6 +60,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     private val sessions = container.sessionStore
     private var ledgerJob: Job? = null
     private var cooldownJob: Job? = null
+    private var lastAvatarKey: String? = null
 
     var state = androidx.compose.runtime.mutableStateOf(UiState())
         private set
@@ -73,11 +83,15 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                 if (!state.value.locked) observeLedger(it.userId)
             }
         }
+        viewModelScope.launch {
+            delay(2_000)
+            checkForUpdates(silent = true)
+        }
     }
 
     fun selectTab(tab: AppTab) {
         state.value = state.value.copy(selectedTab = tab, message = null)
-        if (tab == AppTab.INBOX) refreshMailbox()
+        if (tab == AppTab.MY) refreshMailbox()
     }
 
     fun showAuthPage(page: AuthPage) {
@@ -319,9 +333,10 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateProfile(displayName: String, avatarKey: String) {
+    fun updateProfile(displayName: String) {
         val session = state.value.session ?: return
         viewModelScope.launch {
+            val avatarKey = state.value.ledger.profile?.avatarKey ?: "sunny"
             ledger.updateProfile(session.userId, displayName, avatarKey)
             app.enqueueImmediateSync()
             state.value = state.value.copy(
@@ -329,6 +344,60 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                 message = "资料已保存"
             )
         }
+    }
+
+    fun uploadAvatar(uri: Uri) {
+        val session = state.value.session ?: return
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true, message = null)
+            runCatching {
+                val jpeg = readAvatarJpeg(uri)
+                ledger.saveAvatar(session.userId, jpeg)
+            }.onSuccess { url ->
+                app.enqueueImmediateSync()
+                state.value = state.value.copy(isBusy = false, avatarUrl = url, message = "头像已保存")
+            }.onFailure {
+                state.value = state.value.copy(isBusy = false, message = "头像保存失败：${it.message.orEmpty().take(80)}")
+            }
+        }
+    }
+
+    fun refreshAvatar() {
+        val avatarKey = state.value.ledger.profile?.avatarKey
+        viewModelScope.launch {
+            state.value = state.value.copy(avatarUrl = ledger.resolveAvatarUrl(avatarKey))
+        }
+    }
+
+    fun checkForUpdates(silent: Boolean = false) {
+        if (state.value.isCheckingUpdate) return
+        viewModelScope.launch {
+            state.value = state.value.copy(isCheckingUpdate = true)
+            runCatching { ledger.latestAppVersion() }
+                .onSuccess { latest ->
+                    val newer = latest?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+                    state.value = state.value.copy(
+                        isCheckingUpdate = false,
+                        availableUpdate = newer,
+                        message = when {
+                            newer != null -> if (silent) null else "发现新版本 ${newer.versionName}"
+                            !silent -> "当前已是最新版本 ${BuildConfig.VERSION_NAME}"
+                            else -> null
+                        }
+                    )
+                }
+                .onFailure {
+                    state.value = state.value.copy(
+                        isCheckingUpdate = false,
+                        message = if (silent) null else "版本检查失败，请稍后重试"
+                    )
+                }
+        }
+    }
+
+    fun dismissUpdate() {
+        if (state.value.availableUpdate?.isMandatory == true) return
+        state.value = state.value.copy(availableUpdate = null)
     }
 
     fun syncNow() {
@@ -400,6 +469,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     fun signOut() {
         auth.signOut()
         ledgerJob?.cancel()
+        lastAvatarKey = null
         state.value = UiState(
             secureScreen = sessions.isSecureScreenEnabled(),
             lockOnLaunch = sessions.isLockOnLaunchEnabled(),
@@ -465,7 +535,31 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         ledgerJob = viewModelScope.launch {
             ledger.observeState(userId, state.value.selectedMonth).collectLatest {
                 state.value = state.value.copy(ledger = it)
+                val avatarKey = it.profile?.avatarKey
+                if (avatarKey != lastAvatarKey) {
+                    lastAvatarKey = avatarKey
+                    state.value = state.value.copy(avatarUrl = ledger.resolveAvatarUrl(avatarKey))
+                }
             }
+        }
+    }
+
+    private suspend fun readAvatarJpeg(uri: Uri): ByteArray = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val resolver = getApplication<Application>().contentResolver
+        val source = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取图片")
+        require(source.size <= 12 * 1024 * 1024) { "图片不能超过 12MB" }
+        val bitmap = BitmapFactory.decodeByteArray(source, 0, source.size) ?: error("图片格式不支持")
+        val maxSide = maxOf(bitmap.width, bitmap.height)
+        val scaled = if (maxSide > 1024) {
+            val ratio = 1024f / maxSide
+            Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt(), true)
+        } else bitmap
+        ByteArrayOutputStream().use { output ->
+            check(scaled.compress(Bitmap.CompressFormat.JPEG, 86, output)) { "图片压缩失败" }
+            output.toByteArray()
+        }.also {
+            if (scaled !== bitmap) scaled.recycle()
+            bitmap.recycle()
         }
     }
 }

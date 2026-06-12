@@ -31,10 +31,11 @@ import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -82,13 +83,18 @@ import com.plushledger.ui.PlushButton
 import com.plushledger.ui.PlushCard
 import com.plushledger.ui.PlushLedgerTheme
 import com.plushledger.ui.RecordScreen
+import com.plushledger.ui.BillsScreen
 import com.plushledger.ui.StatsScreen
 import com.plushledger.ui.HomeScreen
+import com.plushledger.update.AppUpdateManager
 import kotlinx.coroutines.delay
 
 class MainActivity : FragmentActivity() {
+    private lateinit var updateManager: AppUpdateManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        updateManager = AppUpdateManager(this)
         setContent {
             PlushLedgerApp(
                 biometricAvailable = isBiometricAvailable(),
@@ -99,9 +105,20 @@ class MainActivity : FragmentActivity() {
                     } else {
                         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     }
-                }
+                },
+                downloadUpdate = updateManager::download
             )
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        updateManager.register()
+    }
+
+    override fun onStop() {
+        updateManager.unregister()
+        super.onStop()
     }
 
     private fun isBiometricAvailable(): Boolean =
@@ -132,6 +149,7 @@ private fun PlushLedgerApp(
     biometricAvailable: Boolean,
     requestBiometric: (() -> Unit) -> Unit,
     setSecure: (Boolean) -> Unit,
+    downloadUpdate: (com.plushledger.sync.AppVersionInfo) -> Unit,
     viewModel: LedgerViewModel = viewModel()
 ) {
     val state by viewModel.state
@@ -162,6 +180,25 @@ private fun PlushLedgerApp(
                     else -> LedgerShell(viewModel, biometricAvailable)
                 }
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp))
+                state.availableUpdate?.let { update ->
+                    AlertDialog(
+                        onDismissRequest = { viewModel.dismissUpdate() },
+                        title = { Text("发现新版本 ${update.versionName}", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(update.releaseNotes.ifBlank { "修复问题并改进使用体验。" })
+                                Text("安装包约 ${update.fileSizeBytes / 1024 / 1024}MB", color = LocalPlushPalette.current.muted)
+                                Text("下载完成后将由 Android 系统安装器确认更新。", color = LocalPlushPalette.current.muted)
+                            }
+                        },
+                        dismissButton = if (update.isMandatory) null else {
+                            { TextButton(onClick = viewModel::dismissUpdate) { Text("稍后") } }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { downloadUpdate(update) }) { Text("下载更新") }
+                        }
+                    )
+                }
             }
         }
     }
@@ -390,25 +427,12 @@ private fun LockScreen(biometricAvailable: Boolean, onUnlockPin: (String) -> Uni
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean) {
     val state by viewModel.state
     val palette = LocalPlushPalette.current
-    val title = when (state.selectedTab) {
-        AppTab.HOME -> "绒绒记账"
-        AppTab.RECORD -> "记账"
-        AppTab.STATS -> "统计"
-        AppTab.INBOX -> "信箱"
-        AppTab.MY -> "我的"
-    }
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(title, fontWeight = FontWeight.Black, color = palette.ink) }
-            )
-        },
         bottomBar = {
             NavigationBar(containerColor = palette.surface) {
                 navItems.forEach { item ->
@@ -424,7 +448,13 @@ private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean)
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.selectedTab) {
-                AppTab.HOME -> HomeScreen(state.ledger, viewModel::deleteTransaction)
+                AppTab.HOME -> HomeScreen(
+                    state.ledger,
+                    viewModel::deleteTransaction,
+                    onRecord = { viewModel.selectTab(AppTab.RECORD) },
+                    onBills = { viewModel.selectTab(AppTab.BILLS) }
+                )
+                AppTab.BILLS -> BillsScreen(state.ledger, state.selectedDate, viewModel::changeMonth, viewModel::selectStatsDate, viewModel::deleteTransaction)
                 AppTab.RECORD -> RecordScreen(
                     state = state,
                     onAdd = viewModel::addTransaction,
@@ -436,7 +466,6 @@ private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean)
                     onDeleteTransaction = viewModel::deleteTransaction
                 )
                 AppTab.STATS -> StatsScreen(state.ledger, state.selectedDate, viewModel::changeMonth, viewModel::selectStatsDate)
-                AppTab.INBOX -> InboxScreen(state.officialMessages, state.isBusy, viewModel::submitFeedback)
                 AppTab.MY -> MyScreen(state, biometricAvailable, viewModel)
             }
         }
@@ -447,8 +476,8 @@ private data class NavItem(val tab: AppTab, val label: String, val icon: android
 
 private val navItems = listOf(
     NavItem(AppTab.HOME, "首页", Icons.Default.Home),
-    NavItem(AppTab.RECORD, "记账", Icons.Default.Add),
+    NavItem(AppTab.BILLS, "账单", Icons.Default.ReceiptLong),
+    NavItem(AppTab.RECORD, "记账", Icons.Default.EditNote),
     NavItem(AppTab.STATS, "统计", Icons.Default.PieChart),
-    NavItem(AppTab.INBOX, "信箱", Icons.Default.Inbox),
     NavItem(AppTab.MY, "我的", Icons.Default.Person)
 )

@@ -55,15 +55,15 @@ data class PlushPalette(
 )
 
 private val LightPalette = PlushPalette(
-    background = Color(0xFFFFF8F4),
-    surface = Color(0xFFFFFDFC),
-    surfaceAlt = Color(0xFFF1F7F0),
-    ink = Color(0xFF3D3033),
-    muted = Color(0xFF7B6C70),
-    rose = Color(0xFFC86F7E),
-    moss = Color(0xFF5E9B83),
-    blue = Color(0xFF6488B8),
-    border = Color(0xFFE8D9D5)
+    background = Color(0xFFFFFBF7),
+    surface = Color(0xFFFFFFFF),
+    surfaceAlt = Color(0xFFFFF4E4),
+    ink = Color(0xFF4A392F),
+    muted = Color(0xFF9C8D84),
+    rose = Color(0xFFFF9F2D),
+    moss = Color(0xFF69C69E),
+    blue = Color(0xFF82AEE8),
+    border = Color(0xFFF2DDC4)
 )
 
 private val DarkPalette = PlushPalette(
@@ -72,7 +72,7 @@ private val DarkPalette = PlushPalette(
     surfaceAlt = Color(0xFF27312C),
     ink = Color(0xFFF5EDEC),
     muted = Color(0xFFC7B9BC),
-    rose = Color(0xFFE38A98),
+    rose = Color(0xFFFFA53D),
     moss = Color(0xFF78B59A),
     blue = Color(0xFF85A8D4),
     border = Color(0xFF514347)
@@ -114,20 +114,7 @@ fun PlushLedgerTheme(darkMode: Boolean, content: @Composable () -> Unit) {
 @Composable
 fun FabricBackdrop() {
     val palette = LocalPlushPalette.current
-    Canvas(Modifier.fillMaxSize().background(palette.background)) {
-        val step = 24.dp.toPx()
-        var x = -size.height
-        while (x < size.width) {
-            drawLine(
-                color = palette.border.copy(alpha = 0.22f),
-                start = Offset(x, 0f),
-                end = Offset(x + size.height, size.height),
-                strokeWidth = 1.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            x += step
-        }
-    }
+    Canvas(Modifier.fillMaxSize().background(palette.background)) {}
 }
 
 @Composable
@@ -138,7 +125,7 @@ fun PlushCard(
 ) {
     val palette = LocalPlushPalette.current
     Card(
-        modifier = modifier.shadow(10.dp, RoundedCornerShape(8.dp), spotColor = palette.rose.copy(alpha = 0.16f)),
+        modifier = modifier.shadow(10.dp, RoundedCornerShape(8.dp), spotColor = palette.rose.copy(alpha = 0.12f)),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = palette.surface),
         border = BorderStroke(1.dp, palette.border)
@@ -180,13 +167,13 @@ fun SoftChip(
     Surface(
         modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        color = if (selected) color else palette.surface,
+        color = if (selected) color.copy(alpha = 0.15f) else palette.surface,
         border = BorderStroke(1.dp, if (selected) color else palette.border),
         shadowElevation = if (selected) 6.dp else 1.dp
     ) {
         Text(
             text = text,
-            color = if (selected) Color.White else palette.ink,
+            color = if (selected) color else palette.ink,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
