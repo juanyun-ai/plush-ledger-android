@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -114,8 +115,8 @@ fun HomeScreen(
         item {
             BrandHeader(
                 title = "绒绒记账",
-                subtitle = "早上好，今天也要好好记录呀～",
-                trailing = month.format(DateTimeFormatter.ofPattern("yyyy年M月")),
+                subtitle = "把日子，记成喜欢的样子",
+                trailing = month.format(DateTimeFormatter.ofPattern("yyyy.MM")),
                 onTrailingClick = { showCalendar = !showCalendar }
             )
         }
@@ -206,8 +207,8 @@ fun BillsScreen(
         item {
             BrandHeader(
                 "账单",
-                "早上好，今天也要好好记录呀～",
-                month.format(DateTimeFormatter.ofPattern("yyyy年M月")),
+                "每一笔，都有来处",
+                month.format(DateTimeFormatter.ofPattern("yyyy.MM")),
                 onTrailingClick = { showCalendar = !showCalendar }
             )
         }
@@ -256,12 +257,21 @@ private fun BrandHeader(
     onTrailingClick: (() -> Unit)? = null
 ) {
     val palette = LocalPlushPalette.current
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Image(painterResource(R.drawable.ic_launcher), contentDescription = null, modifier = Modifier.size(76.dp), contentScale = ContentScale.Fit)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, color = palette.ink, fontSize = 28.sp, fontWeight = FontWeight.Black)
-            Text(subtitle, color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Row(Modifier.fillMaxWidth().heightIn(min = 68.dp), verticalAlignment = Alignment.CenterVertically) {
+        Image(painterResource(R.drawable.ic_launcher), contentDescription = null, modifier = Modifier.size(58.dp), contentScale = ContentScale.Fit)
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+            if (title == "绒绒记账") {
+                Image(
+                    painterResource(R.drawable.brand_wordmark),
+                    contentDescription = "绒绒记账",
+                    modifier = Modifier.fillMaxWidth(0.92f).height(34.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                Text(title, color = palette.ink, fontSize = 27.sp, fontWeight = FontWeight.Black)
+            }
+            Text(subtitle, color = palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         trailing?.let {
             Surface(
@@ -270,13 +280,12 @@ private fun BrandHeader(
                 color = palette.surface,
                 border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
             ) {
-                Row(Modifier.padding(horizontal = 9.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = palette.muted, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text(it, color = palette.ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+                Row(Modifier.padding(horizontal = 7.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = palette.rose, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(it, color = palette.ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1)
                     if (onTrailingClick != null) {
-                        Spacer(Modifier.width(3.dp))
-                        Icon(Icons.Default.ExpandMore, contentDescription = "选择日期", tint = palette.muted, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.ExpandMore, contentDescription = "选择日期", tint = palette.muted, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -302,6 +311,7 @@ private fun SummaryNumber(label: String, value: Long, color: Color, modifier: Mo
 @Composable
 fun RecordScreen(
     state: UiState,
+    onBack: () -> Unit,
     onAdd: (String, String, String?, String?, String?, String, LocalDate) -> Unit,
     onBudget: (String, String?) -> Unit,
     onAddAccount: (String, String) -> Unit,
@@ -345,8 +355,12 @@ fun RecordScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Box(Modifier.fillMaxWidth().height(54.dp), contentAlignment = Alignment.Center) {
-                Text("记一笔", color = palette.ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
+            Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
+                Column {
+                    Text("记一笔", color = palette.ink, fontSize = 25.sp, fontWeight = FontWeight.Black)
+                    Text("记下此刻，轻松一点", color = palette.muted, fontSize = 11.sp)
+                }
             }
         }
         item {
@@ -527,7 +541,6 @@ private fun FoldSection(
 @Composable
 fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) -> Unit, onDate: (LocalDate) -> Unit) {
     var showCalendar by rememberSaveable { mutableStateOf(false) }
-    var chartMode by rememberSaveable { mutableStateOf("donut") }
     val palette = LocalPlushPalette.current
     val categoryMap = ledger.categories.associateBy { it.id }
     val dayTransactions = ledger.transactions.filter { it.localDate() == selectedDate }
@@ -540,8 +553,8 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
         item {
             BrandHeader(
                 "统计",
-                "用数据了解自己，让每一笔都更有意义～",
-                YearMonth.from(selectedDate).format(DateTimeFormatter.ofPattern("yyyy年M月")),
+                "让数字讲清生活",
+                YearMonth.from(selectedDate).format(DateTimeFormatter.ofPattern("yyyy.MM")),
                 onTrailingClick = { showCalendar = !showCalendar }
             )
         }
@@ -558,14 +571,19 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
             }
         }
         item {
-            PlushCard {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SoftChip("环形图", chartMode == "donut", palette.rose) { chartMode = "donut" }
-                    SoftChip("柱状图", chartMode == "bar", palette.blue) { chartMode = "bar" }
+            if (daySpend.isEmpty()) {
+                EmptyPanel("这一天还没有支出")
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PlushCard(Modifier.weight(1f), padding = 10.dp) {
+                        Text("分类占比", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        DonutChart(daySpend, compact = true)
+                    }
+                    PlushCard(Modifier.weight(1f), padding = 10.dp) {
+                        Text("支出走势", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        BarChart(daySpend, compact = true)
+                    }
                 }
-                Spacer(Modifier.height(14.dp))
-                if (daySpend.isEmpty()) Text("这一天还没有支出", color = palette.muted)
-                else if (chartMode == "donut") DonutChart(daySpend) else BarChart(daySpend)
             }
         }
         item {
@@ -637,12 +655,12 @@ private fun CalendarSelector(
 }
 
 @Composable
-private fun DonutChart(spend: List<CategorySpend>) {
+private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false) {
     val palette = LocalPlushPalette.current
     val total = spend.sumOf { it.amountMinor }.coerceAtLeast(1)
-    Box(Modifier.fillMaxWidth().height(210.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(168.dp)) {
-            val stroke = 26.dp.toPx()
+    Box(Modifier.fillMaxWidth().height(if (compact) 150.dp else 210.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(if (compact) 116.dp else 168.dp)) {
+            val stroke = (if (compact) 18.dp else 26.dp).toPx()
             var start = -90f
             spend.take(6).forEach {
                 val sweep = it.amountMinor.toFloat() / total * 360f
@@ -652,17 +670,17 @@ private fun DonutChart(spend: List<CategorySpend>) {
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("支出", color = palette.muted, fontSize = 12.sp)
-            Text(Money.formatCny(total), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 20.sp)
+            Text(Money.formatCny(total), color = palette.ink, fontWeight = FontWeight.Black, fontSize = if (compact) 13.sp else 20.sp, maxLines = 1)
         }
     }
 }
 
 @Composable
-private fun BarChart(spend: List<CategorySpend>) {
+private fun BarChart(spend: List<CategorySpend>, compact: Boolean = false) {
     val max = spend.maxOf { it.amountMinor }.coerceAtLeast(1)
     val bars = spend.take(6)
-    Canvas(Modifier.fillMaxWidth().height(200.dp)) {
-        val gap = 12.dp.toPx()
+    Canvas(Modifier.fillMaxWidth().height(if (compact) 150.dp else 200.dp)) {
+        val gap = (if (compact) 6.dp else 12.dp).toPx()
         val width = (size.width - gap * (bars.size + 1)) / bars.size.coerceAtLeast(1)
         bars.forEachIndexed { index, item ->
             val height = item.amountMinor.toFloat() / max * size.height * 0.8f

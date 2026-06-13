@@ -157,12 +157,14 @@ class LedgerRepository(
         dao.softDeleteCategory(id, userId, now())
     }
 
-    suspend fun updateProfile(userId: String, displayName: String, avatarKey: String) {
+    suspend fun updateProfile(userId: String, displayName: String, age: Int?, birthDate: String?, gender: String?) {
         val current = dao.getProfile(userId) ?: return
         dao.upsertProfile(
             current.copy(
                 displayName = displayName.trim().ifBlank { current.displayName },
-                avatarKey = avatarKey,
+                age = age,
+                birthDate = birthDate,
+                gender = gender,
                 updatedAt = now(),
                 syncState = SYNC_DIRTY
             )
@@ -182,21 +184,34 @@ class LedgerRepository(
         } else {
             "file:${localFile.absolutePath}"
         }
-        updateProfile(userId, profile.displayName, avatarKey)
-        return if (avatarKey.startsWith("file:")) {
-            "file://${localFile.absolutePath}"
-        } else {
-            withFreshAccessToken { token -> supabaseClient.createAvatarSignedUrl(token, avatarKey) }
-        }
+        dao.upsertProfile(profile.copy(avatarKey = avatarKey, updatedAt = now(), syncState = SYNC_DIRTY))
+        return "file://${localFile.absolutePath}"
     }
 
     suspend fun resolveAvatarUrl(avatarKey: String?): String? {
         if (avatarKey.isNullOrBlank() || avatarKey == "sunny") return null
+        sessionStore.currentSession()?.userId?.let { userId ->
+            val cached = File(File(context.filesDir, "avatars"), "$userId.jpg")
+            if (cached.exists()) return "file://${cached.absolutePath}"
+        }
         if (avatarKey.startsWith("file:")) return "file://${avatarKey.removePrefix("file:")}"
         if (sessionStore.currentSession()?.accessToken == null) return null
         return runCatching {
             withFreshAccessToken { token -> supabaseClient.createAvatarSignedUrl(token, avatarKey) }
         }.getOrNull()
+    }
+
+    suspend fun updateProfileIdentity(userId: String, email: String?, phone: String?) {
+        val current = dao.getProfile(userId) ?: return
+        dao.upsertProfile(
+            current.copy(
+                email = email,
+                phone = phone,
+                updatedAt = now(),
+                syncState = SYNC_DIRTY
+            )
+        )
+        sessionStore.updateIdentity(email, phone)
     }
 
     suspend fun latestAppVersion(): AppVersionInfo? =
@@ -483,6 +498,9 @@ private fun JSONObject.toProfile() = ProfileEntity(
     avatarKey = optString("avatar_key", "sunny"),
     phone = nullableString("phone"),
     email = nullableString("email"),
+    age = nullableInt("age"),
+    birthDate = nullableString("birth_date"),
+    gender = nullableString("gender"),
     role = optString("role", "user"),
     membershipTier = optString("membership_tier", "free"),
     wechatBound = optBoolean("wechat_bound", false),
@@ -567,4 +585,5 @@ private fun JSONObject.toBudget() = BudgetEntity(
 )
 
 private fun JSONObject.nullableString(name: String): String? = if (isNull(name)) null else optString(name)
+private fun JSONObject.nullableInt(name: String): Int? = if (isNull(name)) null else optInt(name)
 private fun JSONObject.nullableLong(name: String): Long? = if (isNull(name)) null else optLong(name)

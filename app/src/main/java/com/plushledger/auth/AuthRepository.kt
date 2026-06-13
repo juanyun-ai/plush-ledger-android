@@ -130,6 +130,32 @@ class AuthRepository(
         }.getOrElse { AuthOutcome.Failed(it.toFriendlyAuthMessage("密码设置失败")) }
     }
 
+    suspend fun requestIdentityChange(channel: AuthChannel, identifier: String): AuthOutcome {
+        val session = sessionStore.currentSession() ?: return AuthOutcome.Failed("请先登录云端账号")
+        val token = session.accessToken ?: return AuthOutcome.Failed("本地模式不支持换绑")
+        val cleaned = identifier.trim()
+        if (channel == AuthChannel.EMAIL && !cleaned.isValidEmail()) return AuthOutcome.Failed("请输入正确的邮箱地址")
+        if (channel == AuthChannel.PHONE && !cleaned.startsWith("+") ) return AuthOutcome.Failed("手机号请使用国际格式，例如 +8613800138000")
+        return runCatching {
+            supabaseClient.requestIdentityChange(token, channel, cleaned)
+            AuthOutcome.OtpSent(if (channel == AuthChannel.EMAIL) "验证码已发送到新邮箱" else "验证码已发送到新手机号")
+        }.getOrElse { AuthOutcome.Failed(it.toFriendlyAuthMessage("验证码发送失败")) }
+    }
+
+    suspend fun verifyIdentityChange(channel: AuthChannel, identifier: String, code: String): AuthOutcome {
+        val session = sessionStore.currentSession() ?: return AuthOutcome.Failed("请先登录云端账号")
+        val token = session.accessToken ?: return AuthOutcome.Failed("本地模式不支持换绑")
+        val cleaned = identifier.trim()
+        if (code.trim().length < 4) return AuthOutcome.Failed("验证码不完整")
+        return runCatching {
+            supabaseClient.verifyIdentityChange(token, channel, cleaned, code.trim())
+            val identity = supabaseClient.fetchCurrentIdentity(token)
+            val updated = session.copy(email = identity.email, phone = identity.phone)
+            sessionStore.saveSession(updated)
+            AuthOutcome.SignedIn(updated, if (channel == AuthChannel.EMAIL) "邮箱换绑成功" else "手机号换绑成功")
+        }.getOrElse { AuthOutcome.Failed(it.toFriendlyAuthMessage("换绑验证失败")) }
+    }
+
     fun signInWithPin(pin: String): AuthOutcome {
         val session = sessionStore.currentSession() ?: return AuthOutcome.Failed("还没有本地会话，请先用手机或邮箱进入")
         return if (sessionStore.verifyPin(pin)) {

@@ -345,16 +345,52 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateProfile(displayName: String) {
+    fun updateProfile(displayName: String, ageText: String, birthDate: String?, gender: String?) {
         val session = state.value.session ?: return
+        val age = ageText.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
+        if (ageText.isNotBlank() && (age == null || age !in 0..150)) {
+            state.value = state.value.copy(message = "年龄需要填写 0-150 的整数")
+            return
+        }
         viewModelScope.launch {
-            val avatarKey = state.value.ledger.profile?.avatarKey ?: "sunny"
-            ledger.updateProfile(session.userId, displayName, avatarKey)
+            ledger.updateProfile(session.userId, displayName, age, birthDate, gender)
             app.enqueueImmediateSync()
             state.value = state.value.copy(
                 session = sessions.currentSession(),
                 message = "资料已保存"
             )
+        }
+    }
+
+    fun requestIdentityChange(channelName: String, identifier: String) {
+        if (state.value.otpCooldown > 0 || state.value.isBusy) return
+        val channel = if (channelName == "email") AuthChannel.EMAIL else AuthChannel.PHONE
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true, message = null)
+            when (val result = auth.requestIdentityChange(channel, identifier)) {
+                is AuthOutcome.OtpSent -> {
+                    state.value = state.value.copy(isBusy = false, message = result.message)
+                    startOtpCooldown()
+                }
+                is AuthOutcome.Failed -> state.value = state.value.copy(isBusy = false, message = result.message)
+                else -> state.value = state.value.copy(isBusy = false)
+            }
+        }
+    }
+
+    fun verifyIdentityChange(channelName: String, identifier: String, code: String) {
+        val channel = if (channelName == "email") AuthChannel.EMAIL else AuthChannel.PHONE
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true, message = null)
+            when (val result = auth.verifyIdentityChange(channel, identifier, code)) {
+                is AuthOutcome.SignedIn -> {
+                    ledger.updateProfileIdentity(result.session.userId, result.session.email, result.session.phone)
+                    app.enqueueImmediateSync()
+                    state.value = state.value.copy(session = result.session, isBusy = false, message = result.message)
+                }
+                is AuthOutcome.Failed -> state.value = state.value.copy(isBusy = false, message = result.message)
+                else -> state.value = state.value.copy(isBusy = false)
+            }
         }
     }
 

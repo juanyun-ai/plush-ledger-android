@@ -1,5 +1,6 @@
 package com.plushledger.ui
 
+import android.app.DatePickerDialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.PickVisualMediaRequest
@@ -76,6 +77,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -87,6 +89,8 @@ import com.plushledger.BuildConfig
 import com.plushledger.R
 import com.plushledger.data.OfficialMessage
 import java.time.Instant
+import java.time.LocalDate
+import java.time.Period
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
@@ -146,7 +150,6 @@ private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP }
 fun MyScreen(state: UiState, biometricAvailable: Boolean, viewModel: LedgerViewModel) {
     var page by rememberSaveable { mutableStateOf(MyPage.ROOT) }
     BackHandler(enabled = page != MyPage.ROOT) { page = MyPage.ROOT }
-    LaunchedEffect(state.ledger.profile?.avatarKey) { viewModel.refreshAvatar() }
     when (page) {
         MyPage.ROOT -> MyRoot(
             state,
@@ -155,7 +158,15 @@ fun MyScreen(state: UiState, biometricAvailable: Boolean, viewModel: LedgerViewM
             onSettings = { page = MyPage.SETTINGS },
             onMembership = { page = MyPage.MEMBERSHIP }
         )
-        MyPage.PROFILE -> ProfileScreen(state, onBack = { page = MyPage.ROOT }, onSave = viewModel::updateProfile, onAvatar = viewModel::uploadAvatar, onBind = viewModel::socialLogin)
+        MyPage.PROFILE -> ProfileScreen(
+            state = state,
+            onBack = { page = MyPage.ROOT },
+            onSave = viewModel::updateProfile,
+            onAvatar = viewModel::uploadAvatar,
+            onBind = viewModel::socialLogin,
+            onSendIdentityCode = viewModel::requestIdentityChange,
+            onVerifyIdentity = viewModel::verifyIdentityChange
+        )
         MyPage.INBOX -> Column(Modifier.fillMaxSize()) {
             BackHeader("消息与建议", onBack = { page = MyPage.ROOT })
             InboxScreen(state.officialMessages, state.isBusy, viewModel::submitFeedback)
@@ -173,7 +184,12 @@ private fun MyRoot(state: UiState, onProfile: () -> Unit, onInbox: () -> Unit, o
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("绒绒记账", fontSize = 28.sp, fontWeight = FontWeight.Black, color = palette.ink)
+                Image(
+                    painterResource(R.drawable.brand_wordmark),
+                    contentDescription = "绒绒记账",
+                    modifier = Modifier.width(178.dp).height(42.dp),
+                    contentScale = ContentScale.Fit
+                )
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "设置", tint = palette.ink) }
             }
@@ -223,14 +239,33 @@ private fun MyRoot(state: UiState, onProfile: () -> Unit, onInbox: () -> Unit, o
                 )
             }
         }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                Text("认真生活，也认真爱自己", color = palette.muted, fontSize = 12.sp)
+            }
+        }
     }
 }
 
 @Composable
-private fun ProfileScreen(state: UiState, onBack: () -> Unit, onSave: (String) -> Unit, onAvatar: (android.net.Uri) -> Unit, onBind: (String) -> Unit) {
+@OptIn(ExperimentalLayoutApi::class)
+private fun ProfileScreen(
+    state: UiState,
+    onBack: () -> Unit,
+    onSave: (String, String, String?, String?) -> Unit,
+    onAvatar: (android.net.Uri) -> Unit,
+    onBind: (String) -> Unit,
+    onSendIdentityCode: (String, String) -> Unit,
+    onVerifyIdentity: (String, String, String) -> Unit
+) {
     val palette = LocalPlushPalette.current
     val profile = state.ledger.profile
+    val context = LocalContext.current
     var nickname by rememberSaveable(profile?.displayName) { mutableStateOf(profile?.displayName ?: state.session?.displayName.orEmpty()) }
+    var age by rememberSaveable(profile?.age) { mutableStateOf(profile?.age?.toString().orEmpty()) }
+    var birthDate by rememberSaveable(profile?.birthDate) { mutableStateOf(profile?.birthDate.orEmpty()) }
+    var gender by rememberSaveable(profile?.gender) { mutableStateOf(profile?.gender ?: "prefer_not") }
+    var identityChannel by rememberSaveable { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(onAvatar) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { BackHeader("我的资料", onBack) }
@@ -250,14 +285,55 @@ private fun ProfileScreen(state: UiState, onBack: () -> Unit, onSave: (String) -
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(nickname, { nickname = it.take(24) }, label = { Text("昵称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(12.dp))
-                PlushButton("保存资料", Icons.Default.Save, Modifier.fillMaxWidth()) { onSave(nickname) }
+                OutlinedTextField(
+                    age,
+                    { age = it.filter(Char::isDigit).take(3) },
+                    label = { Text("年龄") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        val initial = runCatching { LocalDate.parse(birthDate) }.getOrDefault(LocalDate.now().minusYears(20))
+                        DatePickerDialog(
+                            context,
+                            { _, year, month, day ->
+                                val selected = LocalDate.of(year, month + 1, day)
+                                birthDate = selected.toString()
+                                age = Period.between(selected, LocalDate.now()).years.coerceAtLeast(0).toString()
+                            },
+                            initial.year,
+                            initial.monthValue - 1,
+                            initial.dayOfMonth
+                        ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Badge, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (birthDate.isBlank()) "选择生日" else "生日  $birthDate")
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("性别", color = palette.muted, fontSize = 12.sp)
+                Spacer(Modifier.height(6.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("female" to "女", "male" to "男", "other" to "其他", "prefer_not" to "不公开").forEach { (key, label) ->
+                        SoftChip(label, gender == key, palette.rose) { gender = key }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                PlushButton("保存资料", Icons.Default.Save, Modifier.fillMaxWidth()) {
+                    onSave(nickname, age, birthDate.ifBlank { null }, gender)
+                }
             }
         }
         item {
             PlushCard {
                 InfoRow(Icons.Default.Badge, "身份", membershipLabel(profile?.role, profile?.membershipTier))
-                InfoRow(Icons.Default.Phone, "手机号", profile?.phone ?: "未绑定")
-                InfoRow(Icons.Default.Email, "邮箱", profile?.email ?: state.session?.email ?: "本地账号")
+                IdentityRow(Icons.Default.Phone, "手机号", profile?.phone ?: state.session?.phone ?: "未绑定", state.session?.accessToken != null) { identityChannel = "phone" }
+                IdentityRow(Icons.Default.Email, "邮箱", profile?.email ?: state.session?.email ?: "本地账号", state.session?.accessToken != null) { identityChannel = "email" }
             }
         }
         item {
@@ -266,6 +342,16 @@ private fun ProfileScreen(state: UiState, onBack: () -> Unit, onSave: (String) -
                 BindRow("QQ", profile?.qqBound == true) { onBind("QQ绑定") }
             }
         }
+    }
+    identityChannel?.let { channel ->
+        IdentityChangeDialog(
+            channel = channel,
+            cooldown = state.otpCooldown,
+            busy = state.isBusy,
+            onDismiss = { identityChannel = null },
+            onSend = { onSendIdentityCode(channel, it) },
+            onVerify = { value, code -> onVerifyIdentity(channel, value, code) }
+        )
     }
 }
 
@@ -477,6 +563,76 @@ private fun InfoRow(icon: ImageVector, label: String, value: String) {
 }
 
 @Composable
+private fun IdentityRow(icon: ImageVector, label: String, value: String, enabled: Boolean, onChange: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = palette.blue)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, color = palette.muted, fontSize = 12.sp)
+            Text(value, color = palette.ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        TextButton(onClick = onChange, enabled = enabled) { Text(if (enabled) "换绑" else "本地模式") }
+    }
+}
+
+@Composable
+private fun IdentityChangeDialog(
+    channel: String,
+    cooldown: Int,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSend: (String) -> Unit,
+    onVerify: (String, String) -> Unit
+) {
+    var value by rememberSaveable(channel) { mutableStateOf("") }
+    var code by rememberSaveable(channel) { mutableStateOf("") }
+    val isEmail = channel == "email"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isEmail) "换绑邮箱" else "换绑手机号", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    if (isEmail) "验证码会发送到新邮箱。为保护账号，原邮箱可能也会收到安全通知。"
+                    else "手机号请填写国际格式，例如 +8613800138000。",
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(
+                    value,
+                    { value = it.trim().take(80) },
+                    label = { Text(if (isEmail) "新邮箱" else "新手机号") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = if (isEmail) KeyboardType.Email else KeyboardType.Phone)
+                )
+                OutlinedButton(
+                    onClick = { onSend(value) },
+                    enabled = !busy && cooldown == 0 && value.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (cooldown > 0) "${cooldown}s 后可重发" else "获取验证码")
+                }
+                OutlinedTextField(
+                    code,
+                    { code = it.filter(Char::isDigit).take(8) },
+                    label = { Text("验证码") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = {
+            TextButton(onClick = { onVerify(value, code) }, enabled = !busy && value.isNotBlank() && code.length >= 4) {
+                Text("确认换绑")
+            }
+        }
+    )
+}
+
+@Composable
 private fun BindRow(provider: String, bound: Boolean, onBind: () -> Unit) {
     val palette = LocalPlushPalette.current
     Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -489,12 +645,19 @@ private fun BindRow(provider: String, bound: Boolean, onBind: () -> Unit) {
 
 @Composable
 private fun Avatar(url: String?, size: androidx.compose.ui.unit.Dp) {
-    val palette = LocalPlushPalette.current
     Box(Modifier.size(size).clip(CircleShape).background(Color(0xFFFFC85C)), contentAlignment = Alignment.Center) {
         if (url.isNullOrBlank()) {
             Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.58f))
         } else {
-            AsyncImage(model = url, contentDescription = "用户头像", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            AsyncImage(
+                model = url,
+                contentDescription = "用户头像",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                placeholder = painterResource(R.drawable.ic_launcher),
+                error = painterResource(R.drawable.ic_launcher),
+                fallback = painterResource(R.drawable.ic_launcher)
+            )
         }
     }
 }

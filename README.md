@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.6.5-FF9F2D?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.7.0-FF9F2D?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -17,11 +17,13 @@
 ## 功能
 
 - 收入、支出、转账、分类、账户、预算与搜索。
-- 首页概览、日期分组账单、日历筛选、环形图和柱状图统计。
+- 参考图风格的四项底栏、独立记账页、日期分组账单和可交互日历。
+- 环形图与柱状图并列统计，每页使用独立且与场景匹配的短标语。
 - Room 本地优先存储，离线仍可正常记账。
 - 邮箱验证码注册、密码登录和独立本地模式。
 - 登录后使用 Supabase 同步账本、资料和私有头像。
-- 相册头像、昵称、应用信箱、用户反馈和管理员/会员身份。
+- 稳定的本地头像缓存、昵称、年龄、生日、性别和邮箱/手机号换绑。
+- 应用信箱、用户反馈和管理员/会员身份。
 - PIN、生物识别、隐私防截图、数据导出和账号注销。
 - 自动检查版本、校验 APK SHA-256 并交由 Android 系统安装器更新。
 
@@ -74,6 +76,13 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载后必须通过版本表中的 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.7.0
+
+- 重做首页、账单、统计、记账和“我的”页面，品牌名统一为“绒绒记账”。
+- 修复头像切换页面时短暂消失的问题。
+- 新增年龄、生日、性别资料，以及邮箱和手机号换绑入口。
+- 记账页改为独立页面，系统返回手势会回到上一页。
 
 Android 不允许普通 App 静默安装，用户仍需要在系统安装器中确认。正式发行时请使用长期保存的 release keystore，后续版本必须保持相同签名。
 

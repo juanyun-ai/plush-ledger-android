@@ -22,6 +22,11 @@ data class RemoteSession(
     val refreshToken: String?
 )
 
+data class RemoteIdentity(
+    val email: String?,
+    val phone: String?
+)
+
 data class AppVersionInfo(
     val versionCode: Int,
     val versionName: String,
@@ -78,6 +83,30 @@ class SupabaseClient {
             path = "/auth/v1/user",
             body = JSONObject().put("password", password),
             accessToken = accessToken
+        )
+    }
+
+    suspend fun requestIdentityChange(accessToken: String, channel: AuthChannel, identifier: String) {
+        val body = JSONObject().put(
+            if (channel == AuthChannel.EMAIL) "email" else "phone",
+            identifier
+        )
+        requestObject("PUT", "/auth/v1/user", body, accessToken)
+    }
+
+    suspend fun verifyIdentityChange(accessToken: String, channel: AuthChannel, identifier: String, token: String) {
+        val body = JSONObject()
+            .put("type", if (channel == AuthChannel.EMAIL) "email_change" else "phone_change")
+            .put("token", token)
+            .put(if (channel == AuthChannel.EMAIL) "email" else "phone", identifier)
+        requestObject("POST", "/auth/v1/verify", body, accessToken)
+    }
+
+    suspend fun fetchCurrentIdentity(accessToken: String): RemoteIdentity {
+        val user = requestObject("GET", "/auth/v1/user", accessToken = accessToken)
+        return RemoteIdentity(
+            email = user.optString("email").takeIf(String::isNotBlank),
+            phone = user.optString("phone").takeIf(String::isNotBlank)
         )
     }
 
@@ -265,6 +294,9 @@ private fun Any.toJson(): JSONObject = when (this) {
         .put("avatar_key", avatarKey)
         .put("phone", phone)
         .put("email", email)
+        .put("age", age)
+        .put("birth_date", birthDate)
+        .put("gender", gender)
         .put("wechat_bound", wechatBound)
         .put("qq_bound", qqBound)
         .put("agreement_version", agreementVersion)

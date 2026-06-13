@@ -9,7 +9,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_launcher"
-        android:label="绒绒账本"
+        android:label="绒绒记账"
         android:supportsRtl="true"
         android:theme="@style/Theme.PlushLedger">
         <activity

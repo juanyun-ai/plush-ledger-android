@@ -46,6 +46,11 @@ class SessionStore(private val secureStore: SecureStore) {
         secureStore.putString("display_name", displayName)
     }
 
+    fun updateIdentity(email: String?, phone: String?) {
+        secureStore.putString("email", email)
+        secureStore.putString("phone", phone)
+    }
+
     fun clearSession() {
         secureStore.remove("user_id", "display_name", "access_token", "refresh_token", "phone", "email")
     }

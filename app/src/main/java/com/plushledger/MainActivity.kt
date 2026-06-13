@@ -137,7 +137,7 @@ class MainActivity : FragmentActivity() {
         )
         prompt.authenticate(
             BiometricPrompt.PromptInfo.Builder()
-                .setTitle("解锁绒绒账本")
+                .setTitle("解锁绒绒记账")
                 .setSubtitle("使用系统生物识别")
                 .setNegativeButtonText("取消")
                 .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
@@ -439,21 +439,23 @@ private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean)
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         bottomBar = {
-            NavigationBar(containerColor = palette.surface) {
-                navItems.forEach { item ->
-                    NavigationBarItem(
-                        selected = state.selectedTab == item.tab,
-                        onClick = { viewModel.selectTab(item.tab) },
-                        icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label, maxLines = 1) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = androidx.compose.ui.graphics.Color.White,
-                            selectedTextColor = palette.rose,
-                            indicatorColor = palette.rose.copy(alpha = 0.82f),
-                            unselectedIconColor = palette.muted,
-                            unselectedTextColor = palette.muted
+            if (state.selectedTab != AppTab.RECORD) {
+                NavigationBar(containerColor = palette.surface, tonalElevation = 2.dp) {
+                    navItems.forEach { item ->
+                        NavigationBarItem(
+                            selected = state.selectedTab == item.tab,
+                            onClick = { viewModel.selectTab(item.tab) },
+                            icon = { Icon(item.icon, contentDescription = item.label) },
+                            label = { Text(item.label, maxLines = 1, fontWeight = FontWeight.SemiBold) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = palette.rose,
+                                selectedTextColor = palette.rose,
+                                indicatorColor = palette.surfaceAlt,
+                                unselectedIconColor = palette.muted,
+                                unselectedTextColor = palette.muted
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -472,6 +474,7 @@ private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean)
                 AppTab.BILLS -> BillsScreen(state.ledger, state.selectedDate, viewModel::changeMonth, viewModel::selectStatsDate, viewModel::deleteTransaction)
                 AppTab.RECORD -> RecordScreen(
                     state = state,
+                    onBack = { viewModel.navigateBack() },
                     onAdd = viewModel::addTransaction,
                     onBudget = viewModel::setBudget,
                     onAddAccount = viewModel::addAccount,
@@ -492,7 +495,6 @@ private data class NavItem(val tab: AppTab, val label: String, val icon: android
 private val navItems = listOf(
     NavItem(AppTab.HOME, "首页", Icons.Default.Home),
     NavItem(AppTab.BILLS, "账单", Icons.Default.ReceiptLong),
-    NavItem(AppTab.RECORD, "记账", Icons.Default.EditNote),
     NavItem(AppTab.STATS, "统计", Icons.Default.PieChart),
     NavItem(AppTab.MY, "我的", Icons.Default.Person)
 )
