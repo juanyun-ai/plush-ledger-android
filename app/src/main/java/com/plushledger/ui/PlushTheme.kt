@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -51,19 +53,25 @@ data class PlushPalette(
     val rose: Color,
     val moss: Color,
     val blue: Color,
+    val pink: Color,
+    val lilac: Color,
+    val coral: Color,
     val border: Color
 )
 
 private val LightPalette = PlushPalette(
-    background = Color(0xFFFFFBF7),
+    background = Color(0xFFFFFCF8),
     surface = Color(0xFFFFFFFF),
-    surfaceAlt = Color(0xFFFFF4E4),
-    ink = Color(0xFF4A392F),
-    muted = Color(0xFF9C8D84),
-    rose = Color(0xFFFF9F2D),
-    moss = Color(0xFF69C69E),
-    blue = Color(0xFF82AEE8),
-    border = Color(0xFFF2DDC4)
+    surfaceAlt = Color(0xFFFFF5E8),
+    ink = Color(0xFF4D3B32),
+    muted = Color(0xFFA4978E),
+    rose = Color(0xFFFFA126),
+    moss = Color(0xFF66C79A),
+    blue = Color(0xFF79A9E8),
+    pink = Color(0xFFF58BAE),
+    lilac = Color(0xFFA28ADC),
+    coral = Color(0xFFFF887A),
+    border = Color(0xFFF2E2D2)
 )
 
 private val DarkPalette = PlushPalette(
@@ -75,6 +83,9 @@ private val DarkPalette = PlushPalette(
     rose = Color(0xFFFFA53D),
     moss = Color(0xFF78B59A),
     blue = Color(0xFF85A8D4),
+    pink = Color(0xFFE88DA9),
+    lilac = Color(0xFFA995D0),
+    coral = Color(0xFFE9887D),
     border = Color(0xFF514347)
 )
 
@@ -106,6 +117,16 @@ fun PlushLedgerTheme(darkMode: Boolean, content: @Composable () -> Unit) {
                     onBackground = palette.ink
                 )
             },
+            typography = MaterialTheme.typography.copy(
+                displayLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Black, letterSpacing = 0.sp),
+                headlineLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Black, letterSpacing = 0.sp),
+                headlineMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold, letterSpacing = 0.sp),
+                titleLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold, letterSpacing = 0.sp),
+                titleMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold, letterSpacing = 0.sp),
+                bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif, letterSpacing = 0.sp),
+                bodyMedium = TextStyle(fontFamily = FontFamily.SansSerif, letterSpacing = 0.sp),
+                labelLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
+            ),
             content = content
         )
     }
@@ -125,8 +146,8 @@ fun PlushCard(
 ) {
     val palette = LocalPlushPalette.current
     Card(
-        modifier = modifier.shadow(10.dp, RoundedCornerShape(8.dp), spotColor = palette.rose.copy(alpha = 0.12f)),
-        shape = RoundedCornerShape(8.dp),
+        modifier = modifier.shadow(8.dp, RoundedCornerShape(18.dp), spotColor = palette.ink.copy(alpha = 0.08f)),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = palette.surface),
         border = BorderStroke(1.dp, palette.border)
     ) {
@@ -146,8 +167,8 @@ fun PlushButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(52.dp).shadow(8.dp, RoundedCornerShape(12.dp), spotColor = color.copy(alpha = 0.24f)),
-        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.height(50.dp).shadow(8.dp, RoundedCornerShape(22.dp), spotColor = color.copy(alpha = 0.24f)),
+        shape = RoundedCornerShape(22.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -165,16 +186,16 @@ fun SoftChip(
 ) {
     val palette = LocalPlushPalette.current
     Surface(
-        modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) palette.rose.copy(alpha = 0.82f) else palette.surface,
+        modifier = Modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) palette.rose else palette.surface,
         border = BorderStroke(1.dp, if (selected) palette.rose else palette.border),
         shadowElevation = if (selected) 6.dp else 1.dp
     ) {
         Text(
             text = text,
             color = if (selected) Color.White else palette.ink,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
         )

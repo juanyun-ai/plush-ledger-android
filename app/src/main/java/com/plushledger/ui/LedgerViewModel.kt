@@ -195,7 +195,13 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun signInLocal(username: String, password: String) {
         when (val result = auth.signInLocal(username, password)) {
-            is AuthOutcome.SignedIn -> viewModelScope.launch { completeSignIn(result.session, result.message) }
+            is AuthOutcome.SignedIn -> viewModelScope.launch {
+                completeSignIn(result.session, result.message)
+                if (username.trim() == "体验用户") {
+                    ledger.seedDemoData(result.session.userId)
+                    state.value = state.value.copy(message = "已进入演示账本")
+                }
+            }
             is AuthOutcome.Failed -> state.value = state.value.copy(message = result.message)
             else -> Unit
         }

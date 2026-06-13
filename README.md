@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.7.1-FF9F2D?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.7.5-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -76,6 +76,13 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载后必须通过版本表中的 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.7.5
+
+- 按 10 张产品设计参考图彻底重构欢迎页、首页、账单、统计、记账和“我的”。
+- 新增参考图同款 3D 毛绒分类、账户、钱包与植物素材，统一暖白、咖啡棕、橙黄和薄荷绿视觉体系。
+- 新增账单详情、分类管理、账户管理和预算管理的独立页面。
+- 重做底部导航、月份选择、分段控件、数据卡片、图表和操作按钮，同时保留真实本地数据与云同步能力。
 
 ### v0.7.1
 

@@ -308,6 +308,92 @@ class LedgerRepository(
         )
     }
 
+    suspend fun seedDemoData(userId: String) {
+        if (dao.transactionsSnapshot(userId).isNotEmpty()) return
+        val book = dao.getDefaultBook(userId) ?: return
+        val now = now()
+        val activeAccounts = dao.accountsSnapshot(userId)
+        val cash = activeAccounts.firstOrNull { it.name == "现金" } ?: AccountEntity(
+            id = newId(),
+            userId = userId,
+            bookId = book.id,
+            name = "现金",
+            kind = "cash",
+            colorHex = "#F9A35E",
+            initialBalanceMinor = 125_650,
+            createdAt = now,
+            updatedAt = now
+        ).also { dao.upsertAccount(it) }
+        activeAccounts.firstOrNull { it.name == "微信" }?.let { dao.upsertAccount(it.copy(initialBalanceMinor = 68_000, updatedAt = now)) }
+        activeAccounts.firstOrNull { it.name == "支付宝" }?.let { dao.upsertAccount(it.copy(initialBalanceMinor = 215_000, updatedAt = now)) }
+        activeAccounts.firstOrNull { it.name.contains("银行") }?.let { dao.upsertAccount(it.copy(name = "银行卡", initialBalanceMinor = 350_000, updatedAt = now)) }
+
+        val categories = defaultCategoriesForUser(userId)
+        val category = categories.associateBy { it.name }
+        val accounts = dao.accountsSnapshot(userId).associateBy { it.name }
+        val month = YearMonth.now()
+        val today = LocalDate.now()
+        val yesterday = today.minusDays(1)
+        val day3 = month.atDay((today.dayOfMonth - 2).coerceAtLeast(1))
+        val day4 = month.atDay((today.dayOfMonth - 3).coerceAtLeast(1))
+        val day5 = month.atDay((today.dayOfMonth - 4).coerceAtLeast(1))
+
+        val rows = listOf(
+            demoTransaction(userId, book.id, "expense", 3_200, category["餐饮"]?.id, cash.id, "今天 · 12:30", today.atTime(12, 30), now),
+            demoTransaction(userId, book.id, "expense", 1_850, category["交通"]?.id, cash.id, "今天 · 08:15", today.atTime(8, 15), now),
+            demoTransaction(userId, book.id, "expense", 16_800, category["购物"]?.id, accounts["支付宝"]?.id ?: cash.id, "昨天 · 20:45", yesterday.atTime(20, 45), now),
+            demoTransaction(userId, book.id, "income", 120_000, category["兼职"]?.id ?: category["工资"]?.id, accounts["银行卡"]?.id ?: cash.id, "昨天 · 18:30", yesterday.atTime(18, 30), now),
+            demoTransaction(userId, book.id, "expense", 8_700, category["学习"]?.id, cash.id, "买书 · 设计心理学", day3.atTime(10, 30), now),
+            demoTransaction(userId, book.id, "expense", 10_000, category["购物"]?.id, accounts["微信"]?.id ?: cash.id, "生活用品 · 超市", day3.atTime(12, 20), now),
+            demoTransaction(userId, book.id, "expense", 26_000, category["娱乐"]?.id, cash.id, "电影 · 周末放松", day4.atTime(18, 30), now),
+            demoTransaction(userId, book.id, "expense", 59_100, category["住房"]?.id, accounts["银行卡"]?.id ?: cash.id, "房租 · 月度", day5.atTime(9, 0), now),
+            demoTransaction(userId, book.id, "income", 248_000, category["工资"]?.id, accounts["银行卡"]?.id ?: cash.id, "6月工资", day5.atTime(9, 30), now)
+        )
+        dao.upsertTransactions(rows)
+        dao.upsertBudgets(
+            listOf(
+                BudgetEntity(newId(), userId, book.id, month.toString(), null, 600_000, now, now),
+                BudgetEntity(newId(), userId, book.id, month.toString(), category["餐饮"]?.id, 150_000, now, now),
+                BudgetEntity(newId(), userId, book.id, month.toString(), category["交通"]?.id, 100_000, now, now),
+                BudgetEntity(newId(), userId, book.id, month.toString(), category["购物"]?.id, 180_000, now, now),
+                BudgetEntity(newId(), userId, book.id, month.toString(), category["娱乐"]?.id, 80_000, now, now)
+            )
+        )
+    }
+
+    private suspend fun defaultCategoriesForUser(userId: String): List<CategoryEntity> {
+        val book = dao.getDefaultBook(userId) ?: return emptyList()
+        val existing = dao.categoriesSnapshot(userId)
+        if (existing.isNotEmpty()) return existing
+        val defaults = defaultCategories(userId, book.id, now())
+        dao.upsertCategories(defaults)
+        return defaults
+    }
+
+    private fun demoTransaction(
+        userId: String,
+        bookId: String,
+        type: String,
+        amountMinor: Long,
+        categoryId: String?,
+        accountId: String,
+        note: String,
+        dateTime: java.time.LocalDateTime,
+        now: Long
+    ) = TransactionEntity(
+        id = newId(),
+        userId = userId,
+        bookId = bookId,
+        type = type,
+        amountMinor = amountMinor,
+        categoryId = categoryId,
+        accountId = accountId,
+        note = note,
+        occurredAt = dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+        createdAt = now,
+        updatedAt = now
+    )
+
     suspend fun exportCsv(userId: String): File = withContext(Dispatchers.IO) {
         val dir = File(context.getExternalFilesDir(null), "exports").apply { mkdirs() }
         val file = File(dir, "plush-ledger-${LocalDate.now()}.csv")

@@ -1,5 +1,6 @@
 package com.plushledger.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -107,16 +109,19 @@ fun HomeScreen(
     val palette = LocalPlushPalette.current
     var showCalendar by rememberSaveable { mutableStateOf(false) }
     val month = YearMonth.from(selectedDate)
+    val todayExpense = ledger.transactions.filter { it.type == "expense" && it.localDate() == selectedDate }.sumOf { it.amountMinor }
+    val yesterdayExpense = ledger.transactions.filter { it.type == "expense" && it.localDate() == selectedDate.minusDays(1) }.sumOf { it.amountMinor }
+    val dayDelta = kotlin.math.abs(todayExpense - yesterdayExpense)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
             BrandHeader(
                 title = "绒绒记账",
-                subtitle = "把日子，记成喜欢的样子",
-                trailing = month.format(DateTimeFormatter.ofPattern("yyyy.MM")),
+                subtitle = "早上好，今天也要好好记录呀～",
+                trailing = month.format(DateTimeFormatter.ofPattern("yyyy年M月")),
                 onTrailingClick = { showCalendar = !showCalendar }
             )
         }
@@ -129,30 +134,73 @@ fun HomeScreen(
             }
         }
         item {
-            PlushCard(padding = 18.dp) {
+            PlushCard(padding = 14.dp) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SummaryNumber("本月支出", ledger.summary.expenseMinor, palette.rose, Modifier.weight(1f))
                     SummaryNumber("本月收入", ledger.summary.incomeMinor, palette.moss, Modifier.weight(1f))
                     SummaryNumber("本月结余", ledger.summary.incomeMinor - ledger.summary.expenseMinor, palette.rose, Modifier.weight(1f))
                 }
-                Spacer(Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceAround) {
+                    Image(
+                        painterResource(R.drawable.art_expense_wallet),
+                        contentDescription = null,
+                        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                    Image(
+                        painterResource(R.drawable.art_income_wallet),
+                        contentDescription = null,
+                        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Fit
+                    )
                     Image(
                         painterResource(R.drawable.ic_launcher),
                         contentDescription = null,
-                        modifier = Modifier.size(86.dp),
-                        contentScale = ContentScale.Fit
+                        modifier = Modifier.size(68.dp).clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Crop
                     )
+                }
+            }
+        }
+        item {
+            PlushCard(padding = 10.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(palette.rose.copy(alpha = 0.13f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = palette.rose)
+                    }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("本月已记录 ${ledger.transactions.count { YearMonth.from(it.localDate()) == month }} 笔", color = palette.ink, fontWeight = FontWeight.Bold)
+                        Text("今日支出", color = palette.ink, fontWeight = FontWeight.Bold)
                         Text(
-                            if (ledger.summary.expenseMinor == 0L) "从第一笔记录开始了解自己的生活" else "每一笔小记录，都在帮你看清生活",
-                            color = palette.muted,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp
+                            Money.formatCny(todayExpense),
+                            color = palette.ink,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black
                         )
                     }
+                    Surface(shape = RoundedCornerShape(20.dp), color = palette.surfaceAlt) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                if (todayExpense <= yesterdayExpense) "比昨天少花了" else "比昨天多花了",
+                                color = palette.ink,
+                                fontSize = 12.sp,
+                                maxLines = 1
+                            )
+                            Text(
+                                "${Money.formatCny(dayDelta)} ${if (todayExpense <= yesterdayExpense) "↓" else "↑"}",
+                                color = if (todayExpense <= yesterdayExpense) palette.moss else palette.rose,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    Image(painterResource(R.drawable.art_plant), contentDescription = null, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
                 }
             }
         }
@@ -163,7 +211,7 @@ fun HomeScreen(
                 TextButton(onClick = onBills) { Text("全部账单") }
             }
         }
-        if (ledger.transactions.isEmpty()) item { EmptyPanel("还没有账目") }
+        if (ledger.transactions.isEmpty()) item { EmptyPanel("还没有账目，记下今天的第一笔吧") }
         else item {
             PlushCard(padding = 10.dp) {
                 val recent = ledger.transactions.take(6)
@@ -171,11 +219,6 @@ fun HomeScreen(
                     CompactTransactionRow(record, ledger.categories.associateBy { it.id }, onDelete)
                     if (index != recent.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 }
-            }
-        }
-        item {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                PlushButton("记一笔", Icons.Default.EditNote, onClick = onRecord)
             }
         }
     }
@@ -191,6 +234,7 @@ fun BillsScreen(
 ) {
     var filter by rememberSaveable { mutableStateOf("all") }
     var showCalendar by rememberSaveable { mutableStateOf(false) }
+    var selectedRecordId by rememberSaveable { mutableStateOf<String?>(null) }
     val palette = LocalPlushPalette.current
     val month = YearMonth.from(selectedDate)
     val categoryMap = ledger.categories.associateBy { it.id }
@@ -198,34 +242,49 @@ fun BillsScreen(
         .filter { YearMonth.from(it.localDate()) == month && (filter == "all" || it.type == filter) }
         .sortedByDescending { it.occurredAt }
     val grouped = records.groupBy { it.localDate() }.toSortedMap(compareByDescending { it })
+    val selectedRecord = ledger.transactions.firstOrNull { it.id == selectedRecordId }
+
+    if (selectedRecord != null) {
+        BackHandler { selectedRecordId = null }
+        BillDetailScreen(
+            record = selectedRecord,
+            category = categoryMap[selectedRecord.categoryId],
+            account = ledger.accounts.firstOrNull { it.id == selectedRecord.accountId },
+            onBack = { selectedRecordId = null },
+            onDelete = {
+                onDelete(selectedRecord.id)
+                selectedRecordId = null
+            }
+        )
+        return
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             BrandHeader(
                 "账单",
                 "每一笔，都有来处",
-                month.format(DateTimeFormatter.ofPattern("yyyy.MM")),
+                month.format(DateTimeFormatter.ofPattern("yyyy年M月")),
                 onTrailingClick = { showCalendar = !showCalendar }
             )
         }
-        item {
-            PlushCard(padding = 8.dp) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("all" to "全部", "expense" to "支出", "income" to "收入").forEach { (key, label) ->
-                        Box(Modifier.weight(1f)) { SoftChip(label, filter == key, if (key == "income") palette.moss else palette.rose) { filter = key } }
-                    }
-                }
-            }
-        }
+        item { ReferenceSegment(listOf("all" to "全部", "expense" to "支出", "income" to "收入"), filter, { filter = it }) }
         if (showCalendar) item { CalendarSelector(selectedDate, month, onMonth) { onDate(it); showCalendar = false } }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                MiniMetric("支出", Money.formatCny(records.filter { it.type == "expense" }.sumOf { it.amountMinor }), palette.rose, Modifier.weight(1f))
-                MiniMetric("收入", Money.formatCny(records.filter { it.type == "income" }.sumOf { it.amountMinor }), palette.moss, Modifier.weight(1f))
+            PlushCard(padding = 18.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("本月支出", color = palette.muted, fontSize = 12.sp)
+                        Text(Money.formatCny(records.filter { it.type == "expense" }.sumOf { it.amountMinor }), color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                        Spacer(Modifier.height(8.dp))
+                        Text("本月收入  ${Money.formatCny(records.filter { it.type == "income" }.sumOf { it.amountMinor })}", color = palette.moss, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    MascotArt(92.dp)
+                }
             }
         }
         grouped.forEach { (date, dayRecords) ->
@@ -239,7 +298,7 @@ fun BillsScreen(
             item(key = "bill-group-$date") {
                 PlushCard(padding = 10.dp) {
                     dayRecords.forEachIndexed { index, record ->
-                        CompactTransactionRow(record, categoryMap, onDelete)
+                        CompactTransactionRow(record, categoryMap, onDelete) { selectedRecordId = record.id }
                         if (index != dayRecords.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                     }
                 }
@@ -250,47 +309,106 @@ fun BillsScreen(
 }
 
 @Composable
+private fun BillDetailScreen(
+    record: TransactionEntity,
+    category: CategoryEntity?,
+    account: AccountEntity?,
+    onBack: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    var confirmDelete by remember { mutableStateOf(false) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
+                Text("账单详情", modifier = Modifier.weight(1f), color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.MoreHoriz, contentDescription = "更多", tint = palette.ink) }
+            }
+        }
+        item {
+            PlushCard(padding = 22.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        CategoryArt(category?.name, 64.dp)
+                        Spacer(Modifier.height(12.dp))
+                        Text(category?.name ?: "未分类", color = palette.muted, fontSize = 13.sp)
+                        Text(
+                            when (record.type) {
+                                "income" -> Money.formatCny(record.amountMinor, true)
+                                "expense" -> "-${Money.formatCny(record.amountMinor)}"
+                                else -> Money.formatCny(record.amountMinor)
+                            },
+                            color = if (record.type == "income") palette.moss else palette.ink,
+                            fontSize = 38.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                    MascotArt(112.dp)
+                }
+            }
+        }
+        item {
+            PlushCard(padding = 18.dp) {
+                DetailRow("分类", category?.name ?: "未分类")
+                DetailRow("账户", account?.name ?: "默认账户")
+                DetailRow("日期", record.localDate().format(DateTimeFormatter.ofPattern("yyyy年M月d日")))
+                DetailRow("备注", record.note.ifBlank { "无备注" })
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                MascotArt(86.dp)
+                Spacer(Modifier.width(10.dp))
+                Surface(shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                    Text("每一笔记录，都有它的小故事～", modifier = Modifier.padding(14.dp), color = palette.muted, fontSize = 12.sp)
+                }
+            }
+        }
+        item {
+            androidx.compose.material3.OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(20.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = null, tint = palette.coral)
+                Spacer(Modifier.width(8.dp))
+                Text("删除记录", color = palette.coral, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+    if (confirmDelete) {
+        ConfirmDialog("删除账目", "是否要删除“${record.note.ifBlank { category?.name ?: "这笔账目" }}”？", onDismiss = { confirmDelete = false }) {
+            onDelete()
+            confirmDelete = false
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), color = palette.muted, fontSize = 13.sp)
+        Text(value, color = palette.ink, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
 private fun BrandHeader(
     title: String,
     subtitle: String,
     trailing: String? = null,
     onTrailingClick: (() -> Unit)? = null
 ) {
-    val palette = LocalPlushPalette.current
-    Row(Modifier.fillMaxWidth().heightIn(min = 68.dp), verticalAlignment = Alignment.CenterVertically) {
-        Image(painterResource(R.drawable.ic_launcher), contentDescription = null, modifier = Modifier.size(58.dp), contentScale = ContentScale.Fit)
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-            if (title == "绒绒记账") {
-                Image(
-                    painterResource(R.drawable.brand_wordmark),
-                    contentDescription = "绒绒记账",
-                    modifier = Modifier.fillMaxWidth(0.92f).height(34.dp),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                Text(title, color = palette.ink, fontSize = 27.sp, fontWeight = FontWeight.Black)
-            }
-            Text(subtitle, color = palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        trailing?.let {
-            Surface(
-                modifier = Modifier.clickable(enabled = onTrailingClick != null) { onTrailingClick?.invoke() },
-                shape = RoundedCornerShape(8.dp),
-                color = palette.surface,
-                border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
-            ) {
-                Row(Modifier.padding(horizontal = 7.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = palette.rose, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(it, color = palette.ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1)
-                    if (onTrailingClick != null) {
-                        Icon(Icons.Default.ExpandMore, contentDescription = "选择日期", tint = palette.muted, modifier = Modifier.size(14.dp))
-                    }
-                }
-            }
-        }
-    }
+    ReferenceHeader(
+        title = title,
+        subtitle = subtitle,
+        month = trailing,
+        branded = title == "绒绒记账",
+        mascot = title == "账单",
+        onMonth = onTrailingClick
+    )
 }
 
 @Composable
@@ -303,7 +421,7 @@ private fun SummaryNumber(label: String, value: Long, color: Color, modifier: Mo
             Text(label, color = palette.muted, fontSize = 11.sp)
         }
         Spacer(Modifier.height(6.dp))
-        Text(Money.formatCny(value), color = if (label.contains("结余")) palette.rose else palette.ink, fontWeight = FontWeight.Black, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(Money.formatCny(value), color = if (label.contains("结余")) palette.rose else palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -341,6 +459,7 @@ fun RecordScreen(
     var newCategory by rememberSaveable { mutableStateOf("") }
     var deleteAccount by remember { mutableStateOf<AccountEntity?>(null) }
     var deleteCategory by remember { mutableStateOf<CategoryEntity?>(null) }
+    var managePage by rememberSaveable { mutableStateOf<String?>(null) }
     val categories = ledger.categories.filter { it.kind == type }
     val categoryMap = ledger.categories.associateBy { it.id }
     val filtered = ledger.transactions.filter {
@@ -349,26 +468,57 @@ fun RecordScreen(
         )
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
-                Column {
-                    Text("记一笔", color = palette.ink, fontSize = 25.sp, fontWeight = FontWeight.Black)
-                    Text("记下此刻，轻松一点", color = palette.muted, fontSize = 11.sp)
-                }
+    if (managePage != null) {
+        BackHandler { managePage = null }
+        when (managePage) {
+            "category" -> CategoryManagementScreen(
+                ledger = ledger,
+                onBack = { managePage = null },
+                onAdd = onAddCategory,
+                onDelete = { id -> deleteCategory = ledger.categories.firstOrNull { it.id == id } }
+            )
+            "account" -> AccountManagementScreen(
+                ledger = ledger,
+                onBack = { managePage = null },
+                onAdd = onAddAccount,
+                onDelete = { id -> deleteAccount = ledger.accounts.firstOrNull { it.id == id } }
+            )
+            else -> BudgetManagementScreen(ledger, { managePage = null }, onBudget)
+        }
+        deleteAccount?.let { account ->
+            ConfirmDialog("删除账户", "是否要删除“${account.name}”？历史账目会保留。", onDismiss = { deleteAccount = null }) {
+                onDeleteAccount(account.id)
+                deleteAccount = null
             }
         }
+        deleteCategory?.let { category ->
+            ConfirmDialog("删除分类", "是否要删除“${category.name}”？历史账目会保留。", onDismiss = { deleteCategory = null }) {
+                onDeleteCategory(category.id)
+                deleteCategory = null
+            }
+        }
+        return
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, top = 4.dp, end = 20.dp, bottom = 122.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
         item {
+            Row(Modifier.fillMaxWidth().height(50.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
+                Text("记一笔", modifier = Modifier.weight(1f), color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                IconButton(onClick = { showManage = !showManage }) { Icon(Icons.Default.Search, contentDescription = "搜索", tint = palette.ink) }
+            }
+        }
+        if (showManage) item {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it.take(30) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                label = { Text("搜索账目") },
+                placeholder = { Text("搜索账目") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -378,42 +528,52 @@ fun RecordScreen(
             if (filtered.isEmpty()) item { EmptyPanel("没有找到匹配账目") }
         }
         item {
-            PlushCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) { SoftChip("支出", type == "expense", palette.rose) { type = "expense"; categoryId = null } }
-                    Box(Modifier.weight(1f)) { SoftChip("收入", type == "income", palette.moss) { type = "income"; categoryId = null } }
-                    Box(Modifier.weight(1f)) { SoftChip("转账", type == "transfer", palette.blue) { type = "transfer"; categoryId = null } }
-                }
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
+            ReferenceSegment(
+                items = listOf("expense" to "↓  支出", "income" to "↑  收入", "transfer" to "⇄  转账"),
+                selected = type,
+                onSelected = { type = it; categoryId = null }
+            )
+        }
+        item {
+            PlushCard(padding = 12.dp) {
+                BasicTextField(
                     value = amount,
                     onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' }.take(12) },
-                    label = { Text("金额（元）") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
                     singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 42.sp, fontWeight = FontWeight.Black, color = palette.ink),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Black, color = palette.ink),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    decorationBox = { inner ->
+                        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                            Text("¥ ", fontSize = 24.sp, fontWeight = FontWeight.Black, color = palette.ink)
+                            if (amount.isBlank()) Text("0.00", fontSize = 34.sp, fontWeight = FontWeight.Black, color = palette.muted.copy(alpha = 0.45f)) else inner()
+                        }
+                    }
                 )
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(note, { note = it.take(80) }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                FoldHeader("日期：${date.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))}", Icons.Default.CalendarMonth, showDate) { showDate = !showDate }
-                if (showDate) PlushCalendar(date, YearMonth.from(date), onSelect = { date = it; showDate = false })
             }
         }
         if (type != "transfer") {
             item {
-                FoldSection("分类", Icons.Default.Category, showCategories, { showCategories = !showCategories }) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        categories.forEach { CategoryChoice(it, categoryId == it.id) { categoryId = it.id } }
+                PlushCard(Modifier.fillMaxWidth(), padding = 12.dp) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        categories.take(8).forEach { CategoryChoice(it, categoryId == it.id) { categoryId = it.id } }
                     }
                 }
             }
         }
         item {
-            FoldSection("账户", Icons.Default.AccountBalanceWallet, showAccounts, { showAccounts = !showAccounts }) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ledger.accounts.forEach { SoftChip(it.name, accountId == it.id, palette.blue) { accountId = it.id } }
+            PlushCard(padding = 16.dp) {
+                RecordInfoRow(Icons.Default.CalendarMonth, "日期", date.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))) { showDate = !showDate }
+                if (showDate) {
+                    Spacer(Modifier.height(8.dp))
+                    PlushCalendar(date, YearMonth.from(date), onSelect = { date = it; showDate = false })
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                RecordInfoRow(Icons.Default.AccountBalanceWallet, "账户", ledger.accounts.firstOrNull { it.id == accountId }?.name ?: "默认账户（现金）") { showAccounts = !showAccounts }
+                if (showAccounts) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ledger.accounts.forEach { SoftChip(it.name, accountId == it.id, palette.blue) { accountId = it.id } }
+                    }
                 }
                 if (type == "transfer") {
                     Spacer(Modifier.height(10.dp))
@@ -423,53 +583,38 @@ fun RecordScreen(
                         ledger.accounts.forEach { SoftChip(it.name, toAccountId == it.id, palette.moss) { toAccountId = it.id } }
                     }
                 }
-            }
-        }
-        item {
-            PlushButton("记一笔", Icons.Default.Add, Modifier.fillMaxWidth()) {
-                onAdd(type, amount, categoryId, accountId, toAccountId, note, date)
-                if (amount.isNotBlank()) {
-                    amount = ""
-                    note = ""
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                RecordInfoRow(Icons.Default.EditNote, "备注", note.ifBlank { "可输入备注信息" }) { showCategories = !showCategories }
+                if (showCategories) {
+                    OutlinedTextField(note, { note = it.take(80) }, placeholder = { Text("备注") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 }
             }
         }
         item {
-            FoldSection("本月预算", Icons.Default.CalendarMonth, showBudget, { showBudget = !showBudget }) {
-                val progress = if (ledger.summary.budgetLimitMinor == 0L) 0f else
-                    (ledger.summary.budgetUsedMinor.toFloat() / ledger.summary.budgetLimitMinor).coerceIn(0f, 1f)
-                Text("${Money.formatCny(ledger.summary.budgetUsedMinor)} / ${Money.formatCny(ledger.summary.budgetLimitMinor)}", fontWeight = FontWeight.Bold, color = palette.ink)
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(8.dp)), color = palette.rose)
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(budgetAmount, { budgetAmount = it.filter { ch -> ch.isDigit() || ch == '.' }.take(12) }, label = { Text("预算金额") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SoftChip("总预算", budgetCategory == null, palette.rose) { budgetCategory = null }
-                    ledger.categories.filter { it.kind == "expense" }.forEach {
-                        SoftChip(it.name, budgetCategory == it.id, it.categoryColor()) { budgetCategory = it.id }
-                    }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                MascotArt(92.dp)
+                Surface(shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                    Text("每一笔记录，\n都是通往美好生活的一步～", modifier = Modifier.padding(14.dp), color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
                 }
-                Spacer(Modifier.height(10.dp))
-                PlushButton("保存预算", Icons.Default.CalendarMonth, Modifier.fillMaxWidth()) { onBudget(budgetAmount, budgetCategory) }
             }
         }
         item {
-            FoldSection("管理分类与账户", Icons.Default.Category, showManage, { showManage = !showManage }) {
-                Text("账户", fontWeight = FontWeight.Bold, color = palette.ink)
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(newAccount, { newAccount = it.take(12) }, label = { Text("新账户") }, modifier = Modifier.weight(1f), singleLine = true)
-                    IconButton(onClick = { onAddAccount(newAccount, "wallet"); newAccount = "" }) { Icon(Icons.Default.Add, contentDescription = "新增账户") }
-                }
-                ManageFlow(ledger.accounts.map { it.id to it.name }, palette.blue) { id -> deleteAccount = ledger.accounts.first { it.id == id } }
-                Spacer(Modifier.height(12.dp))
-                Text("分类", fontWeight = FontWeight.Bold, color = palette.ink)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(newCategory, { newCategory = it.take(12) }, label = { Text("新分类") }, modifier = Modifier.weight(1f), singleLine = true)
-                    IconButton(onClick = { onAddCategory(newCategory, type.takeIf { it != "transfer" } ?: "expense"); newCategory = "" }) { Icon(Icons.Default.Add, contentDescription = "新增分类") }
-                }
-                ManageFlow(ledger.categories.map { it.id to it.name }, palette.rose) { id -> deleteCategory = ledger.categories.first { it.id == id } }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedButton(onClick = { managePage = "budget" }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp)) { Text("预算") }
+                androidx.compose.material3.OutlinedButton(onClick = { managePage = "category" }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp)) { Text("分类") }
+                androidx.compose.material3.OutlinedButton(onClick = { managePage = "account" }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp)) { Text("账户") }
+            }
+        }
+        }
+        PlushButton(
+            "保存记录",
+            Icons.Default.EditNote,
+            Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 18.dp).fillMaxWidth()
+        ) {
+            onAdd(type, amount, categoryId, accountId, toAccountId, note, date)
+            if (amount.isNotBlank()) {
+                amount = ""
+                note = ""
             }
         }
     }
@@ -485,6 +630,198 @@ fun RecordScreen(
             onDeleteCategory(category.id)
             deleteCategory = null
         }
+    }
+}
+
+@Composable
+private fun RecordInfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(palette.surfaceAlt), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = palette.rose, modifier = Modifier.size(19.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(label, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold)
+        Text(value, color = palette.muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted, modifier = Modifier.size(20.dp))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CategoryManagementScreen(
+    ledger: LedgerState,
+    onBack: () -> Unit,
+    onAdd: (String, String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    var kind by rememberSaveable { mutableStateOf("expense") }
+    var newName by rememberSaveable { mutableStateOf("") }
+    val categories = ledger.categories.filter { it.kind == kind }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item { ManagementHeader("分类管理", onBack) }
+        item { ReferenceSegment(listOf("expense" to "支出分类", "income" to "收入分类"), kind, { kind = it }) }
+        item { Text("长按或点击删除按钮可移除自定义分类", color = palette.muted, fontSize = 12.sp) }
+        item {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                categories.forEach { category ->
+                    PlushCard(Modifier.width(164.dp), padding = 12.dp) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CategoryArt(category.name, 46.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(category.name, color = palette.ink, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text(if (category.kind == "income") "收入" else "支出", color = palette.muted, fontSize = 11.sp)
+                            }
+                            IconButton(onClick = { onDelete(category.id) }, modifier = Modifier.size(30.dp)) {
+                                Icon(Icons.Default.Delete, contentDescription = "删除${category.name}", tint = palette.muted, modifier = Modifier.size(17.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                MascotArt(82.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("分类清楚一点，生活也会更有条理～", color = palette.muted, fontSize = 12.sp)
+            }
+        }
+        item {
+            OutlinedTextField(newName, { newName = it.take(12) }, placeholder = { Text("新分类名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Spacer(Modifier.height(10.dp))
+            PlushButton("添加新分类", Icons.Default.Add, Modifier.fillMaxWidth()) {
+                onAdd(newName, kind)
+                newName = ""
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AccountManagementScreen(
+    ledger: LedgerState,
+    onBack: () -> Unit,
+    onAdd: (String, String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    var newName by rememberSaveable { mutableStateOf("") }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item { ManagementHeader("账户管理", onBack) }
+        item {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ledger.accounts.take(4).forEach { account ->
+                    PlushCard(Modifier.width(164.dp), padding = 12.dp) {
+                        AccountArt(account.name, 58.dp)
+                        Spacer(Modifier.height(8.dp))
+                        Text(account.name, color = palette.ink, fontWeight = FontWeight.Bold)
+                        Text(Money.formatCny(account.initialBalanceMinor), color = palette.muted, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        item {
+            PlushCard(padding = 18.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("总资产", color = palette.muted, fontSize = 12.sp)
+                        Text(Money.formatCny(ledger.summary.balanceMinor), color = palette.ink, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    }
+                    MascotArt(92.dp)
+                }
+            }
+        }
+        item {
+            PlushCard(padding = 10.dp) {
+                ledger.accounts.forEachIndexed { index, account ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AccountArt(account.name, 46.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(account.name, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { onDelete(account.id) }) { Icon(Icons.Default.Delete, contentDescription = "删除${account.name}", tint = palette.muted) }
+                    }
+                    if (index != ledger.accounts.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                }
+            }
+        }
+        item {
+            OutlinedTextField(newName, { newName = it.take(12) }, placeholder = { Text("新账户名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Spacer(Modifier.height(10.dp))
+            PlushButton("添加新账户", Icons.Default.Add, Modifier.fillMaxWidth()) {
+                onAdd(newName, "wallet")
+                newName = ""
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun BudgetManagementScreen(ledger: LedgerState, onBack: () -> Unit, onBudget: (String, String?) -> Unit) {
+    val palette = LocalPlushPalette.current
+    var amount by rememberSaveable { mutableStateOf("") }
+    var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
+    val progress = if (ledger.summary.budgetLimitMinor == 0L) 0f else (ledger.summary.budgetUsedMinor.toFloat() / ledger.summary.budgetLimitMinor).coerceIn(0f, 1f)
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item { ManagementHeader("预算管理", onBack) }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("本月预算", color = palette.muted, fontSize = 12.sp)
+                    Text(Money.formatCny(ledger.summary.budgetLimitMinor), color = palette.ink, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                }
+                MascotArt(92.dp)
+            }
+        }
+        item {
+            PlushCard(padding = 18.dp) {
+                Text("预算使用情况", color = palette.ink, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(8.dp)), color = palette.rose, trackColor = palette.surfaceAlt)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    Text("已用 ${Money.formatCny(ledger.summary.budgetUsedMinor)}", modifier = Modifier.weight(1f), color = palette.muted, fontSize = 12.sp)
+                    Text("剩余 ${Money.formatCny((ledger.summary.budgetLimitMinor - ledger.summary.budgetUsedMinor).coerceAtLeast(0))}", color = palette.moss, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        item {
+            PlushCard(padding = 14.dp) {
+                ledger.categorySpend.take(5).forEach { spend ->
+                    CategoryBar(spend.category.name, spend.amountMinor, spend.amountMinor.toFloat() / ledger.summary.budgetLimitMinor.coerceAtLeast(1), spend.category.categoryColor())
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+        }
+        item {
+            OutlinedTextField(amount, { amount = it.filter { ch -> ch.isDigit() || ch == '.' }.take(12) }, label = { Text("预算金额") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Spacer(Modifier.height(10.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SoftChip("总预算", categoryId == null, palette.rose) { categoryId = null }
+                ledger.categories.filter { it.kind == "expense" }.forEach { category ->
+                    SoftChip(category.name, categoryId == category.id, category.categoryColor()) { categoryId = category.id }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            PlushButton("保存预算", Icons.Default.CalendarMonth, Modifier.fillMaxWidth()) { onBudget(amount, categoryId) }
+        }
+    }
+}
+
+@Composable
+private fun ManagementHeader(title: String, onBack: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
+        Text(title, modifier = Modifier.weight(1f), color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.size(48.dp))
     }
 }
 
@@ -554,7 +891,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
             BrandHeader(
                 "统计",
                 "让数字讲清生活",
-                YearMonth.from(selectedDate).format(DateTimeFormatter.ofPattern("yyyy.MM")),
+                YearMonth.from(selectedDate).format(DateTimeFormatter.ofPattern("yyyy年M月")),
                 onTrailingClick = { showCalendar = !showCalendar }
             )
         }
@@ -562,34 +899,40 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
             CalendarSelector(selectedDate, YearMonth.from(selectedDate), onMonth) { onDate(it); showCalendar = false }
         }
         item {
-            PlushCard {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    SummaryNumber("本月支出", ledger.summary.expenseMinor, palette.rose, Modifier.weight(1f))
-                    SummaryNumber("本月收入", ledger.summary.incomeMinor, palette.moss, Modifier.weight(1f))
-                    SummaryNumber("本月结余", ledger.summary.incomeMinor - ledger.summary.expenseMinor, palette.rose, Modifier.weight(1f))
+            PlushCard(padding = 14.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                        SummaryNumber("本月支出", ledger.summary.expenseMinor, palette.rose, Modifier.weight(1f))
+                        SummaryNumber("本月收入", ledger.summary.incomeMinor, palette.moss, Modifier.weight(1f))
+                        SummaryNumber("本月结余", ledger.summary.incomeMinor - ledger.summary.expenseMinor, palette.rose, Modifier.weight(1f))
+                    }
+                    MascotArt(66.dp)
                 }
             }
         }
         item {
-            if (daySpend.isEmpty()) {
-                EmptyPanel("这一天还没有支出")
-            } else {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PlushCard(Modifier.weight(1f), padding = 10.dp) {
-                        Text("分类占比", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        DonutChart(daySpend, compact = true)
-                    }
-                    PlushCard(Modifier.weight(1f), padding = 10.dp) {
-                        Text("支出走势", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        BarChart(daySpend, compact = true)
-                    }
+            val chartData = daySpend.ifEmpty { ledger.categorySpend }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PlushCard(Modifier.weight(1f), padding = 10.dp) {
+                    Text("分类占比", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    DonutChart(chartData, compact = true)
+                }
+                PlushCard(Modifier.weight(1f), padding = 10.dp) {
+                    Text("支出走势", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    BarChart(chartData, compact = true)
                 }
             }
         }
         item {
             SectionTitle("本月分类支出", Icons.Default.PieChart)
             Spacer(Modifier.height(8.dp))
-            if (ledger.categorySpend.isEmpty()) EmptyPanel("这个月还没有支出")
+            if (ledger.categorySpend.isEmpty()) PlushCard(Modifier.fillMaxWidth(), padding = 14.dp) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    MascotArt(72.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("这个月还没有支出，记一笔后就能看到分类排行～", color = palette.muted, fontSize = 12.sp)
+                }
+            }
             else PlushCard {
                 val max = ledger.categorySpend.maxOf { it.amountMinor }.coerceAtLeast(1)
                 ledger.categorySpend.take(8).forEach {
@@ -657,10 +1000,20 @@ private fun CalendarSelector(
 @Composable
 private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false) {
     val palette = LocalPlushPalette.current
-    val total = spend.sumOf { it.amountMinor }.coerceAtLeast(1)
+    val rawTotal = spend.sumOf { it.amountMinor }
+    val total = rawTotal.coerceAtLeast(1)
     Box(Modifier.fillMaxWidth().height(if (compact) 150.dp else 210.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(if (compact) 116.dp else 168.dp)) {
             val stroke = (if (compact) 18.dp else 26.dp).toPx()
+            drawArc(
+                palette.surfaceAlt,
+                -90f,
+                360f,
+                false,
+                Offset(stroke / 2, stroke / 2),
+                Size(size.width - stroke, size.height - stroke),
+                style = Stroke(stroke, cap = StrokeCap.Round)
+            )
             var start = -90f
             spend.take(6).forEach {
                 val sweep = it.amountMinor.toFloat() / total * 360f
@@ -670,21 +1023,24 @@ private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false) {
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("支出", color = palette.muted, fontSize = 12.sp)
-            Text(Money.formatCny(total), color = palette.ink, fontWeight = FontWeight.Black, fontSize = if (compact) 13.sp else 20.sp, maxLines = 1)
+            Text(Money.formatCny(rawTotal), color = palette.ink, fontWeight = FontWeight.Black, fontSize = if (compact) 13.sp else 20.sp, maxLines = 1)
         }
     }
 }
 
 @Composable
 private fun BarChart(spend: List<CategorySpend>, compact: Boolean = false) {
-    val max = spend.maxOf { it.amountMinor }.coerceAtLeast(1)
+    val palette = LocalPlushPalette.current
+    val max = spend.maxOfOrNull { it.amountMinor }?.coerceAtLeast(1) ?: 1
     val bars = spend.take(6)
     Canvas(Modifier.fillMaxWidth().height(if (compact) 150.dp else 200.dp)) {
         val gap = (if (compact) 6.dp else 12.dp).toPx()
-        val width = (size.width - gap * (bars.size + 1)) / bars.size.coerceAtLeast(1)
-        bars.forEachIndexed { index, item ->
-            val height = item.amountMinor.toFloat() / max * size.height * 0.8f
-            drawRoundRect(item.category.categoryColor(), Offset(gap + index * (width + gap), size.height - height), Size(width, height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
+        val count = if (bars.isEmpty()) 5 else bars.size
+        val width = (size.width - gap * (count + 1)) / count.coerceAtLeast(1)
+        repeat(count) { index ->
+            val item = bars.getOrNull(index)
+            val height = if (item == null) size.height * (0.22f + index * 0.08f) else item.amountMinor.toFloat() / max * size.height * 0.8f
+            drawRoundRect(item?.category?.categoryColor() ?: palette.surfaceAlt, Offset(gap + index * (width + gap), size.height - height), Size(width, height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
         }
     }
 }
@@ -718,14 +1074,17 @@ private fun MiniMetric(label: String, value: String, color: Color, modifier: Mod
 private fun CompactTransactionRow(
     record: TransactionEntity,
     categories: Map<String, CategoryEntity>,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    onOpen: (() -> Unit)? = null
 ) {
     val palette = LocalPlushPalette.current
     val category = record.categoryId?.let(categories::get)
     val color = when (record.type) { "income" -> palette.moss; "transfer" -> palette.blue; else -> palette.rose }
     var confirm by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = onOpen != null) { onOpen?.invoke() }
+            .padding(horizontal = 2.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         CategoryBadge(category, color, 42.dp)
@@ -796,25 +1155,26 @@ private fun TransactionRow(record: TransactionEntity, categories: Map<String, Ca
 @Composable
 private fun CategoryChoice(category: CategoryEntity, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
-    val color = category.categoryColor()
-    Column(
-        modifier = Modifier.width(76.dp).clip(RoundedCornerShape(8.dp))
-            .background(if (selected) palette.rose.copy(alpha = 0.82f) else palette.surfaceAlt)
-            .clickable(onClick = onClick).padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        modifier = Modifier.width(68.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Transparent,
+        border = androidx.compose.foundation.BorderStroke(2.dp, if (selected) palette.rose else Color.Transparent)
     ) {
-        CategoryBadge(category, color, 42.dp)
-        Spacer(Modifier.height(6.dp))
-        Text(category.name, color = if (selected) Color.White else palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Column(
+            modifier = Modifier.padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CategoryBadge(category, category.categoryColor(), 40.dp)
+            Spacer(Modifier.height(4.dp))
+            Text(category.name, color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
     }
 }
 
 @Composable
 private fun CategoryBadge(category: CategoryEntity?, fallback: Color, size: androidx.compose.ui.unit.Dp) {
-    val color = category?.categoryColor() ?: fallback
-    Box(Modifier.size(size).clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-        Icon(categoryIcon(category?.name), contentDescription = null, tint = color, modifier = Modifier.size(size * 0.54f))
-    }
+    CategoryArt(category?.name, size)
 }
 
 private fun categoryIcon(name: String?): androidx.compose.ui.graphics.vector.ImageVector = when (name) {

@@ -1,5 +1,6 @@
 package com.plushledger
 
+import android.content.Context
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -8,6 +9,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,8 +20,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -66,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -80,6 +85,7 @@ import com.plushledger.ui.FabricBackdrop
 import com.plushledger.ui.InboxScreen
 import com.plushledger.ui.LedgerViewModel
 import com.plushledger.ui.LocalPlushPalette
+import com.plushledger.ui.MascotArt
 import com.plushledger.ui.MyScreen
 import com.plushledger.ui.PlushButton
 import com.plushledger.ui.PlushCard
@@ -156,6 +162,9 @@ private fun PlushLedgerApp(
 ) {
     val state by viewModel.state
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val onboardingStore = remember { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE) }
+    var onboardingDone by rememberSaveable { mutableStateOf(onboardingStore.getBoolean("v075_seen", false)) }
 
     DisposableEffect(state.secureScreen) {
         setSecure(state.secureScreen)
@@ -173,6 +182,17 @@ private fun PlushLedgerApp(
             Box(Modifier.fillMaxSize()) {
                 FabricBackdrop()
                 when {
+                    state.session == null && !onboardingDone -> WelcomeScreen(
+                        onStart = {
+                            onboardingStore.edit().putBoolean("v075_seen", true).apply()
+                            onboardingDone = true
+                        },
+                        onPreview = {
+                            onboardingStore.edit().putBoolean("v075_seen", true).apply()
+                            onboardingDone = true
+                            viewModel.signInLocal("体验用户", "plush075")
+                        }
+                    )
                     state.session == null -> AuthScreen(state, viewModel)
                     state.locked -> LockScreen(
                         biometricAvailable = biometricAvailable && state.biometricUnlock,
@@ -206,6 +226,62 @@ private fun PlushLedgerApp(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WelcomeScreen(onStart: () -> Unit, onPreview: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+        contentPadding = PaddingValues(horizontal = 28.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        item { Spacer(Modifier.height(18.dp)) }
+        item { MascotArt(190.dp) }
+        item {
+            Image(
+                painter = painterResource(R.drawable.brand_wordmark),
+                contentDescription = "绒绒记账",
+                modifier = Modifier.fillMaxWidth(0.68f).height(58.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
+        item { Text("让每一次记录，都变得柔软而清晰", color = palette.muted, fontSize = 14.sp) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                WelcomeFeature(R.drawable.art_feature_record, "轻松记账", Modifier.weight(1f))
+                WelcomeFeature(R.drawable.art_feature_chart, "清晰统计", Modifier.weight(1f))
+                WelcomeFeature(R.drawable.art_feature_cloud, "安心同步", Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Box(Modifier.size(18.dp, 7.dp).clip(RoundedCornerShape(4.dp)).background(palette.rose))
+                Box(Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(palette.border))
+                Box(Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(palette.border))
+            }
+        }
+        item {
+            PlushButton("开始使用", Icons.Default.EditNote, Modifier.fillMaxWidth(), onClick = onStart)
+            TextButton(onClick = onPreview, modifier = Modifier.fillMaxWidth()) { Text("先看看", color = palette.muted) }
+        }
+    }
+}
+
+@Composable
+private fun WelcomeFeature(res: Int, label: String, modifier: Modifier = Modifier) {
+    val palette = LocalPlushPalette.current
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Image(
+            painter = painterResource(res),
+            contentDescription = label,
+            modifier = Modifier.fillMaxWidth().height(84.dp).clip(RoundedCornerShape(18.dp)),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(label, color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -447,21 +523,40 @@ private fun LedgerShell(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         bottomBar = {
             if (state.selectedTab != AppTab.RECORD) {
-                NavigationBar(containerColor = palette.surface, tonalElevation = 2.dp) {
-                    navItems.forEach { item ->
-                        NavigationBarItem(
-                            selected = state.selectedTab == item.tab,
-                            onClick = { viewModel.selectTab(item.tab) },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label, maxLines = 1, fontWeight = FontWeight.SemiBold) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = palette.rose,
-                                selectedTextColor = palette.rose,
-                                indicatorColor = palette.surfaceAlt,
-                                unselectedIconColor = palette.muted,
-                                unselectedTextColor = palette.muted
-                            )
-                        )
+                Surface(
+                    modifier = Modifier.navigationBarsPadding(),
+                    color = palette.surface,
+                    shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+                    shadowElevation = 12.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(66.dp).padding(horizontal = 18.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        navItems.forEach { item ->
+                            val selected = state.selectedTab == item.tab
+                            Column(
+                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
+                                    .clickable { viewModel.selectTab(item.tab) }.padding(vertical = 5.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    item.icon,
+                                    contentDescription = item.label,
+                                    tint = if (selected) palette.rose else palette.muted,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    item.label,
+                                    color = if (selected) palette.rose else palette.muted,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -492,6 +587,18 @@ private fun LedgerShell(
                 )
                 AppTab.STATS -> StatsScreen(state.ledger, state.selectedDate, viewModel::changeMonth, viewModel::selectStatsDate)
                 AppTab.MY -> MyScreen(state, biometricAvailable, viewModel, downloadUpdate)
+            }
+            if (state.selectedTab == AppTab.HOME) {
+                Box(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 14.dp)
+                ) {
+                    PlushButton(
+                        "记一笔",
+                        Icons.Default.EditNote,
+                        Modifier.width(154.dp),
+                        onClick = { viewModel.selectTab(AppTab.RECORD) }
+                    )
+                }
             }
         }
     }

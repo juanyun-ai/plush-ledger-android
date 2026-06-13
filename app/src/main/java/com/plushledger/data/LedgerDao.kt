@@ -65,6 +65,9 @@ interface LedgerDao {
     @Query("SELECT * FROM categories WHERE user_id = :userId AND deleted_at IS NULL ORDER BY kind, sort_order")
     fun observeCategories(userId: String): Flow<List<CategoryEntity>>
 
+    @Query("SELECT * FROM categories WHERE user_id = :userId AND deleted_at IS NULL ORDER BY kind, sort_order")
+    suspend fun categoriesSnapshot(userId: String): List<CategoryEntity>
+
     @Query("SELECT * FROM transactions WHERE user_id = :userId AND deleted_at IS NULL ORDER BY occurred_at DESC, created_at DESC")
     fun observeTransactions(userId: String): Flow<List<TransactionEntity>>
 
