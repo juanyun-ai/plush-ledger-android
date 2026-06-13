@@ -88,6 +88,7 @@ import coil.compose.AsyncImage
 import com.plushledger.BuildConfig
 import com.plushledger.R
 import com.plushledger.data.OfficialMessage
+import com.plushledger.sync.AppVersionInfo
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
@@ -96,9 +97,15 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 
 @Composable
-fun InboxScreen(messages: List<OfficialMessage>, busy: Boolean, onFeedback: (String) -> Unit) {
+fun InboxScreen(
+    messages: List<OfficialMessage>,
+    busy: Boolean,
+    onFeedback: (String) -> Unit,
+    onDownloadUpdate: (AppVersionInfo) -> Unit
+) {
     val palette = LocalPlushPalette.current
     var feedback by rememberSaveable { mutableStateOf("") }
+    var pendingDownload by remember { mutableStateOf<AppVersionInfo?>(null) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -121,6 +128,17 @@ fun InboxScreen(messages: List<OfficialMessage>, busy: Boolean, onFeedback: (Str
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(message.body, color = palette.muted, lineHeight = 21.sp)
+                message.updateInfo?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }?.let { update ->
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { pendingDownload = update },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("下载 v${update.versionName}")
+                    }
+                }
             }
         }
         if (messages.isEmpty()) item { Text("暂时没有新消息", color = palette.muted) }
@@ -142,12 +160,33 @@ fun InboxScreen(messages: List<OfficialMessage>, busy: Boolean, onFeedback: (Str
             }
         }
     }
+    pendingDownload?.let { update ->
+        AlertDialog(
+            onDismissRequest = { pendingDownload = null },
+            title = { Text("下载 v${update.versionName}", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("安装包约 ${update.fileSizeBytes / 1024 / 1024}MB。下载完成并通过安全校验后，将交由 Android 系统安装。")
+            },
+            dismissButton = { TextButton(onClick = { pendingDownload = null }) { Text("取消") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDownloadUpdate(update)
+                    pendingDownload = null
+                }) { Text("确认下载") }
+            }
+        )
+    }
 }
 
 private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP }
 
 @Composable
-fun MyScreen(state: UiState, biometricAvailable: Boolean, viewModel: LedgerViewModel) {
+fun MyScreen(
+    state: UiState,
+    biometricAvailable: Boolean,
+    viewModel: LedgerViewModel,
+    onDownloadUpdate: (AppVersionInfo) -> Unit
+) {
     var page by rememberSaveable { mutableStateOf(MyPage.ROOT) }
     BackHandler(enabled = page != MyPage.ROOT) { page = MyPage.ROOT }
     when (page) {
@@ -169,7 +208,7 @@ fun MyScreen(state: UiState, biometricAvailable: Boolean, viewModel: LedgerViewM
         )
         MyPage.INBOX -> Column(Modifier.fillMaxSize()) {
             BackHeader("消息与建议", onBack = { page = MyPage.ROOT })
-            InboxScreen(state.officialMessages, state.isBusy, viewModel::submitFeedback)
+            InboxScreen(state.officialMessages, state.isBusy, viewModel::submitFeedback, onDownloadUpdate)
         }
         MyPage.SETTINGS -> SettingsScreen(state, biometricAvailable, viewModel, onBack = { page = MyPage.ROOT })
         MyPage.MEMBERSHIP -> MembershipScreen(state, onBack = { page = MyPage.ROOT }, onPay = viewModel::startMembershipPurchase)

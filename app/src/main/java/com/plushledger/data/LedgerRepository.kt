@@ -358,15 +358,20 @@ class LedgerRepository(
     }
 
     suspend fun loadOfficialMessages(): List<OfficialMessage> {
-        val session = sessionStore.currentSession() ?: return builtInMessages()
-        val token = session.accessToken ?: return builtInMessages()
+        val token = sessionStore.currentSession()?.accessToken
         return runCatching {
             supabaseClient.fetchOfficialMessages(token).map { json ->
+                val sourceKey = json.nullableString("source_key")
+                val versionCode = sourceKey
+                    ?.takeIf { it.startsWith("release:android:") }
+                    ?.substringAfterLast(':')
+                    ?.toIntOrNull()
                 OfficialMessage(
                     id = json.getString("id"),
                     title = json.getString("title"),
                     body = json.getString("body"),
-                    createdAt = json.optLong("created_at", now())
+                    createdAt = json.optLong("created_at", now()),
+                    updateInfo = versionCode?.let { supabaseClient.fetchAppVersion(it) }
                 )
             }.ifEmpty { builtInMessages() }
         }.getOrElse { builtInMessages() }
@@ -484,7 +489,8 @@ data class OfficialMessage(
     val id: String,
     val title: String,
     val body: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val updateInfo: AppVersionInfo? = null
 )
 
 private const val CURRENT_AGREEMENT_VERSION = "2026-06-12"

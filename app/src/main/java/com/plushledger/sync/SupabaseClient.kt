@@ -144,8 +144,15 @@ class SupabaseClient {
         )
     }
 
-    suspend fun fetchOfficialMessages(accessToken: String): List<JSONObject> =
-        fetchRows("official_messages", accessToken)
+    suspend fun fetchOfficialMessages(accessToken: String? = null): List<JSONObject> {
+        val text = request(
+            method = "GET",
+            path = "/rest/v1/official_messages?select=*&order=created_at.desc",
+            accessToken = accessToken
+        )
+        val array = if (text.isBlank()) JSONArray() else JSONArray(text)
+        return List(array.length()) { index -> array.getJSONObject(index) }
+    }
 
     suspend fun fetchLatestAppVersion(): AppVersionInfo? {
         val text = request(
@@ -154,17 +161,16 @@ class SupabaseClient {
         )
         val rows = if (text.isBlank()) JSONArray() else JSONArray(text)
         if (rows.length() == 0) return null
-        return rows.getJSONObject(0).let {
-            AppVersionInfo(
-                versionCode = it.getInt("version_code"),
-                versionName = it.getString("version_name"),
-                apkUrl = it.getString("apk_url"),
-                sha256 = it.getString("sha256"),
-                fileSizeBytes = it.getLong("file_size_bytes"),
-                releaseNotes = it.optString("release_notes"),
-                isMandatory = it.optBoolean("is_mandatory", false)
-            )
-        }
+        return rows.getJSONObject(0).toAppVersionInfo()
+    }
+
+    suspend fun fetchAppVersion(versionCode: Int): AppVersionInfo? {
+        val text = request(
+            method = "GET",
+            path = "/rest/v1/app_versions?select=version_code,version_name,apk_url,sha256,file_size_bytes,release_notes,is_mandatory&platform=eq.android&version_code=eq.$versionCode&active=eq.true&limit=1"
+        )
+        val rows = if (text.isBlank()) JSONArray() else JSONArray(text)
+        return if (rows.length() == 0) null else rows.getJSONObject(0).toAppVersionInfo()
     }
 
     suspend fun uploadAvatar(accessToken: String, userId: String, bytes: ByteArray): String {
@@ -285,6 +291,16 @@ private fun JSONObject.toRemoteSession(fallbackRefreshToken: String? = null): Re
     userId = getJSONObject("user").getString("id"),
     accessToken = getString("access_token"),
     refreshToken = optString("refresh_token").ifBlank { fallbackRefreshToken }
+)
+
+private fun JSONObject.toAppVersionInfo() = AppVersionInfo(
+    versionCode = getInt("version_code"),
+    versionName = getString("version_name"),
+    apkUrl = getString("apk_url"),
+    sha256 = getString("sha256"),
+    fileSizeBytes = getLong("file_size_bytes"),
+    releaseNotes = optString("release_notes"),
+    isMandatory = optBoolean("is_mandatory", false)
 )
 
 private fun Any.toJson(): JSONObject = when (this) {

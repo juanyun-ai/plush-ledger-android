@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.7.0-FF9F2D?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.7.1-FF9F2D?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -25,7 +25,7 @@
 - 稳定的本地头像缓存、昵称、年龄、生日、性别和邮箱/手机号换绑。
 - 应用信箱、用户反馈和管理员/会员身份。
 - PIN、生物识别、隐私防截图、数据导出和账号注销。
-- 自动检查版本、校验 APK SHA-256 并交由 Android 系统安装器更新。
+- 自动检查版本、信箱快捷下载、断点状态恢复、校验 APK SHA-256 并交由 Android 系统安装器更新。
 
 ## 数据安全
 
@@ -76,6 +76,12 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载后必须通过版本表中的 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.7.1
+
+- 修复应用内更新下载失败，发行包改用 Supabase 公共存储提供稳定下载。
+- 下载任务在应用切到后台或重新打开后可继续恢复和检查结果。
+- 官方信箱版本通知新增“下载”按钮，点击后需在取消/确认弹窗中确认。
 
 ### v0.7.0
 

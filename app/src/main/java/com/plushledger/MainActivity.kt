@@ -179,7 +179,7 @@ private fun PlushLedgerApp(
                         onUnlockPin = viewModel::unlockWithPin,
                         onBiometric = { requestBiometric { viewModel.unlockWithBiometric() } }
                     )
-                    else -> LedgerShell(viewModel, biometricAvailable)
+                    else -> LedgerShell(viewModel, biometricAvailable, downloadUpdate)
                 }
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp))
                 state.availableUpdate?.let { update ->
@@ -197,7 +197,10 @@ private fun PlushLedgerApp(
                             { TextButton(onClick = viewModel::dismissUpdate) { Text("稍后") } }
                         },
                         confirmButton = {
-                            TextButton(onClick = { downloadUpdate(update) }) { Text("下载更新") }
+                            TextButton(onClick = {
+                                downloadUpdate(update)
+                                viewModel.dismissUpdate()
+                            }) { Text("下载更新") }
                         }
                     )
                 }
@@ -430,7 +433,11 @@ private fun LockScreen(biometricAvailable: Boolean, onUnlockPin: (String) -> Uni
 }
 
 @Composable
-private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean) {
+private fun LedgerShell(
+    viewModel: LedgerViewModel,
+    biometricAvailable: Boolean,
+    downloadUpdate: (com.plushledger.sync.AppVersionInfo) -> Unit
+) {
     val state by viewModel.state
     val palette = LocalPlushPalette.current
     BackHandler(enabled = state.selectedTab != AppTab.HOME || viewModel.hasTabHistory()) {
@@ -484,7 +491,7 @@ private fun LedgerShell(viewModel: LedgerViewModel, biometricAvailable: Boolean)
                     onDeleteTransaction = viewModel::deleteTransaction
                 )
                 AppTab.STATS -> StatsScreen(state.ledger, state.selectedDate, viewModel::changeMonth, viewModel::selectStatsDate)
-                AppTab.MY -> MyScreen(state, biometricAvailable, viewModel)
+                AppTab.MY -> MyScreen(state, biometricAvailable, viewModel, downloadUpdate)
             }
         }
     }
