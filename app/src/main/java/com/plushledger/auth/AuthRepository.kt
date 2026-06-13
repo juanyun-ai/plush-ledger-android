@@ -146,10 +146,14 @@ class AuthRepository(
         val session = sessionStore.currentSession() ?: return AuthOutcome.Failed("请先登录云端账号")
         val token = session.accessToken ?: return AuthOutcome.Failed("本地模式不支持换绑")
         val cleaned = identifier.trim()
-        if (code.trim().length < 4) return AuthOutcome.Failed("验证码不完整")
+        if (channel == AuthChannel.PHONE && code.trim().length < 4) return AuthOutcome.Failed("验证码不完整")
         return runCatching {
-            supabaseClient.verifyIdentityChange(token, channel, cleaned, code.trim())
+            if (code.isNotBlank()) {
+                supabaseClient.verifyIdentityChange(token, channel, cleaned, code.trim())
+            }
             val identity = supabaseClient.fetchCurrentIdentity(token)
+            val changed = if (channel == AuthChannel.EMAIL) identity.email == cleaned else identity.phone == cleaned
+            check(changed) { if (channel == AuthChannel.EMAIL) "请先在新邮箱中完成确认" else "手机号尚未完成验证" }
             val updated = session.copy(email = identity.email, phone = identity.phone)
             sessionStore.saveSession(updated)
             AuthOutcome.SignedIn(updated, if (channel == AuthChannel.EMAIL) "邮箱换绑成功" else "手机号换绑成功")

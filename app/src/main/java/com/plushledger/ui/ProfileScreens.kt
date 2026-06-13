@@ -594,7 +594,7 @@ private fun IdentityChangeDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    if (isEmail) "验证码会发送到新邮箱。为保护账号，原邮箱可能也会收到安全通知。"
+                    if (isEmail) "邮件可能包含验证码或确认链接。输入验证码，或点完确认链接后返回这里继续。"
                     else "手机号请填写国际格式，例如 +8613800138000。",
                     fontSize = 12.sp
                 )
@@ -625,8 +625,8 @@ private fun IdentityChangeDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         confirmButton = {
-            TextButton(onClick = { onVerify(value, code) }, enabled = !busy && value.isNotBlank() && code.length >= 4) {
-                Text("确认换绑")
+            TextButton(onClick = { onVerify(value, code) }, enabled = !busy && value.isNotBlank() && (isEmail || code.length >= 4)) {
+                Text(if (isEmail && code.isBlank()) "已点链接，完成换绑" else "确认换绑")
             }
         }
     )
