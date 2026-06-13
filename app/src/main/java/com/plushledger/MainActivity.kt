@@ -537,20 +537,23 @@ private fun LedgerShell(
                         navItems.forEach { item ->
                             val selected = state.selectedTab == item.tab
                             Column(
-                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
-                                    .clickable { viewModel.selectTab(item.tab) }.padding(vertical = 5.dp),
+                                modifier = Modifier.weight(1f)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(if (selected) palette.rose else androidx.compose.ui.graphics.Color.Transparent)
+                                    .clickable { viewModel.selectTab(item.tab) }
+                                    .padding(vertical = 5.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Icon(
                                     item.icon,
                                     contentDescription = item.label,
-                                    tint = if (selected) palette.rose else palette.muted,
+                                    tint = if (selected) androidx.compose.ui.graphics.Color.White else palette.muted,
                                     modifier = Modifier.size(26.dp)
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     item.label,
-                                    color = if (selected) palette.rose else palette.muted,
+                                    color = if (selected) androidx.compose.ui.graphics.Color.White else palette.muted,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
@@ -587,18 +590,6 @@ private fun LedgerShell(
                 )
                 AppTab.STATS -> StatsScreen(state.ledger, state.selectedDate, viewModel::changeMonth, viewModel::selectStatsDate)
                 AppTab.MY -> MyScreen(state, biometricAvailable, viewModel, downloadUpdate)
-            }
-            if (state.selectedTab == AppTab.HOME) {
-                Box(
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 14.dp)
-                ) {
-                    PlushButton(
-                        "记一笔",
-                        Icons.Default.EditNote,
-                        Modifier.width(154.dp),
-                        onClick = { viewModel.selectTab(AppTab.RECORD) }
-                    )
-                }
             }
         }
     }

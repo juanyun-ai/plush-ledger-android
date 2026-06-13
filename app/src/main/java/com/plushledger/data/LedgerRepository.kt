@@ -291,6 +291,24 @@ class LedgerRepository(
         )
     }
 
+    suspend fun moveCategory(userId: String, categoryId: String, direction: Int) {
+        if (direction == 0) return
+        val all = dao.categoriesSnapshot(userId)
+        val current = all.firstOrNull { it.id == categoryId } ?: return
+        val siblings = all.filter { it.kind == current.kind }.sortedBy { it.sortOrder }
+        val from = siblings.indexOfFirst { it.id == categoryId }
+        if (from == -1) return
+        val to = (from + direction).coerceIn(0, siblings.lastIndex)
+        if (from == to) return
+        val reordered = siblings.toMutableList().apply { add(to, removeAt(from)) }
+        val now = now()
+        dao.upsertCategories(
+            reordered.mapIndexed { index, item ->
+                item.copy(sortOrder = index, updatedAt = now, syncState = SYNC_DIRTY)
+            }
+        )
+    }
+
     suspend fun setBudget(userId: String, month: YearMonth, categoryId: String?, limitMinor: Long) {
         val book = dao.getDefaultBook(userId) ?: return
         val now = now()

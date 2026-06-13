@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -76,10 +76,13 @@ fun ReferenceHeader(
             }
             Text(subtitle, color = palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        when {
-            month != null -> MonthPill(month, onMonth)
-            trailingAction != null -> IconButton(onClick = trailingAction) {
-                Icon(Icons.Default.MoreHoriz, contentDescription = "更多", tint = palette.ink)
+        if (month != null) {
+            MonthPill(month, onMonth)
+        }
+        if (trailingAction != null) {
+            Spacer(Modifier.width(6.dp))
+            IconButton(onClick = trailingAction) {
+                Icon(Icons.Default.Search, contentDescription = "搜索", tint = palette.ink)
             }
         }
     }

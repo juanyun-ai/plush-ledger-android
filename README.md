@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.7.5-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.8.0-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -76,6 +76,15 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载后必须通过版本表中的 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.8.0
+
+- 继续按新增参考图细化账单、统计、我的、预算管理、分类管理、设置、用户信息和关于我们页面。
+- 账单页新增右上角搜索，修正收入/支出筛选与汇总展示，日期分组改为“今天/昨天 + 日期 + 星期”，并显示每日收入与支出。
+- 统计页重做暖色汇总、支出构成、周支出趋势和分类排行模块，图表视觉更贴近参考稿。
+- 我的页、设置页和用户信息页改为顶部暖色人物卡与分组列表，数据导出改为选择保存位置后确认导出。
+- 分类管理改为参考图双列卡片和三条杠手柄，支持轻点下移、双击上移、长按确认删除并同步排序。
+- 通知提醒固定每页展示 5 条，版本消息支持折叠预览与确认下载弹窗。
 
 ### v0.7.5
 

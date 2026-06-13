@@ -13,8 +13,8 @@ android {
         applicationId = "com.plushledger"
         minSdk = 26
         targetSdk = 36
-        versionCode = 75
-        versionName = "0.7.5"
+        versionCode = 80
+        versionName = "0.8.0"
 
         val supabaseUrl = providers.gradleProperty("SUPABASE_URL").orNull ?: ""
         val supabaseAnonKey = providers.gradleProperty("SUPABASE_ANON_KEY").orNull ?: ""

@@ -1,6 +1,7 @@
 package com.plushledger.ui
 
 import android.app.DatePickerDialog
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.PickVisualMediaRequest
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Inbox
@@ -88,6 +91,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.plushledger.BuildConfig
 import com.plushledger.R
+import com.plushledger.data.LedgerState
 import com.plushledger.data.OfficialMessage
 import com.plushledger.sync.AppVersionInfo
 import java.time.Instant
@@ -109,12 +113,12 @@ fun InboxScreen(
     var pendingDownload by remember { mutableStateOf<AppVersionInfo?>(null) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { SectionTitle("官方消息", Icons.Default.Notifications) }
-        items(messages, key = { it.id }) { message ->
-            PlushCard {
+        items(messages.take(5), key = { it.id }) { message ->
+            PlushCard(Modifier.fillMaxWidth().height(126.dp), padding = 12.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     PlushBadge(Icons.Default.Inbox, palette.blue, 40.dp)
                     Spacer(Modifier.width(10.dp))
@@ -127,10 +131,10 @@ fun InboxScreen(
                         )
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(message.body, color = palette.muted, lineHeight = 21.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(message.body, color = palette.muted, lineHeight = 18.sp, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 message.updateInfo?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }?.let { update ->
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(6.dp))
                     OutlinedButton(
                         onClick = { pendingDownload = update },
                         modifier = Modifier.fillMaxWidth()
@@ -179,7 +183,7 @@ fun InboxScreen(
     }
 }
 
-private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP, BUDGET, CATEGORY }
+private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP, BUDGET, CATEGORY, ABOUT }
 
 @Composable
 fun MyScreen(
@@ -199,6 +203,7 @@ fun MyScreen(
             onMembership = { page = MyPage.MEMBERSHIP },
             onBudget = { page = MyPage.BUDGET },
             onCategory = { page = MyPage.CATEGORY },
+            onAbout = { page = MyPage.ABOUT },
             onDarkMode = viewModel::setDarkMode
         )
         MyPage.PROFILE -> ProfileScreen(
@@ -221,8 +226,10 @@ fun MyScreen(
             ledger = state.ledger,
             onBack = { page = MyPage.ROOT },
             onAdd = viewModel::addCategory,
-            onDelete = viewModel::deleteCategory
+            onDelete = viewModel::deleteCategory,
+            onReorder = viewModel::moveCategory
         )
+        MyPage.ABOUT -> AboutScreen(onBack = { page = MyPage.ROOT })
     }
 }
 
@@ -235,6 +242,7 @@ private fun MyRoot(
     onMembership: () -> Unit,
     onBudget: () -> Unit,
     onCategory: () -> Unit,
+    onAbout: () -> Unit,
     onDarkMode: (Boolean) -> Unit
 ) {
     val palette = LocalPlushPalette.current
@@ -242,6 +250,20 @@ private fun MyRoot(
     val badge = membershipLabel(profile?.role, profile?.membershipTier)
     val monthCount = state.ledger.transactions.count { java.time.YearMonth.from(it.localDateForProfile()) == java.time.YearMonth.now() }
     val streakDays = state.ledger.transactions.map { it.localDateForProfile() }.distinct().size.coerceAtMost(99)
+    val context = LocalContext.current
+    var showExportDialog by rememberSaveable { mutableStateOf(false) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(buildCsv(state.ledger)) }
+                    ?: error("无法打开导出位置")
+            }.onSuccess {
+                Toast.makeText(context, "导出成功", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "导出失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -256,7 +278,7 @@ private fun MyRoot(
             }
         }
         item {
-            PlushCard(Modifier.fillMaxWidth().clickable(onClick = onProfile), padding = 14.dp) {
+            ProfileWarmPanel(Modifier.fillMaxWidth().clickable(onClick = onProfile), padding = 14.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(state.avatarUrl, 58.dp)
                     Spacer(Modifier.width(12.dp))
@@ -276,7 +298,7 @@ private fun MyRoot(
                     MascotArt(76.dp)
                 }
                 Spacer(Modifier.height(10.dp))
-                Surface(shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                Surface(shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.78f), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
                     Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ProfileMetric("连续记账", "$streakDays 天", palette.rose, Modifier.weight(1f))
                         Box(Modifier.width(1.dp).height(58.dp).background(palette.border))
@@ -295,7 +317,7 @@ private fun MyRoot(
                     MenuRow(Icons.Default.Badge, "分类管理", "", palette.moss)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                Box(Modifier.fillMaxWidth().clickable(onClick = onSettings).padding(6.dp)) {
+                Box(Modifier.fillMaxWidth().clickable { showExportDialog = true }.padding(6.dp)) {
                     MenuRow(Icons.Default.Download, "数据导出", "", palette.rose)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
@@ -307,13 +329,13 @@ private fun MyRoot(
                     MenuRow(Icons.Default.Notifications, "通知提醒", if (state.officialMessages.isEmpty()) "已开启" else "${state.officialMessages.size} 条消息", palette.coral)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                Box(Modifier.fillMaxWidth().clickable(onClick = onSettings).padding(6.dp)) {
+                Box(Modifier.fillMaxWidth().clickable(onClick = onAbout).padding(6.dp)) {
                     MenuRow(Icons.Default.AccountCircle, "关于我们", "", palette.blue)
                 }
             }
         }
         item {
-            PlushCard(padding = 16.dp) {
+            ProfileWarmPanel(padding = 16.dp) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("每一笔记录，都是生活的温柔片段", fontWeight = FontWeight.Bold, color = palette.ink)
@@ -324,6 +346,106 @@ private fun MyRoot(
                 }
             }
         }
+    }
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = { Text("导出数据", fontWeight = FontWeight.Bold, color = palette.ink) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("请选择保存位置。导出的 CSV 只包含本机当前可见账目。", color = palette.muted, fontSize = 13.sp)
+                    ProfileWarmPanel(padding = 12.dp) {
+                        Text("文件名", color = palette.muted, fontSize = 12.sp)
+                        Text("rongrong-ledger-${LocalDate.now()}.csv", color = palette.ink, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text("取消") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExportDialog = false
+                    exportLauncher.launch("rongrong-ledger-${LocalDate.now()}.csv")
+                }) { Text("确认导出") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AboutScreen(onBack: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item { BackHeader("关于我们", onBack) }
+        item {
+            ProfileWarmPanel(padding = 20.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    MascotArt(116.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Image(
+                            painterResource(R.drawable.brand_wordmark),
+                            contentDescription = "绒绒记账",
+                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Surface(shape = RoundedCornerShape(16.dp), color = Color.White.copy(alpha = 0.8f), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                            Text("Version ${BuildConfig.VERSION_NAME}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = palette.rose, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            PlushCard(padding = 16.dp) {
+                SectionTitle("品牌简介", Icons.Default.AccountCircle)
+                Spacer(Modifier.height(10.dp))
+                Text("绒绒记账是一款本地优先、可云同步的温柔记账应用。每一笔收入和支出，都被安全保存，也被整理成容易看懂的生活线索。", color = palette.muted, lineHeight = 20.sp, fontSize = 13.sp)
+            }
+        }
+        item {
+            PlushCard(padding = 16.dp) {
+                SectionTitle("我们的初心", Icons.Default.Star)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AboutValue(Icons.Default.EditNote, "轻松记录", palette.rose, Modifier.weight(1f))
+                    AboutValue(Icons.Default.Security, "安心守护", palette.moss, Modifier.weight(1f))
+                    AboutValue(Icons.Default.Badge, "生活有序", palette.blue, Modifier.weight(1f))
+                }
+            }
+        }
+        item {
+            PlushCard(padding = 16.dp) {
+                SectionTitle("联系我们", Icons.Default.Email)
+                Spacer(Modifier.height(10.dp))
+                MenuRow(Icons.Default.Email, "support@rongrong.app", "用户反馈和合作联系", palette.rose)
+            }
+        }
+        item {
+            ProfileWarmPanel(padding = 16.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("愿每一次记录，都能帮你更温柔地靠近生活", color = palette.ink, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(5.dp))
+                        Text("谢谢你一直以来的陪伴～", color = palette.muted, fontSize = 12.sp)
+                    }
+                    MascotArt(74.dp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutValue(icon: ImageVector, label: String, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        PlushBadge(icon, color, 42.dp)
+        Spacer(Modifier.height(8.dp))
+        Text(label, color = LocalPlushPalette.current.ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
@@ -347,32 +469,70 @@ private fun ProfileScreen(
     var gender by rememberSaveable(profile?.gender) { mutableStateOf(profile?.gender ?: "prefer_not") }
     var identityChannel by rememberSaveable { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(onAvatar) }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { BackHeader("我的资料", onBack) }
+    val genderLabel = when (gender) {
+        "female" -> "女"
+        "male" -> "男"
+        "other" -> "其他"
+        else -> "不公开"
+    }
+    val birthdayLabel = birthDate.ifBlank { "未设置" }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item { BackHeader("用户信息", onBack) }
         item {
-            PlushCard {
+            ProfileWarmPanel(padding = 16.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(state.avatarUrl, 82.dp)
+                    Avatar(state.avatarUrl, 92.dp)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("头像", fontWeight = FontWeight.Bold, color = palette.ink)
-                        Text("支持 JPG、PNG 和 WebP，最大 12MB", color = palette.muted, fontSize = 12.sp)
+                        Text(nickname.ifBlank { "绒绒用户" }, fontWeight = FontWeight.Black, fontSize = 26.sp, color = palette.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("让每一次记录更贴近自己～", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TinyPill(age.ifBlank { "--" } + "岁", palette.rose)
+                            TinyPill(genderLabel, palette.rose)
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text("生日  ${birthdayLabel.replace("-", "月").replaceFirst("月", "年")}", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(membershipLabel(profile?.role, profile?.membershipTier), color = badgeColor(profile?.role, profile?.membershipTier), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
+                    MascotArt(86.dp)
+                }
+            }
+        }
+        item {
+            PlushCard {
+                ProfileSectionTitle("基本资料")
+                ProfileEditRow(Icons.Default.PhotoCamera, "头像", "点击右侧更换头像", palette.rose) {
                     IconButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                        Icon(Icons.Default.PhotoCamera, contentDescription = "从相册选择头像", tint = palette.rose)
+                        Avatar(state.avatarUrl, 34.dp)
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 OutlinedTextField(nickname, { nickname = it.take(24) }, label = { Text("昵称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    age,
-                    { age = it.filter(Char::isDigit).take(3) },
-                    label = { Text("年龄") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        age,
+                        { age = it.filter(Char::isDigit).take(3) },
+                        label = { Text("年龄") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    Column(Modifier.weight(1.4f)) {
+                        Text("性别", color = palette.muted, fontSize = 12.sp)
+                        Spacer(Modifier.height(7.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("female" to "女", "male" to "男", "other" to "其他", "prefer_not" to "不公开").forEach { (key, label) ->
+                                SoftChip(label, gender == key, palette.rose) { gender = key }
+                            }
+                        }
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(
                     onClick = {
@@ -396,30 +556,44 @@ private fun ProfileScreen(
                     Text(if (birthDate.isBlank()) "选择生日" else "生日  $birthDate")
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("性别", color = palette.muted, fontSize = 12.sp)
-                Spacer(Modifier.height(6.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("female" to "女", "male" to "男", "other" to "其他", "prefer_not" to "不公开").forEach { (key, label) ->
-                        SoftChip(label, gender == key, palette.rose) { gender = key }
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                PlushButton("保存资料", Icons.Default.Save, Modifier.fillMaxWidth()) {
-                    onSave(nickname, age, birthDate.ifBlank { null }, gender)
-                }
+                ProfileEditRow(Icons.Default.ChatBubble, "个性签名", "认真生活，温柔记账", palette.coral) {}
             }
         }
         item {
             PlushCard {
-                InfoRow(Icons.Default.Badge, "身份", membershipLabel(profile?.role, profile?.membershipTier))
+                ProfileSectionTitle("账号绑定")
+                InfoRow(Icons.Default.Badge, "会员", membershipLabel(profile?.role, profile?.membershipTier))
                 IdentityRow(Icons.Default.Phone, "手机号", profile?.phone ?: state.session?.phone ?: "未绑定", state.session?.accessToken != null) { identityChannel = "phone" }
                 IdentityRow(Icons.Default.Email, "邮箱", profile?.email ?: state.session?.email ?: "本地账号", state.session?.accessToken != null) { identityChannel = "email" }
+                BindRow("微信", profile?.wechatBound == true) { onBind("微信绑定") }
+                BindRow("QQ", profile?.qqBound == true) { onBind("QQ绑定") }
             }
         }
         item {
             PlushCard {
-                BindRow("微信", profile?.wechatBound == true) { onBind("微信绑定") }
-                BindRow("QQ", profile?.qqBound == true) { onBind("QQ绑定") }
+                ProfileSectionTitle("其他功能")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    ProfileShortcut(Icons.Default.Lock, "资料隐私", palette.lilac, Modifier.weight(1f))
+                    Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
+                    ProfileShortcut(Icons.Default.Security, "修改密码", palette.rose, Modifier.weight(1f))
+                    Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
+                    ProfileShortcut(Icons.Default.Shield, "实名认证", palette.moss, Modifier.weight(1f))
+                    Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
+                    ProfileShortcut(Icons.Default.DeleteForever, "注销账号", palette.coral, Modifier.weight(1f))
+                }
+            }
+        }
+        item {
+            ProfileWarmPanel(padding = 14.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("完善个人信息，体验会更完整哦～", color = palette.ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    MascotArt(72.dp)
+                }
+            }
+        }
+        item {
+            PlushButton("保存修改", Icons.Default.Save, Modifier.fillMaxWidth()) {
+                onSave(nickname, age, birthDate.ifBlank { null }, gender)
             }
         }
     }
@@ -436,8 +610,58 @@ private fun ProfileScreen(
 }
 
 @Composable
+private fun ProfileSectionTitle(text: String) {
+    val palette = LocalPlushPalette.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(4.dp).height(22.dp).clip(RoundedCornerShape(4.dp)).background(palette.rose))
+        Spacer(Modifier.width(8.dp))
+        Text(text, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp)
+    }
+    Spacer(Modifier.height(10.dp))
+}
+
+@Composable
+private fun TinyPill(text: String, color: Color) {
+    Surface(shape = RoundedCornerShape(14.dp), color = color.copy(alpha = 0.14f)) {
+        Text(text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun ProfileEditRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    color: Color,
+    trailing: @Composable RowScope.() -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+        PlushBadge(icon, color, 34.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = palette.ink, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        trailing()
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted)
+    }
+}
+
+@Composable
+private fun ProfileShortcut(icon: ImageVector, label: String, color: Color, modifier: Modifier = Modifier) {
+    val palette = LocalPlushPalette.current
+    Column(modifier.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        PlushBadge(icon, color, 42.dp)
+        Spacer(Modifier.height(8.dp))
+        Text(label, color = palette.ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
 private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewModel: LedgerViewModel, onBack: () -> Unit) {
     val palette = LocalPlushPalette.current
+    val profile = state.ledger.profile
     var pin by rememberSaveable { mutableStateOf("") }
     var exportPin by rememberSaveable { mutableStateOf("") }
     var showSignOut by rememberSaveable { mutableStateOf(false) }
@@ -453,17 +677,51 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
         }
     }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         item { BackHeader("设置", onBack) }
         item {
-            PlushCard {
-                ToggleRow(Icons.Default.DarkMode, "夜间模式", state.darkMode, viewModel::setDarkMode)
-                ToggleRow(Icons.Default.Security, "隐私防截图", state.secureScreen, viewModel::setSecureScreen)
+            ProfileWarmPanel(padding = 14.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(state.avatarUrl, 76.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(profile?.displayName ?: state.session?.displayName ?: "绒绒用户", color = palette.ink, fontSize = 23.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("让每一次记录更顺手～", color = palette.muted, fontSize = 12.sp)
+                    }
+                    MascotArt(82.dp)
+                }
             }
         }
         item {
             PlushCard {
-                Text("打开验证", fontWeight = FontWeight.Bold, color = palette.ink)
+                ProfileSectionTitle("通用设置")
+                ToggleRow(Icons.Default.DarkMode, "主题模式", state.darkMode, viewModel::setDarkMode)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                SettingsValueRow(Icons.Default.Notifications, "记账提醒", "已开启", palette.coral)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                SettingsValueRow(Icons.Default.Paid, "货币单位", "人民币  ¥", palette.moss)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                SettingsValueRow(Icons.Default.Badge, "每月起始日", "1日", palette.rose)
+            }
+        }
+        item {
+            PlushCard {
+                ProfileSectionTitle("数据与安全")
+                ActionRow(Icons.Default.Download, "数据导出", "输入 PIN 后导出 CSV", palette.moss) { viewModel.exportCsv(exportPin) }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(exportPin, { exportPin = it.filter(Char::isDigit).take(12) }, label = { Text("导出 PIN") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                state.exportPath?.let { Text(it, color = palette.muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                ToggleRow(Icons.Default.Security, "隐私防截图", state.secureScreen, viewModel::setSecureScreen)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                ActionRow(Icons.Default.CloudSync, "云端备份", state.syncLabel.ifBlank { "未开启" }, palette.blue, viewModel::syncNow)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                Text("打开验证", fontWeight = FontWeight.Bold, color = palette.ink, modifier = Modifier.padding(top = 10.dp))
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     pin,
@@ -485,7 +743,10 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
         }
         item {
             PlushCard {
-                ActionRow(Icons.Default.CloudSync, "立即同步", state.syncLabel, palette.blue, viewModel::syncNow)
+                ProfileSectionTitle("更多")
+                ActionRow(Icons.Default.ChatBubble, "帮助与反馈", "在“我的-通知提醒”里发送建议", palette.coral) {}
+                Spacer(Modifier.height(8.dp))
+                ActionRow(Icons.Default.AccountCircle, "关于我们", "当前版本 ${BuildConfig.VERSION_NAME}", palette.blue) {}
                 Spacer(Modifier.height(8.dp))
                 ActionRow(
                     Icons.Default.SystemUpdate,
@@ -493,22 +754,31 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                     if (state.isCheckingUpdate) "正在检查" else "当前版本 ${BuildConfig.VERSION_NAME}",
                     palette.moss
                 ) { viewModel.checkForUpdates() }
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(exportPin, { exportPin = it.filter(Char::isDigit).take(12) }, label = { Text("导出 PIN") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { viewModel.exportCsv(exportPin) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Download, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("导出 CSV")
-                }
-                state.exportPath?.let { Text(it, color = palette.muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             }
         }
         item {
-            PlushCard {
-                ActionRow(Icons.Default.Logout, "退出登录", "保留本机数据", palette.rose) { showSignOut = true }
-                Spacer(Modifier.height(8.dp))
-                ActionRow(Icons.Default.DeleteForever, "注销账号", "永久删除云端与本机数据", palette.rose) { showDelete = true }
+            ProfileWarmPanel(padding = 14.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("小绒绒提示：", color = palette.ink, fontWeight = FontWeight.Bold)
+                        Text("设置好提醒，记账会更轻松哦～", color = palette.muted, fontSize = 12.sp)
+                    }
+                    MascotArt(74.dp)
+                }
+            }
+        }
+        item {
+            OutlinedButton(onClick = { showSignOut = true }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                Icon(Icons.Default.Logout, contentDescription = null, tint = palette.rose)
+                Spacer(Modifier.width(8.dp))
+                Text("退出登录", color = palette.rose, fontWeight = FontWeight.Bold)
+            }
+        }
+        item {
+            OutlinedButton(onClick = { showDelete = true }, modifier = Modifier.fillMaxWidth().height(46.dp)) {
+                Icon(Icons.Default.DeleteForever, contentDescription = null, tint = palette.coral)
+                Spacer(Modifier.width(8.dp))
+                Text("注销账号", color = palette.coral, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -602,6 +872,19 @@ private fun MenuRow(icon: ImageVector, title: String, subtitle: String, color: C
             Text(title, fontWeight = FontWeight.Bold, color = palette.ink)
             if (subtitle.isNotBlank()) Text(subtitle, color = palette.muted, fontSize = 12.sp)
         }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted)
+    }
+}
+
+@Composable
+private fun SettingsValueRow(icon: ImageVector, title: String, value: String, color: Color) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        PlushBadge(icon, color, 34.dp)
+        Spacer(Modifier.width(12.dp))
+        Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, color = palette.ink)
+        Text(value, color = palette.muted, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.width(6.dp))
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted)
     }
 }
@@ -745,11 +1028,46 @@ private fun Avatar(url: String?, size: androidx.compose.ui.unit.Dp) {
 @Composable
 private fun ProfileMetric(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
     val palette = LocalPlushPalette.current
-    Column(modifier.clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.10f)).padding(8.dp)) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = 0.12f)).padding(12.dp)) {
         Text(label, color = palette.muted, fontSize = 11.sp)
-        Text(value, color = color, fontSize = 16.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
+
+@Composable
+private fun ProfileWarmPanel(
+    modifier: Modifier = Modifier,
+    padding: androidx.compose.ui.unit.Dp = 16.dp,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = palette.surfaceAlt,
+        border = androidx.compose.foundation.BorderStroke(1.dp, palette.border),
+        shadowElevation = 6.dp
+    ) {
+        Column(Modifier.padding(padding), content = content)
+    }
+}
+
+private fun buildCsv(ledger: LedgerState): String {
+    val categories = ledger.categories.associateBy { it.id }
+    val accounts = ledger.accounts.associateBy { it.id }
+    return buildString {
+        appendLine("date,type,category,account,amount_minor,note")
+        ledger.transactions.sortedByDescending { it.occurredAt }.forEach { record ->
+            val date = Instant.ofEpochMilli(record.occurredAt).atZone(ZoneId.systemDefault()).toLocalDate()
+            val category = categories[record.categoryId]?.name.orEmpty().csvCell()
+            val account = accounts[record.accountId]?.name.orEmpty().csvCell()
+            val note = record.note.csvCell()
+            appendLine("$date,${record.type},$category,$account,${record.amountMinor},$note")
+        }
+    }
+}
+
+private fun String.csvCell(): String = "\"${replace("\"", "\"\"")}\""
 
 private fun com.plushledger.data.TransactionEntity.localDateForProfile(): java.time.LocalDate =
     java.time.Instant.ofEpochMilli(occurredAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate()

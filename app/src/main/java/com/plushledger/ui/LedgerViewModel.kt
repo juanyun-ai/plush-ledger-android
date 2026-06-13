@@ -337,6 +337,15 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun moveCategory(id: String, direction: Int) {
+        val userId = state.value.session?.userId ?: return
+        viewModelScope.launch {
+            ledger.moveCategory(userId, id, direction)
+            app.enqueueImmediateSync()
+            state.value = state.value.copy(message = "分类顺序已更新")
+        }
+    }
+
     fun setBudget(amountText: String, categoryId: String?) {
         val session = state.value.session ?: return
         val amount = Money.parseToMinor(amountText)
