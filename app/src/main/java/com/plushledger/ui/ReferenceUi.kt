@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,8 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,7 +75,12 @@ fun ReferenceHeader(
                     alignment = Alignment.CenterStart
                 )
             } else {
-                Text(title, color = palette.ink, fontSize = 25.sp, fontWeight = FontWeight.Black)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, color = palette.ink, fontSize = 25.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.width(7.dp))
+                    Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.coral.copy(alpha = 0.72f), modifier = Modifier.size(15.dp))
+                    Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.rose.copy(alpha = 0.35f), modifier = Modifier.size(12.dp))
+                }
             }
             Text(subtitle, color = palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -147,12 +155,27 @@ fun ReferenceSegment(
 
 @Composable
 fun MascotArt(size: Dp = 88.dp) {
-    Image(
-        painter = painterResource(R.drawable.ic_launcher_transparent),
-        contentDescription = null,
-        modifier = Modifier.size(size),
-        contentScale = ContentScale.Fit
-    )
+    val palette = LocalPlushPalette.current
+    Box(Modifier.size(size)) {
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_transparent),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit
+        )
+        Icon(
+            Icons.Default.AutoAwesome,
+            contentDescription = null,
+            tint = palette.rose.copy(alpha = 0.62f),
+            modifier = Modifier.size(size * 0.18f).align(Alignment.TopStart)
+        )
+        Icon(
+            Icons.Default.Favorite,
+            contentDescription = null,
+            tint = palette.coral.copy(alpha = 0.68f),
+            modifier = Modifier.size(size * 0.18f).align(Alignment.TopEnd)
+        )
+    }
 }
 
 @Composable

@@ -372,8 +372,19 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             app.enqueueImmediateSync()
             state.value = state.value.copy(
                 session = sessions.currentSession(),
-                message = "资料已保存"
+                message = "已保存本次修改"
             )
+        }
+    }
+
+    fun changePassword(currentPassword: String, password: String, confirmation: String) {
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true, message = null)
+            when (val result = auth.changePassword(currentPassword, password, confirmation)) {
+                is AuthOutcome.SignedIn -> state.value = state.value.copy(session = result.session, isBusy = false, message = result.message)
+                is AuthOutcome.Failed -> state.value = state.value.copy(isBusy = false, message = result.message)
+                else -> state.value = state.value.copy(isBusy = false)
+            }
         }
     }
 

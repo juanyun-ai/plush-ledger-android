@@ -236,7 +236,9 @@ fun MyScreen(
             onAvatar = viewModel::uploadAvatar,
             onBind = viewModel::socialLogin,
             onSendIdentityCode = viewModel::requestIdentityChange,
-            onVerifyIdentity = viewModel::verifyIdentityChange
+            onVerifyIdentity = viewModel::verifyIdentityChange,
+            onChangePassword = viewModel::changePassword,
+            onDeleteAccount = viewModel::deleteAccountPermanently
         )
         MyPage.INBOX -> Column(Modifier.fillMaxSize()) {
             BackHeader("消息与建议", onBack = { page = MyPage.ROOT })
@@ -504,45 +506,89 @@ private fun ProfileScreen(
     onAvatar: (android.net.Uri) -> Unit,
     onBind: (String) -> Unit,
     onSendIdentityCode: (String, String) -> Unit,
-    onVerifyIdentity: (String, String, String) -> Unit
+    onVerifyIdentity: (String, String, String) -> Unit,
+    onChangePassword: (String, String, String) -> Unit,
+    onDeleteAccount: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
     val profile = state.ledger.profile
     val context = LocalContext.current
-    var nickname by rememberSaveable(profile?.displayName) { mutableStateOf(profile?.displayName ?: state.session?.displayName.orEmpty()) }
-    var age by rememberSaveable(profile?.age) { mutableStateOf(profile?.age?.toString().orEmpty()) }
-    var birthDate by rememberSaveable(profile?.birthDate) { mutableStateOf(profile?.birthDate.orEmpty()) }
-    var gender by rememberSaveable(profile?.gender) { mutableStateOf(profile?.gender ?: "prefer_not") }
+    val prefs = remember { context.getSharedPreferences("plush_profile_actions", Context.MODE_PRIVATE) }
+    val userKey = state.session?.userId ?: "guest"
+    val initialName = profile?.displayName ?: state.session?.displayName.orEmpty()
+    val initialAge = profile?.age?.toString().orEmpty()
+    val initialBirthDate = profile?.birthDate.orEmpty()
+    val initialGender = profile?.gender ?: "prefer_not"
+    val initialSignature = remember(userKey) { prefs.getString("signature_$userKey", "认真生活，温柔记账") ?: "认真生活，温柔记账" }
+    var nickname by rememberSaveable(profile?.displayName) { mutableStateOf(initialName) }
+    var age by rememberSaveable(profile?.age) { mutableStateOf(initialAge) }
+    var birthDate by rememberSaveable(profile?.birthDate) { mutableStateOf(initialBirthDate) }
+    var gender by rememberSaveable(profile?.gender) { mutableStateOf(initialGender) }
+    var signature by rememberSaveable(userKey) { mutableStateOf(initialSignature) }
+    var editMode by rememberSaveable { mutableStateOf(false) }
     var identityChannel by rememberSaveable { mutableStateOf<String?>(null) }
+    var showNicknameEditor by rememberSaveable { mutableStateOf(false) }
+    var showAgeEditor by rememberSaveable { mutableStateOf(false) }
+    var showGenderEditor by rememberSaveable { mutableStateOf(false) }
+    var showSignatureEditor by rememberSaveable { mutableStateOf(false) }
+    var showPrivacy by rememberSaveable { mutableStateOf(false) }
+    var showPassword by rememberSaveable { mutableStateOf(false) }
+    var showVerify by rememberSaveable { mutableStateOf(false) }
+    var showDelete by rememberSaveable { mutableStateOf(false) }
+    var privacyOn by rememberSaveable(userKey) { mutableStateOf(prefs.getBoolean("privacy_$userKey", false)) }
+    var verified by rememberSaveable(userKey) { mutableStateOf(prefs.getBoolean("verified_$userKey", false)) }
+    var verifiedName by rememberSaveable(userKey) { mutableStateOf(prefs.getString("verified_name_$userKey", "") ?: "") }
+    var deleteSeconds by remember { mutableIntStateOf(15) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(onAvatar) }
+    val dirty = nickname != initialName || age != initialAge || birthDate != initialBirthDate ||
+        gender != initialGender || signature != initialSignature
     val genderLabel = when (gender) {
         "female" -> "女"
         "male" -> "男"
         "other" -> "其他"
         else -> "不公开"
     }
-    val birthdayLabel = birthDate.ifBlank { "未设置" }
+    val ageLabel = age.ifBlank { "--" } + "岁"
+    val birthdayLabel = birthDate.toBirthdayLabel()
+    val remoteMode = state.session?.accessToken != null
+
+    LaunchedEffect(showDelete) {
+        if (!showDelete) return@LaunchedEffect
+        deleteSeconds = 15
+        while (deleteSeconds > 0) {
+            delay(1_000)
+            deleteSeconds--
+        }
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { BackHeader("用户信息", onBack) }
+        item {
+            ProfileTopBar(
+                title = "用户信息",
+                editing = editMode,
+                onBack = onBack,
+                onEdit = { editMode = !editMode }
+            )
+        }
         item {
             ProfileWarmPanel(padding = 16.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(state.avatarUrl, 92.dp)
+                    Avatar(state.avatarUrl, 100.dp)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(nickname.ifBlank { "绒绒用户" }, fontWeight = FontWeight.Black, fontSize = 26.sp, color = palette.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("让每一次记录更贴近自己～", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TinyPill(age.ifBlank { "--" } + "岁", palette.rose)
+                            TinyPill(if (privacyOn) "**岁" else ageLabel, palette.rose)
                             TinyPill(genderLabel, palette.rose)
                         }
                         Spacer(Modifier.height(10.dp))
-                        Text("生日  ${birthdayLabel.replace("-", "月").replaceFirst("月", "年")}", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text("生日  ${if (privacyOn) "**月**日" else birthdayLabel}", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         Text(membershipLabel(profile?.role, profile?.membershipTier), color = badgeColor(profile?.role, profile?.membershipTier), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                     MascotArt(86.dp)
@@ -552,95 +598,200 @@ private fun ProfileScreen(
         item {
             PlushCard {
                 ProfileSectionTitle("基本资料")
-                ProfileEditRow(Icons.Default.PhotoCamera, "头像", "点击右侧更换头像", palette.rose) {
-                    IconButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                        Avatar(state.avatarUrl, 34.dp)
-                    }
+                ProfileListRow(Icons.Default.PhotoCamera, "头像", "", palette.rose, onClick = {
+                    editMode = true
+                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }) {
+                    Avatar(state.avatarUrl, 34.dp)
                 }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                OutlinedTextField(nickname, { nickname = it.take(24) }, label = { Text("昵称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        age,
-                        { age = it.filter(Char::isDigit).take(3) },
-                        label = { Text("年龄") },
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
-                    )
-                    Column(Modifier.weight(1.4f)) {
-                        Text("性别", color = palette.muted, fontSize = 12.sp)
-                        Spacer(Modifier.height(7.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("female" to "女", "male" to "男", "other" to "其他", "prefer_not" to "不公开").forEach { (key, label) ->
-                                SoftChip(label, gender == key, palette.rose) { gender = key }
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = {
-                        val initial = runCatching { LocalDate.parse(birthDate) }.getOrDefault(LocalDate.now().minusYears(20))
-                        DatePickerDialog(
-                            context,
-                            { _, year, month, day ->
-                                val selected = LocalDate.of(year, month + 1, day)
-                                birthDate = selected.toString()
-                                age = Period.between(selected, LocalDate.now()).years.coerceAtLeast(0).toString()
-                            },
-                            initial.year,
-                            initial.monthValue - 1,
-                            initial.dayOfMonth
-                        ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Badge, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (birthDate.isBlank()) "选择生日" else "生日  $birthDate")
-                }
-                Spacer(Modifier.height(12.dp))
-                ProfileEditRow(Icons.Default.ChatBubble, "个性签名", "认真生活，温柔记账", palette.coral) {}
+                ProfileDivider()
+                ProfileListRow(Icons.Default.Person, "昵称", nickname.ifBlank { "绒绒用户" }, palette.rose, onClick = {
+                    editMode = true
+                    showNicknameEditor = true
+                })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.Badge, "年龄", if (privacyOn) "**岁" else ageLabel, palette.moss, onClick = {
+                    editMode = true
+                    showAgeEditor = true
+                })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.AccountCircle, "性别", genderLabel, palette.lilac, onClick = {
+                    editMode = true
+                    showGenderEditor = true
+                })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.Badge, "生日", if (privacyOn) "**月**日" else birthdayLabel, palette.coral, onClick = {
+                    editMode = true
+                    val initial = runCatching { LocalDate.parse(birthDate) }.getOrDefault(LocalDate.now().minusYears(20))
+                    DatePickerDialog(
+                        context,
+                        { _, year, month, day ->
+                            val selected = LocalDate.of(year, month + 1, day)
+                            birthDate = selected.toString()
+                            age = Period.between(selected, LocalDate.now()).years.coerceAtLeast(0).toString()
+                        },
+                        initial.year,
+                        initial.monthValue - 1,
+                        initial.dayOfMonth
+                    ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.ChatBubble, "个性签名", signature, palette.coral, onClick = {
+                    editMode = true
+                    showSignatureEditor = true
+                })
             }
         }
         item {
             PlushCard {
                 ProfileSectionTitle("账号绑定")
-                InfoRow(Icons.Default.Badge, "会员", membershipLabel(profile?.role, profile?.membershipTier))
-                IdentityRow(Icons.Default.Phone, "手机号", profile?.phone ?: state.session?.phone ?: "未绑定", state.session?.accessToken != null) { identityChannel = "phone" }
-                IdentityRow(Icons.Default.Email, "邮箱", profile?.email ?: state.session?.email ?: "本地账号", state.session?.accessToken != null) { identityChannel = "email" }
-                BindRow("微信", profile?.wechatBound == true) { onBind("微信绑定") }
-                BindRow("QQ", profile?.qqBound == true) { onBind("QQ绑定") }
+                ProfileListRow(Icons.Default.ChatBubble, "微信", if (profile?.wechatBound == true) "已绑定" else "未绑定", palette.moss, onClick = { onBind("微信绑定") })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.AccountCircle, "QQ", if (profile?.qqBound == true) "已绑定" else "未绑定", palette.blue, onClick = { onBind("QQ绑定") })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.Email, "邮箱", (profile?.email ?: state.session?.email ?: "本地账号").maskIf(privacyOn), palette.coral, enabled = remoteMode, onClick = {
+                    identityChannel = "email"
+                })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.Phone, "手机号", (profile?.phone ?: state.session?.phone ?: "未绑定").maskIf(privacyOn), palette.blue, enabled = remoteMode, onClick = {
+                    identityChannel = "phone"
+                })
             }
         }
         item {
             PlushCard {
                 ProfileSectionTitle("其他功能")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    ProfileShortcut(Icons.Default.Lock, "资料隐私", palette.lilac, Modifier.weight(1f))
+                    ProfileShortcut(Icons.Default.Lock, "资料隐私", palette.lilac, Modifier.weight(1f)) { showPrivacy = true }
                     Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
-                    ProfileShortcut(Icons.Default.Security, "修改密码", palette.rose, Modifier.weight(1f))
+                    ProfileShortcut(Icons.Default.Security, "修改密码", palette.rose, Modifier.weight(1f)) { showPassword = true }
                     Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
-                    ProfileShortcut(Icons.Default.Shield, "实名认证", palette.moss, Modifier.weight(1f))
+                    ProfileShortcut(Icons.Default.Shield, "实名认证", palette.moss, Modifier.weight(1f)) { showVerify = true }
                     Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
-                    ProfileShortcut(Icons.Default.DeleteForever, "注销账号", palette.coral, Modifier.weight(1f))
+                    ProfileShortcut(Icons.Default.DeleteForever, "注销账号", palette.coral, Modifier.weight(1f)) { showDelete = true }
                 }
             }
         }
         item {
             ProfileWarmPanel(padding = 14.dp) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("完善个人信息，体验会更完整哦～", color = palette.ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("完善个人信息，体验会更完整哦～", color = palette.ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     MascotArt(72.dp)
                 }
             }
         }
-        item {
-            PlushButton("保存修改", Icons.Default.Save, Modifier.fillMaxWidth()) {
-                onSave(nickname, age, birthDate.ifBlank { null }, gender)
+        if (editMode) {
+            item {
+                PlushButton("保存修改", Icons.Default.Save, Modifier.fillMaxWidth(), enabled = dirty) {
+                    prefs.edit().putString("signature_$userKey", signature).apply()
+                    onSave(nickname, age, birthDate.ifBlank { null }, gender)
+                    editMode = false
+                }
             }
+        }
+    }
+    if (showNicknameEditor) {
+        ProfileTextEditDialog(
+            title = "修改昵称",
+            value = nickname,
+            label = "昵称",
+            maxLength = 24,
+            onDismiss = { showNicknameEditor = false },
+            onConfirm = { nickname = it.ifBlank { nickname }; showNicknameEditor = false }
+        )
+    }
+    if (showAgeEditor) {
+        ProfileTextEditDialog(
+            title = "修改年龄",
+            value = age,
+            label = "年龄",
+            maxLength = 3,
+            keyboardType = KeyboardType.Number,
+            filter = { it.filter(Char::isDigit) },
+            onDismiss = { showAgeEditor = false },
+            onConfirm = { age = it; showAgeEditor = false }
+        )
+    }
+    if (showGenderEditor) {
+        AlertDialog(
+            onDismissRequest = { showGenderEditor = false },
+            title = { Text("选择性别", fontWeight = FontWeight.Bold) },
+            text = {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("female" to "女", "male" to "男", "other" to "其他", "prefer_not" to "不公开").forEach { (key, label) ->
+                        SoftChip(label, gender == key, palette.rose) {
+                            gender = key
+                            showGenderEditor = false
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+    if (showSignatureEditor) {
+        ProfileTextEditDialog(
+            title = "修改个性签名",
+            value = signature,
+            label = "个性签名",
+            maxLength = 28,
+            onDismiss = { showSignatureEditor = false },
+            onConfirm = { signature = it.ifBlank { "认真生活，温柔记账" }; showSignatureEditor = false }
+        )
+    }
+    if (showPrivacy) {
+        AlertDialog(
+            onDismissRequest = { showPrivacy = false },
+            title = { Text("资料隐私", fontWeight = FontWeight.Bold) },
+            text = {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("隐藏邮箱、手机号、年龄和生日", modifier = Modifier.weight(1f), color = palette.ink)
+                    Switch(checked = privacyOn, onCheckedChange = {
+                        privacyOn = it
+                        prefs.edit().putBoolean("privacy_$userKey", it).apply()
+                    })
+                }
+            },
+            confirmButton = { TextButton(onClick = { showPrivacy = false }) { Text("完成") } }
+        )
+    }
+    if (showPassword) {
+        PasswordChangeDialog(
+            busy = state.isBusy,
+            onDismiss = { showPassword = false },
+            onConfirm = { current, next, confirm ->
+                onChangePassword(current, next, confirm)
+                showPassword = false
+            }
+        )
+    }
+    if (showVerify) {
+        IdentityVerifyDialog(
+            verified = verified,
+            verifiedName = verifiedName,
+            onDismiss = { showVerify = false },
+            onConfirm = { name ->
+                verified = true
+                verifiedName = name
+                prefs.edit()
+                    .putBoolean("verified_$userKey", true)
+                    .putString("verified_name_$userKey", name)
+                    .apply()
+                showVerify = false
+                Toast.makeText(context, "实名认证状态已保存", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+    if (showDelete) {
+        ConfirmDialog(
+            title = "注销账号",
+            message = "注销后账号、云端账目和本机数据都无法恢复。请确认你已经备份重要数据。",
+            confirmText = if (deleteSeconds == 0) "确认永久注销" else "请等待 ${deleteSeconds}s",
+            confirmEnabled = deleteSeconds == 0,
+            onDismiss = { showDelete = false }
+        ) {
+            onDeleteAccount()
+            showDelete = false
         }
     }
     identityChannel?.let { channel ->
@@ -674,6 +825,154 @@ private fun TinyPill(text: String, color: Color) {
 }
 
 @Composable
+private fun ProfileTopBar(title: String, editing: Boolean, onBack: () -> Unit, onEdit: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth().height(54.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            color = palette.ink,
+            fontWeight = FontWeight.Black,
+            fontSize = 22.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        IconButton(onClick = onEdit) {
+            Icon(if (editing) Icons.Default.Close else Icons.Default.EditNote, contentDescription = if (editing) "结束编辑" else "编辑", tint = palette.ink)
+        }
+    }
+}
+
+@Composable
+private fun ProfileDivider() {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(LocalPlushPalette.current.border))
+}
+
+@Composable
+private fun ProfileListRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    color: Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    trailing: (@Composable RowScope.() -> Unit)? = null
+) {
+    val palette = LocalPlushPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PlushBadge(icon, color.copy(alpha = if (enabled) 0.88f else 0.42f), 34.dp)
+        Spacer(Modifier.width(12.dp))
+        Text(label, modifier = Modifier.weight(0.9f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        if (trailing != null) {
+            trailing()
+        } else {
+            Text(
+                value,
+                modifier = Modifier.weight(1.2f),
+                color = if (enabled) palette.muted else palette.muted.copy(alpha = 0.5f),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted.copy(alpha = if (enabled) 1f else 0.35f))
+    }
+}
+
+@Composable
+private fun ProfileTextEditDialog(
+    title: String,
+    value: String,
+    label: String,
+    maxLength: Int,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    filter: (String) -> String = { it },
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var draft by rememberSaveable(title) { mutableStateOf(value) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                draft,
+                { draft = filter(it).take(maxLength) },
+                label = { Text(label) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
+            )
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = { TextButton(onClick = { onConfirm(draft.trim()) }) { Text("确定") } }
+    )
+}
+
+@Composable
+private fun PasswordChangeDialog(
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String) -> Unit
+) {
+    var current by rememberSaveable { mutableStateOf("") }
+    var next by rememberSaveable { mutableStateOf("") }
+    var confirm by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("修改密码", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(current, { current = it.take(64) }, label = { Text("当前密码") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(next, { next = it.take(64) }, label = { Text("新密码") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(confirm, { confirm = it.take(64) }, label = { Text("确认新密码") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Text("新密码需要 8-64 位，并同时包含字母和数字。", color = LocalPlushPalette.current.muted, fontSize = 12.sp)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(current, next, confirm) }, enabled = !busy) { Text("保存密码") }
+        }
+    )
+}
+
+@Composable
+private fun IdentityVerifyDialog(
+    verified: Boolean,
+    verifiedName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var realName by rememberSaveable { mutableStateOf(verifiedName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("实名认证", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    if (verified) "当前已保存认证状态。正式上线前建议接入合规实名服务商。"
+                    else "先保存应用内认证状态；正式实名认证需要后续接入合规服务商。",
+                    color = LocalPlushPalette.current.muted,
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(realName, { realName = it.take(12) }, label = { Text("姓名") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = { TextButton(onClick = { onConfirm(realName.trim()) }, enabled = realName.isNotBlank()) { Text("保存") } }
+    )
+}
+
+@Composable
 private fun ProfileEditRow(
     icon: ImageVector,
     title: String,
@@ -695,12 +994,21 @@ private fun ProfileEditRow(
 }
 
 @Composable
-private fun ProfileShortcut(icon: ImageVector, label: String, color: Color, modifier: Modifier = Modifier) {
+private fun ProfileShortcut(icon: ImageVector, label: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
-    Column(modifier.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         PlushBadge(icon, color, 42.dp)
         Spacer(Modifier.height(8.dp))
-        Text(label, color = palette.ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = palette.ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted, modifier = Modifier.size(15.dp))
+        }
     }
 }
 
@@ -1210,6 +1518,22 @@ private fun String.csvCell(): String = "\"${replace("\"", "\"\"")}\""
 
 private fun com.plushledger.data.TransactionEntity.localDateForProfile(): java.time.LocalDate =
     java.time.Instant.ofEpochMilli(occurredAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+
+private fun String.toBirthdayLabel(): String =
+    runCatching {
+        val date = LocalDate.parse(this)
+        date.format(DateTimeFormatter.ofPattern("MM月dd日"))
+    }.getOrDefault(ifBlank { "未设置" })
+
+private fun String.maskIf(enabled: Boolean): String {
+    if (!enabled || isBlank() || this == "未绑定" || this == "本地账号") return this
+    return if (contains("@")) {
+        val parts = split("@")
+        "${parts.first().take(2)}***@${parts.getOrNull(1).orEmpty()}"
+    } else {
+        take(3) + "****" + takeLast(2)
+    }
+}
 
 private fun membershipLabel(role: String?, tier: String?): String = when {
     role == "admin" -> "管理员"

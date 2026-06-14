@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Redeem
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -80,6 +81,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -488,6 +490,12 @@ private fun dayTitle(date: LocalDate): String {
 @Composable
 private fun SummaryNumber(label: String, value: Long, color: Color, modifier: Modifier = Modifier) {
     val palette = LocalPlushPalette.current
+    val amount = Money.formatCny(value)
+    val amountSize = when {
+        amount.length >= 12 -> 12.sp
+        amount.length >= 10 -> 14.sp
+        else -> 18.sp
+    }
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
@@ -495,7 +503,7 @@ private fun SummaryNumber(label: String, value: Long, color: Color, modifier: Mo
             Text(label, color = palette.muted, fontSize = 11.sp)
         }
         Spacer(Modifier.height(6.dp))
-        Text(Money.formatCny(value), color = if (label.contains("结余")) palette.rose else palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(amount, color = if (label.contains("结余")) palette.rose else palette.ink, fontWeight = FontWeight.Black, fontSize = amountSize, maxLines = 1, softWrap = false)
     }
 }
 
@@ -1090,21 +1098,21 @@ private fun FoldSection(
 @Composable
 fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) -> Unit, onDate: (LocalDate) -> Unit) {
     var showCalendar by rememberSaveable { mutableStateOf(false) }
+    var detailSpend by remember { mutableStateOf<CategorySpend?>(null) }
     val palette = LocalPlushPalette.current
     val month = YearMonth.from(selectedDate)
+    val monthRecords = ledger.transactions.filter { YearMonth.from(it.localDate()) == month }
+    val monthExpense = monthRecords.filter { it.type == "expense" }.sumOf { it.amountMinor }
+    val monthIncome = monthRecords.filter { it.type == "income" }.sumOf { it.amountMinor }
+    val monthBalance = monthIncome - monthExpense
     val chartData = ledger.categorySpend
-    val weeklySpend = (6 downTo 0).map { offset ->
-        val day = selectedDate.minusDays(offset.toLong())
-        day.format(DateTimeFormatter.ofPattern("E", Locale.CHINA)) to ledger.transactions
-            .filter { it.type == "expense" && it.localDate() == day }
-            .sumOf { it.amountMinor }
-    }
+    val weeklySpend = month.weeklyExpense(monthRecords)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             BrandHeader(
                 "统计",
-                "用数字看清生活",
+                "用数据了解自己，让每一笔都有意义～",
                 month.format(DateTimeFormatter.ofPattern("yyyy年M月")),
                 onTrailingClick = { showCalendar = !showCalendar }
             )
@@ -1113,61 +1121,84 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
             CalendarSelector(selectedDate, month, onMonth) { onDate(it); showCalendar = false }
         }
         item {
-            WarmPanel(padding = 14.dp) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                        SummaryNumber("本月支出", ledger.summary.expenseMinor, palette.rose, Modifier.weight(1f))
-                        SummaryNumber("本月收入", ledger.summary.incomeMinor, palette.moss, Modifier.weight(1f))
-                        SummaryNumber("本月结余", ledger.summary.incomeMinor - ledger.summary.expenseMinor, palette.rose, Modifier.weight(1f))
-                    }
-                    MascotArt(66.dp)
-                }
-            }
+            StatsOverviewCard(monthExpense, monthIncome, monthBalance)
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                WarmPanel(Modifier.weight(1f), padding = 10.dp) {
-                    Text("支出构成", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    DonutChart(chartData, compact = true)
-                    chartData.take(4).forEach { item ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(item.category.categoryColor()))
-                            Spacer(Modifier.width(5.dp))
-                            Text(item.category.name, color = palette.muted, fontSize = 10.sp, modifier = Modifier.weight(1f), maxLines = 1)
-                            Text("${(item.amountMinor * 100 / ledger.summary.expenseMinor.coerceAtLeast(1))}%", color = palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-                WarmPanel(Modifier.weight(1f), padding = 10.dp) {
-                    Text("周支出趋势", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    WeekBarChart(weeklySpend)
-                }
+                StatsDonutPanel(chartData, monthExpense, Modifier.weight(1f))
+                StatsTrendPanel(weeklySpend, Modifier.weight(1f))
             }
         }
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                SectionTitle("分类", Icons.Default.PieChart)
-                Spacer(Modifier.weight(1f))
-                Text("金额", color = palette.muted, fontSize = 12.sp)
-                Spacer(Modifier.width(26.dp))
-                Text("占比", color = palette.muted, fontSize = 12.sp)
-            }
-            Spacer(Modifier.height(8.dp))
             if (ledger.categorySpend.isEmpty()) WarmPanel(Modifier.fillMaxWidth(), padding = 14.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     MascotArt(72.dp)
                     Spacer(Modifier.width(10.dp))
                     Text("这个月还没有支出，记一笔后就能看到分类排行～", color = palette.muted, fontSize = 12.sp)
                 }
-            }
-            else WarmPanel {
+            } else WarmPanel(padding = 14.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("分类", color = palette.muted, fontSize = 14.sp, modifier = Modifier.weight(1.45f))
+                    Text("金额", color = palette.muted, fontSize = 14.sp, modifier = Modifier.weight(0.9f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    Text("占比", color = palette.muted, fontSize = 14.sp, modifier = Modifier.weight(1.1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    Spacer(Modifier.width(22.dp))
+                }
+                Spacer(Modifier.height(8.dp))
                 val max = ledger.categorySpend.maxOf { it.amountMinor }.coerceAtLeast(1)
-                ledger.categorySpend.take(8).forEach {
-                    StatsCategoryRow(it, max, ledger.summary.expenseMinor)
-                    Spacer(Modifier.height(8.dp))
+                ledger.categorySpend.take(8).forEachIndexed { index, spend ->
+                    StatsCategoryRow(
+                        spend = spend,
+                        rank = index + 1,
+                        max = max,
+                        total = monthExpense,
+                        color = statsColor(index),
+                        onClick = { detailSpend = spend }
+                    )
+                    if (index != ledger.categorySpend.take(8).lastIndex) {
+                        Spacer(Modifier.height(5.dp))
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                        Spacer(Modifier.height(5.dp))
+                    }
                 }
             }
         }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                MascotArt(78.dp)
+                Spacer(Modifier.width(8.dp))
+                Surface(shape = RoundedCornerShape(20.dp), color = palette.surfaceAlt, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                    Text(
+                        if (monthBalance >= 0) "棒棒哒！本月结余很不错呢～继续保持，向小目标前进吧！" else "这个月支出偏高，看看分类排行就能找到节奏～",
+                        color = palette.ink,
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 13.dp)
+                    )
+                }
+            }
+        }
+    }
+    detailSpend?.let { spend ->
+        val categories = ledger.categories.associateBy { it.id }
+        val records = monthRecords
+            .filter { it.type == "expense" && it.categoryId == spend.category.id }
+            .sortedByDescending { it.occurredAt }
+        AlertDialog(
+            onDismissRequest = { detailSpend = null },
+            title = { Text("${spend.category.name}明细", fontWeight = FontWeight.Bold, color = palette.ink) },
+            text = {
+                Column(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("本月共 ${records.size} 笔，合计 ${Money.formatCny(spend.amountMinor)}", color = palette.muted, fontSize = 12.sp)
+                    records.take(10).forEach { record ->
+                        StatsTransactionRow(record, categories)
+                    }
+                    if (records.size > 10) {
+                        Text("已展示最近 10 笔，完整明细可在账单页筛选查看。", color = palette.muted, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { detailSpend = null }) { Text("知道了") } }
+        )
     }
 }
 
@@ -1225,10 +1256,91 @@ private fun CalendarSelector(
 }
 
 @Composable
+private fun StatsOverviewCard(expense: Long, income: Long, balance: Long) {
+    val palette = LocalPlushPalette.current
+    WarmPanel(padding = 18.dp) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
+                StatsMetric("本月支出", expense, palette.coral, Modifier.weight(1f))
+                StatsMetric("本月收入", income, palette.moss, Modifier.weight(1f))
+                StatsMetric("结余", balance, palette.rose, Modifier.weight(1f))
+            }
+            Spacer(Modifier.width(8.dp))
+            MascotArt(72.dp)
+        }
+    }
+}
+
+@Composable
+private fun StatsMetric(label: String, value: Long, color: Color, modifier: Modifier = Modifier) {
+    val palette = LocalPlushPalette.current
+    val text = Money.formatCny(value)
+    val size = when {
+        text.length >= 12 -> 12.sp
+        text.length >= 10 -> 14.sp
+        else -> 17.sp
+    }
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
+            Spacer(Modifier.width(6.dp))
+            Text(label, color = palette.muted, fontSize = 12.sp, maxLines = 1)
+        }
+        Spacer(Modifier.height(7.dp))
+        Text(text, color = if (label == "结余") palette.rose else palette.ink, fontWeight = FontWeight.Black, fontSize = size, maxLines = 1, softWrap = false)
+    }
+}
+
+@Composable
+private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modifier: Modifier = Modifier) {
+    val palette = LocalPlushPalette.current
+    WarmPanel(modifier, padding = 12.dp) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            ProfileSectionLine("支出构成")
+            Spacer(Modifier.weight(1f))
+            Text("总支出 ${Money.formatCny(totalExpense)}", color = palette.muted, fontSize = 11.sp, maxLines = 1)
+        }
+        DonutChart(spend, compact = true)
+        spend.take(6).forEachIndexed { index, item ->
+            val percent = item.amountMinor * 1000 / totalExpense.coerceAtLeast(1)
+            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(statsColor(index)))
+                Spacer(Modifier.width(7.dp))
+                Text(item.category.name, color = palette.ink, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${percent / 10}.${percent % 10}%", color = palette.muted, fontSize = 12.sp)
+            }
+        }
+        if (spend.isEmpty()) {
+            Text("记一笔支出后会自动生成构成图。", color = palette.muted, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun StatsTrendPanel(spend: List<WeekSpend>, modifier: Modifier = Modifier) {
+    WarmPanel(modifier, padding = 12.dp) {
+        ProfileSectionLine("周支出趋势")
+        MonthWeekTrendChart(spend)
+    }
+}
+
+@Composable
+private fun ProfileSectionLine(title: String) {
+    val palette = LocalPlushPalette.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(4.dp).height(21.dp).clip(RoundedCornerShape(4.dp)).background(palette.rose))
+        Spacer(Modifier.width(8.dp))
+        Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp)
+    }
+}
+
+@Composable
 private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false) {
     val palette = LocalPlushPalette.current
     val rawTotal = spend.sumOf { it.amountMinor }
     val total = rawTotal.coerceAtLeast(1)
+    val top = spend.firstOrNull()
+    val topPercent = (top?.amountMinor ?: 0L) * 1000 / total
     Box(Modifier.fillMaxWidth().height(if (compact) 150.dp else 210.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(if (compact) 116.dp else 168.dp)) {
             val stroke = (if (compact) 18.dp else 26.dp).toPx()
@@ -1242,15 +1354,16 @@ private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false) {
                 style = Stroke(stroke, cap = StrokeCap.Round)
             )
             var start = -90f
-            spend.take(6).forEach {
-                val sweep = it.amountMinor.toFloat() / total * 360f
-                drawArc(it.category.categoryColor(), start, sweep, false, Offset(stroke / 2, stroke / 2), Size(size.width - stroke, size.height - stroke), style = Stroke(stroke, cap = StrokeCap.Round))
+            spend.take(6).forEachIndexed { index, item ->
+                val sweep = item.amountMinor.toFloat() / total * 360f
+                drawArc(statsColor(index), start, sweep, false, Offset(stroke / 2, stroke / 2), Size(size.width - stroke, size.height - stroke), style = Stroke(stroke, cap = StrokeCap.Round))
                 start += sweep
             }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("支出", color = palette.muted, fontSize = 12.sp)
-            Text(Money.formatCny(rawTotal), color = palette.ink, fontWeight = FontWeight.Black, fontSize = if (compact) 13.sp else 20.sp, maxLines = 1)
+            Text(top?.category?.name ?: "支出构成", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(Money.formatCny(top?.amountMinor ?: rawTotal), color = palette.ink, fontWeight = FontWeight.Black, fontSize = if (compact) 13.sp else 20.sp, maxLines = 1)
+            Text("${topPercent / 10}.${topPercent % 10}%", color = palette.muted, fontSize = 11.sp)
         }
     }
 }
@@ -1273,52 +1386,125 @@ private fun BarChart(spend: List<CategorySpend>, compact: Boolean = false) {
 }
 
 @Composable
-private fun WeekBarChart(spend: List<Pair<String, Long>>) {
+private fun MonthWeekTrendChart(spend: List<WeekSpend>) {
     val palette = LocalPlushPalette.current
-    val max = spend.maxOfOrNull { it.second }?.coerceAtLeast(1) ?: 1
-    Row(
-        Modifier.fillMaxWidth().height(156.dp).padding(top = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        spend.forEachIndexed { index, (label, amount) ->
-            val color = listOf(palette.rose, palette.coral, palette.blue, palette.moss, palette.lilac, palette.pink, palette.rose)[index % 7]
-            Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height((28 + (amount.toFloat() / max * 88)).dp)
-                        .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 5.dp, bottomEnd = 5.dp))
-                        .background(color.copy(alpha = 0.82f))
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(label.takeLast(1), color = palette.muted, fontSize = 10.sp, maxLines = 1)
+    val max = spend.maxOfOrNull { it.amountMinor }?.coerceAtLeast(1) ?: 1
+    Box(Modifier.fillMaxWidth().height(214.dp).padding(top = 10.dp)) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+            repeat(4) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border.copy(alpha = 0.72f)))
+            }
+        }
+        Row(
+            Modifier.fillMaxSize().padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            spend.forEachIndexed { index, week ->
+                val height = if (max <= 0) 22.dp else (34 + (week.amountMinor.toFloat() / max * 104)).dp
+                Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                    Text(Money.formatCny(week.amountMinor).replace("¥", ""), color = palette.ink, fontSize = 10.sp, maxLines = 1)
+                    Spacer(Modifier.height(5.dp))
+                    Box(
+                        Modifier
+                            .width(28.dp)
+                            .height(height)
+                            .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
+                            .background(Brush.verticalGradient(listOf(statsColor(index).copy(alpha = 0.58f), statsColor(index))))
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(week.label, color = palette.muted, fontSize = 9.sp, maxLines = 1)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun StatsCategoryRow(spend: CategorySpend, max: Long, total: Long) {
+private fun StatsCategoryRow(spend: CategorySpend, rank: Int, max: Long, total: Long, color: Color, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
-    val percent = spend.amountMinor * 100 / total.coerceAtLeast(1)
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        CategoryArt(spend.category.name, 34.dp)
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(spend.category.name, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1)
-                Text(Money.formatCny(spend.amountMinor), color = palette.ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.width(12.dp))
-                Text("$percent%", color = palette.muted, fontSize = 11.sp)
-            }
-            Spacer(Modifier.height(5.dp))
-            Box(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.75f))) {
-                Box(Modifier.fillMaxWidth((spend.amountMinor.toFloat() / max).coerceIn(0f, 1f)).fillMaxHeight().background(spend.category.categoryColor()))
-            }
+    val percent = spend.amountMinor * 1000 / total.coerceAtLeast(1)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(shape = RoundedCornerShape(10.dp), color = color.copy(alpha = 0.85f)) {
+            Text(rank.toString(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp), color = Color.White, fontWeight = FontWeight.Black, fontSize = 12.sp)
         }
+        Spacer(Modifier.width(8.dp))
+        CategoryArt(spend.category.name, 44.dp)
+        Spacer(Modifier.width(10.dp))
+        Text(spend.category.name, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(Money.formatCny(spend.amountMinor), color = palette.ink, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(0.8f), textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+            Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(9.dp)).background(palette.surfaceAlt)) {
+                Box(
+                    Modifier
+                        .fillMaxWidth((spend.amountMinor.toFloat() / max).coerceIn(0.02f, 1f))
+                        .fillMaxHeight()
+                        .background(color)
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("${percent / 10}.${percent % 10}%", color = palette.muted, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.Default.ChevronRight, contentDescription = "查看详情", tint = palette.muted, modifier = Modifier.size(20.dp))
     }
 }
+
+@Composable
+private fun StatsTransactionRow(record: TransactionEntity, categories: Map<String, CategoryEntity>) {
+    val palette = LocalPlushPalette.current
+    val category = record.categoryId?.let(categories::get)
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        CategoryArt(category?.name, 36.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(category?.name ?: "未分类", color = palette.ink, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(
+                "${record.localDate().format(DateTimeFormatter.ofPattern("M月d日"))}  ${record.note.ifBlank { "无备注" }}",
+                color = palette.muted,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text("-${Money.formatCny(record.amountMinor)}", color = palette.rose, fontWeight = FontWeight.Black, maxLines = 1)
+    }
+}
+
+private data class WeekSpend(val label: String, val amountMinor: Long)
+
+private fun YearMonth.weeklyExpense(records: List<TransactionEntity>): List<WeekSpend> {
+    val end = atEndOfMonth()
+    val weeks = mutableListOf<WeekSpend>()
+    var start = atDay(1)
+    while (!start.isAfter(end)) {
+        val stopCandidate = start.plusDays(6)
+        val stop = if (stopCandidate.isAfter(end)) end else stopCandidate
+        val amount = records
+            .filter { it.type == "expense" }
+            .filter {
+                val date = it.localDate()
+                !date.isBefore(start) && !date.isAfter(stop)
+            }
+            .sumOf { it.amountMinor }
+        weeks += WeekSpend("${start.monthValue}/${start.dayOfMonth}-${stop.monthValue}/${stop.dayOfMonth}", amount)
+        start = stop.plusDays(1)
+    }
+    return weeks
+}
+
+private fun statsColor(index: Int): Color = listOf(
+    Color(0xFFFFB24A),
+    Color(0xFF7BC79D),
+    Color(0xFFF28CAB),
+    Color(0xFFA98BE8),
+    Color(0xFF8CB9F2),
+    Color(0xFFCFCBC4)
+)[index % 6]
 
 @Composable
 private fun BalancePanel(ledger: LedgerState) {

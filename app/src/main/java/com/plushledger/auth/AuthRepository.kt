@@ -131,33 +131,62 @@ class AuthRepository(
     }
 
     suspend fun requestIdentityChange(channel: AuthChannel, identifier: String): AuthOutcome {
-        val session = sessionStore.currentSession() ?: return AuthOutcome.Failed("请先登录云端账号")
-        val token = session.accessToken ?: return AuthOutcome.Failed("本地模式不支持换绑")
         val cleaned = identifier.trim()
         if (channel == AuthChannel.EMAIL && !cleaned.isValidEmail()) return AuthOutcome.Failed("请输入正确的邮箱地址")
         if (channel == AuthChannel.PHONE && !cleaned.startsWith("+") ) return AuthOutcome.Failed("手机号请使用国际格式，例如 +8613800138000")
         return runCatching {
-            supabaseClient.requestIdentityChange(token, channel, cleaned)
+            withFreshAccessToken { token ->
+                supabaseClient.requestIdentityChange(token, channel, cleaned)
+            }
             AuthOutcome.OtpSent(if (channel == AuthChannel.EMAIL) "验证码已发送到新邮箱" else "验证码已发送到新手机号")
         }.getOrElse { AuthOutcome.Failed(it.toFriendlyAuthMessage("验证码发送失败")) }
     }
 
     suspend fun verifyIdentityChange(channel: AuthChannel, identifier: String, code: String): AuthOutcome {
-        val session = sessionStore.currentSession() ?: return AuthOutcome.Failed("请先登录云端账号")
-        val token = session.accessToken ?: return AuthOutcome.Failed("本地模式不支持换绑")
         val cleaned = identifier.trim()
         if (channel == AuthChannel.PHONE && code.trim().length < 4) return AuthOutcome.Failed("验证码不完整")
         return runCatching {
-            if (code.isNotBlank()) {
-                supabaseClient.verifyIdentityChange(token, channel, cleaned, code.trim())
+            val session = sessionStore.currentSession() ?: error("请先登录云端账号")
+            val identity = withFreshAccessToken { token ->
+                if (code.isNotBlank()) {
+                    supabaseClient.verifyIdentityChange(token, channel, cleaned, code.trim())
+                }
+                supabaseClient.fetchCurrentIdentity(token)
             }
-            val identity = supabaseClient.fetchCurrentIdentity(token)
             val changed = if (channel == AuthChannel.EMAIL) identity.email == cleaned else identity.phone == cleaned
             check(changed) { if (channel == AuthChannel.EMAIL) "请先在新邮箱中完成确认" else "手机号尚未完成验证" }
             val updated = session.copy(email = identity.email, phone = identity.phone)
             sessionStore.saveSession(updated)
             AuthOutcome.SignedIn(updated, if (channel == AuthChannel.EMAIL) "邮箱换绑成功" else "手机号换绑成功")
         }.getOrElse { AuthOutcome.Failed(it.toFriendlyAuthMessage("换绑验证失败")) }
+    }
+
+    suspend fun changePassword(currentPassword: String, password: String, confirmation: String): AuthOutcome {
+        if (password != confirmation) return AuthOutcome.Failed("两次输入的新密码不一致")
+        if (password.length !in 8..64 || password.none(Char::isLetter) || password.none(Char::isDigit)) {
+            return AuthOutcome.Failed("新密码需为 8-64 位，并同时包含字母和数字")
+        }
+        val session = sessionStore.currentSession() ?: return AuthOutcome.Failed("请先登录账号")
+        if (currentPassword.isBlank()) return AuthOutcome.Failed("请输入当前密码")
+        if (session.accessToken == null) {
+            if (!sessionStore.verifyLocalPassword(session.displayName, currentPassword)) {
+                return AuthOutcome.Failed("当前密码不正确")
+            }
+            sessionStore.saveLocalPassword(session.displayName, password)
+            return AuthOutcome.SignedIn(session, "密码已修改")
+        }
+        val email = session.email ?: return AuthOutcome.Failed("当前云端账号没有邮箱，请先绑定邮箱")
+        return runCatching {
+            val signedIn = supabaseClient.signInWithPassword(email, currentPassword)
+            val updatedSession = session.copy(
+                userId = signedIn.userId,
+                accessToken = signedIn.accessToken,
+                refreshToken = signedIn.refreshToken
+            )
+            sessionStore.saveSession(updatedSession)
+            supabaseClient.updatePassword(signedIn.accessToken, password)
+            AuthOutcome.SignedIn(updatedSession, "密码已修改")
+        }.getOrElse { AuthOutcome.Failed(it.toFriendlyAuthMessage("密码修改失败")) }
     }
 
     fun signInWithPin(pin: String): AuthOutcome {
@@ -178,6 +207,23 @@ class AuthRepository(
 
     fun signOut() = sessionStore.clearSession()
 
+    private suspend fun <T> withFreshAccessToken(block: suspend (String) -> T): T {
+        val session = sessionStore.currentSession() ?: error("请先登录云端账号")
+        val token = session.accessToken ?: error("本地模式不支持换绑")
+        return runCatching { block(token) }.recoverCatching { error ->
+            if (!error.isAuthExpired()) throw error
+            val refreshToken = session.refreshToken ?: error("登录已过期，请重新登录")
+            val refreshed = supabaseClient.refreshSession(refreshToken)
+            val updated = session.copy(
+                userId = refreshed.userId,
+                accessToken = refreshed.accessToken,
+                refreshToken = refreshed.refreshToken
+            )
+            sessionStore.saveSession(updated)
+            block(refreshed.accessToken)
+        }.getOrThrow()
+    }
+
     private fun maskIdentifier(value: String): String {
         if (value.contains("@")) {
             val parts = value.split("@")
@@ -189,17 +235,29 @@ class AuthRepository(
 
     private fun Throwable.toFriendlyAuthMessage(fallback: String): String {
         val raw = message.orEmpty()
+        val lower = raw.lowercase()
         return when {
+            isAuthExpired() -> "登录状态已刷新，请再试一次；如果仍失败，请退出后重新登录"
             "429" in raw || raw.contains("rate", ignoreCase = true) -> "验证码请求太频繁了，请稍后再试；也可以先用本地模式进入"
             "403" in raw -> "验证码服务暂时不可用：请检查 Supabase Auth 登录方式和短信/邮件服务配置；也可以先用本地模式进入"
             "400" in raw && raw.contains("sms", ignoreCase = true) -> "短信服务还没配置好，请先配置 Supabase 短信服务商"
-            "invalid login credentials" in raw.lowercase() -> "邮箱或密码不正确"
-            "email not confirmed" in raw.lowercase() -> "邮箱还未完成验证"
-            "user already registered" in raw.lowercase() -> "这个邮箱已经注册，请直接登录"
-            "phone" in raw.lowercase() && "provider" in raw.lowercase() -> "短信服务还没配置好，请先配置 Supabase 短信服务商"
+            "invalid login credentials" in lower -> "邮箱或密码不正确"
+            "email not confirmed" in lower -> "邮箱还未完成验证"
+            "email_exists" in lower || "email exists" in lower -> "这个邮箱已经绑定过其他账号，请换一个邮箱或先登录该账号"
+            "phone_exists" in lower || "phone exists" in lower -> "这个手机号已经绑定过其他账号，请换一个手机号或先登录该账号"
+            "user already registered" in lower -> "这个邮箱已经注册，请直接登录"
+            "phone" in lower && "provider" in lower -> "短信服务还没配置好，请先配置 Supabase 短信服务商"
             raw.isBlank() -> fallback
             else -> raw.take(120)
         }
+    }
+
+    private fun Throwable.isAuthExpired(): Boolean {
+        val raw = message.orEmpty()
+        return raw.contains("token is expired", ignoreCase = true) ||
+            raw.contains("bad_jwt", ignoreCase = true) ||
+            raw.contains("invalid jwt", ignoreCase = true) ||
+            raw.contains("\"exp\" claim", ignoreCase = true)
     }
 }
 
