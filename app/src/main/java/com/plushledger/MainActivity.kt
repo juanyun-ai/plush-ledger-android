@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ReceiptLong
@@ -178,7 +179,7 @@ private fun PlushLedgerApp(
         }
     }
 
-    PlushLedgerTheme(state.darkMode) {
+    PlushLedgerTheme(state.darkMode, state.themeTone) {
         Surface(Modifier.fillMaxSize(), color = LocalPlushPalette.current.background) {
             Box(Modifier.fillMaxSize()) {
                 FabricBackdrop()
@@ -298,9 +299,13 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
     }
 
     var mode by rememberSaveable { mutableStateOf("email") }
+    var emailLoginMode by rememberSaveable { mutableStateOf("password") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var otp by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var phoneOtp by rememberSaveable { mutableStateOf("") }
+    var phoneCountryCode by rememberSaveable { mutableStateOf("+86") }
     var localName by rememberSaveable { mutableStateOf("") }
     var localPassword by rememberSaveable { mutableStateOf("") }
     var showAgreement by rememberSaveable { mutableStateOf(false) }
@@ -325,9 +330,10 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
             Text("绒绒记账", fontSize = 30.sp, fontWeight = FontWeight.Black, color = palette.ink)
             Spacer(Modifier.height(18.dp))
             PlushCard(Modifier.fillMaxWidth()) {
-                TabRow(selectedTabIndex = if (mode == "email") 0 else 1) {
-                    Tab(mode == "email", { mode = "email" }, text = { Text("邮箱账号") })
-                    Tab(mode == "local", { mode = "local" }, text = { Text("本地模式") })
+                TabRow(selectedTabIndex = when (mode) { "phone" -> 1; "local" -> 2; else -> 0 }) {
+                    Tab(selected = mode == "email", onClick = { mode = "email"; viewModel.showAuthPage(AuthPage.LOGIN) }, text = { Text("邮箱") })
+                    Tab(selected = mode == "phone", onClick = { mode = "phone"; viewModel.showAuthPage(AuthPage.LOGIN) }, text = { Text("手机") })
+                    Tab(selected = mode == "local", onClick = { mode = "local"; viewModel.showAuthPage(AuthPage.LOGIN) }, text = { Text("本地") })
                 }
                 Spacer(Modifier.height(14.dp))
                 if (mode == "local") {
@@ -346,22 +352,69 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
                     PlushButton("进入本地账本", Icons.Default.Lock, Modifier.fillMaxWidth()) {
                         viewModel.signInLocal(localName, localPassword)
                     }
+                } else if (mode == "phone") {
+                    Text("手机号验证码登录", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = palette.ink)
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CountryCodeButton(phoneCountryCode, Modifier.width(92.dp)) { phoneCountryCode = it }
+                        OutlinedTextField(
+                            phone,
+                            { phone = it.filter(Char::isDigit).take(15) },
+                            label = { Text("手机号") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone)
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    OtpEntryRow(
+                        code = phoneOtp,
+                        onCodeChange = { phoneOtp = it },
+                        cooldown = state.otpCooldown,
+                        busy = state.isBusy,
+                        onSend = { viewModel.sendLoginOtp("phone", "$phoneCountryCode$phone") }
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    PlushButton("手机号登录", Icons.Default.Phone, Modifier.fillMaxWidth(), enabled = !state.isBusy) {
+                        viewModel.verifyLoginOtp("phone", "$phoneCountryCode$phone", phoneOtp)
+                    }
+                    Text("短信验证码是否能收到，取决于后台短信服务商是否已放开对应地区和号码。", color = palette.muted, fontSize = 11.sp, lineHeight = 16.sp)
+                    SocialLoginRow(viewModel)
                 } else {
                     when (state.authPage) {
                         AuthPage.LOGIN -> {
+                            TabRow(selectedTabIndex = if (emailLoginMode == "password") 0 else 1) {
+                                Tab(selected = emailLoginMode == "password", onClick = { emailLoginMode = "password" }, text = { Text("密码登录") })
+                                Tab(selected = emailLoginMode == "otp", onClick = { emailLoginMode = "otp" }, text = { Text("验证码登录") })
+                            }
+                            Spacer(Modifier.height(12.dp))
                             OutlinedTextField(email, { email = it.trim() }, label = { Text("邮箱") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                             Spacer(Modifier.height(10.dp))
-                            OutlinedTextField(
-                                password,
-                                { password = it.take(64) },
-                                label = { Text("密码") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                visualTransformation = PasswordVisualTransformation()
-                            )
-                            Spacer(Modifier.height(14.dp))
-                            PlushButton("登录", Icons.Default.Lock, Modifier.fillMaxWidth(), enabled = !state.isBusy) {
-                                viewModel.signInWithPassword(email, password)
+                            if (emailLoginMode == "password") {
+                                OutlinedTextField(
+                                    password,
+                                    { password = it.take(64) },
+                                    label = { Text("密码") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    visualTransformation = PasswordVisualTransformation()
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                PlushButton("邮箱密码登录", Icons.Default.Lock, Modifier.fillMaxWidth(), enabled = !state.isBusy) {
+                                    viewModel.signInWithPassword(email, password)
+                                }
+                            } else {
+                                OtpEntryRow(
+                                    code = otp,
+                                    onCodeChange = { otp = it },
+                                    cooldown = state.otpCooldown,
+                                    busy = state.isBusy,
+                                    onSend = { viewModel.sendLoginOtp("email", email) }
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                PlushButton("邮箱验证码登录", Icons.Default.Shield, Modifier.fillMaxWidth(), enabled = !state.isBusy) {
+                                    viewModel.verifyLoginOtp("email", email, otp)
+                                }
                             }
                             TextButton(onClick = { viewModel.showAuthPage(AuthPage.RESET) }, modifier = Modifier.fillMaxWidth()) { Text("忘记密码") }
                             OutlinedButton(onClick = { viewModel.showAuthPage(AuthPage.REGISTER) }, modifier = Modifier.fillMaxWidth()) {
@@ -377,19 +430,13 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
                             Spacer(Modifier.height(10.dp))
                             OutlinedTextField(email, { email = it.trim() }, label = { Text("邮箱") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                             Spacer(Modifier.height(10.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(otp, { otp = it.filter(Char::isDigit).take(8) }, label = { Text("验证码") }, modifier = Modifier.weight(1f), singleLine = true)
-                                PlushButton(
-                                    text = when {
-                                        state.otpCooldown > 0 -> "${state.otpCooldown}s"
-                                        state.isBusy -> "发送中"
-                                        else -> "获取验证码"
-                                    },
-                                    icon = Icons.Default.Refresh,
-                                    modifier = Modifier.weight(0.8f),
-                                    enabled = state.otpCooldown == 0 && !state.isBusy
-                                ) { viewModel.sendRegistrationOtp(email, isReset) }
-                            }
+                            OtpEntryRow(
+                                code = otp,
+                                onCodeChange = { otp = it },
+                                cooldown = state.otpCooldown,
+                                busy = state.isBusy,
+                                onSend = { viewModel.sendRegistrationOtp(email, isReset) }
+                            )
                             if (!isReset) {
                                 Spacer(Modifier.height(10.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -429,16 +476,87 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
 }
 
 @Composable
+private fun OtpEntryRow(
+    code: String,
+    onCodeChange: (String) -> Unit,
+    cooldown: Int,
+    busy: Boolean,
+    onSend: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            code,
+            { onCodeChange(it.filter(Char::isDigit).take(8)) },
+            label = { Text("验证码") },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+        )
+        PlushButton(
+            text = when {
+                cooldown > 0 -> "${cooldown}s"
+                busy -> "发送中"
+                else -> "获取验证码"
+            },
+            icon = Icons.Default.Refresh,
+            modifier = Modifier.weight(0.8f),
+            enabled = cooldown == 0 && !busy,
+            onClick = onSend
+        )
+    }
+}
+
+@Composable
+private fun CountryCodeButton(value: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
+    var showPicker by rememberSaveable { mutableStateOf(false) }
+    OutlinedButton(onClick = { showPicker = true }, modifier = modifier.height(56.dp)) {
+        Text(value, fontWeight = FontWeight.Bold)
+    }
+    if (showPicker) {
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text("选择区号", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    phoneCountryOptions.forEach { item ->
+                        OutlinedButton(
+                            onClick = {
+                                onChange(item.code)
+                                showPicker = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("${item.name}  ${item.code}")
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+}
+
+private data class PhoneCountry(val name: String, val code: String)
+
+private val phoneCountryOptions = listOf(
+    PhoneCountry("中国大陆", "+86"),
+    PhoneCountry("中国香港", "+852"),
+    PhoneCountry("中国澳门", "+853"),
+    PhoneCountry("中国台湾", "+886"),
+    PhoneCountry("美国/加拿大", "+1")
+)
+
+@Composable
 private fun SocialLoginRow(viewModel: LedgerViewModel) {
     Spacer(Modifier.height(14.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedButton(onClick = { viewModel.socialLogin("微信") }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.ChatBubble, contentDescription = null)
+            Image(painterResource(R.drawable.logo_wechat), contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.size(6.dp))
             Text("微信")
         }
         OutlinedButton(onClick = { viewModel.socialLogin("QQ") }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.AlternateEmail, contentDescription = null)
+            Image(painterResource(R.drawable.logo_qq), contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.size(6.dp))
             Text("QQ")
         }

@@ -1125,8 +1125,8 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatsDonutPanel(chartData, monthExpense, Modifier.weight(1f))
-                StatsTrendPanel(weeklySpend, Modifier.weight(1f))
+                StatsDonutPanel(chartData, monthExpense, Modifier.weight(1f).height(316.dp))
+                StatsTrendPanel(weeklySpend, Modifier.weight(1f).height(316.dp))
             }
         }
         item {
@@ -1410,7 +1410,7 @@ private fun MonthWeekTrendChart(spend: List<WeekSpend>) {
                             .background(Brush.verticalGradient(listOf(statsColor(index).copy(alpha = 0.58f), statsColor(index))))
                     )
                     Spacer(Modifier.height(6.dp))
-                    Text(week.label.substringBefore('-'), color = palette.muted, fontSize = 9.sp, maxLines = 1)
+                    Text(week.label, color = palette.muted, fontSize = 9.sp, maxLines = 1)
                 }
             }
         }
@@ -1488,7 +1488,7 @@ private fun YearMonth.weeklyExpense(records: List<TransactionEntity>): List<Week
                 !date.isBefore(start) && !date.isAfter(stop)
             }
             .sumOf { it.amountMinor }
-        weeks += WeekSpend("${start.monthValue}/${start.dayOfMonth}-${stop.monthValue}/${stop.dayOfMonth}", amount)
+        weeks += WeekSpend("${start.dayOfMonth}~${stop.dayOfMonth}", amount)
         start = stop.plusDays(1)
     }
     return weeks

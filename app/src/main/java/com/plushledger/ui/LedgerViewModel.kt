@@ -48,6 +48,7 @@ data class UiState(
     val lockOnLaunch: Boolean = false,
     val biometricUnlock: Boolean = false,
     val darkMode: Boolean = false,
+    val themeTone: String = "warm",
     val exportPath: String? = null,
     val isBusy: Boolean = false
 )
@@ -76,7 +77,8 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             secureScreen = sessions.isSecureScreenEnabled(),
             lockOnLaunch = lockOnLaunch,
             biometricUnlock = sessions.isBiometricUnlockEnabled(),
-            darkMode = sessions.isDarkModeEnabled()
+            darkMode = sessions.isDarkModeEnabled(),
+            themeTone = sessions.themeTone()
         )
         session?.let {
             viewModelScope.launch {
@@ -169,6 +171,40 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                 is AuthOutcome.SignedIn -> completeSignIn(result.session, result.message)
                 is AuthOutcome.Failed -> state.value = state.value.copy(isBusy = false, message = result.message)
                 else -> state.value = state.value.copy(isBusy = false)
+            }
+        }
+    }
+
+    fun sendLoginOtp(channelName: String, identifier: String) {
+        if (state.value.otpCooldown > 0 || state.value.isBusy) return
+        val channel = if (channelName == "phone") AuthChannel.PHONE else AuthChannel.EMAIL
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true, message = null)
+            when (val result = auth.sendOtp(channel, identifier, shouldCreateUser = false)) {
+                is AuthOutcome.OtpSent -> {
+                    state.value = state.value.copy(isBusy = false, message = result.message)
+                    startOtpCooldown()
+                }
+                is AuthOutcome.Failed -> state.value = state.value.copy(isBusy = false, message = result.message)
+                else -> state.value = state.value.copy(isBusy = false)
+            }
+        }
+    }
+
+    fun verifyLoginOtp(channelName: String, identifier: String, token: String) {
+        val channel = if (channelName == "phone") AuthChannel.PHONE else AuthChannel.EMAIL
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true, message = null)
+            when (val result = auth.verifyOtp(channel, identifier, token, requirePasswordSetup = false)) {
+                is AuthOutcome.SignedIn -> completeSignIn(result.session, if (channel == AuthChannel.PHONE) "手机号登录成功" else "邮箱验证码登录成功")
+                is AuthOutcome.Failed -> state.value = state.value.copy(isBusy = false, message = result.message)
+                is AuthOutcome.PasswordSetupRequired -> state.value = state.value.copy(
+                    isBusy = false,
+                    passwordSetupSession = result.session,
+                    passwordSetupIsRegistration = false,
+                    message = result.message
+                )
+                is AuthOutcome.OtpSent -> state.value = state.value.copy(isBusy = false, message = result.message)
             }
         }
     }
@@ -542,6 +578,11 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         state.value = state.value.copy(darkMode = enabled)
     }
 
+    fun setThemeTone(tone: String) {
+        sessions.setThemeTone(tone)
+        state.value = state.value.copy(themeTone = tone, message = "主题已切换为 ${plushThemeName(tone)}")
+    }
+
     fun exportCsv(pin: String) {
         val session = state.value.session ?: return
         if (!sessions.hasPin()) {
@@ -566,7 +607,8 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             secureScreen = sessions.isSecureScreenEnabled(),
             lockOnLaunch = sessions.isLockOnLaunchEnabled(),
             biometricUnlock = sessions.isBiometricUnlockEnabled(),
-            darkMode = sessions.isDarkModeEnabled()
+            darkMode = sessions.isDarkModeEnabled(),
+            themeTone = sessions.themeTone()
         )
     }
 
@@ -579,7 +621,8 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                     state.value = UiState(
                         message = "账号和云端数据已注销",
                         secureScreen = sessions.isSecureScreenEnabled(),
-                        darkMode = sessions.isDarkModeEnabled()
+                        darkMode = sessions.isDarkModeEnabled(),
+                        themeTone = sessions.themeTone()
                     )
                 }
                 .onFailure {

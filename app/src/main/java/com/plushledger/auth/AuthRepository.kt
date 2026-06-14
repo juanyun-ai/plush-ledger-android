@@ -40,15 +40,18 @@ class AuthRepository(
     }
 
     suspend fun sendOtp(channel: AuthChannel, identifier: String, shouldCreateUser: Boolean): AuthOutcome {
-        val cleaned = identifier.trim()
+        val cleaned = normalizeIdentifier(channel, identifier)
         if (cleaned.isBlank()) return AuthOutcome.Failed("请输入手机号或邮箱")
         if (channel == AuthChannel.EMAIL && !cleaned.isValidEmail()) {
             return AuthOutcome.Failed("请输入正确的邮箱地址")
         }
+        if (channel == AuthChannel.PHONE && !cleaned.isLikelyE164Phone()) {
+            return AuthOutcome.Failed("请输入正确的手机号")
+        }
         return if (supabaseClient.isConfigured) {
             runCatching {
                 supabaseClient.sendOtp(channel, cleaned, shouldCreateUser)
-                AuthOutcome.OtpSent("验证码已发送")
+                AuthOutcome.OtpSent(if (channel == AuthChannel.PHONE) "验证码已提交给短信服务商" else "验证码已发送")
             }.getOrElse { AuthOutcome.Failed(it.toFriendlyAuthMessage("验证码发送失败")) }
         } else {
             AuthOutcome.OtpSent("云端未配置，当前使用本地安全模式", "000000")
@@ -61,9 +64,12 @@ class AuthRepository(
         token: String,
         requirePasswordSetup: Boolean
     ): AuthOutcome {
-        val cleaned = identifier.trim()
+        val cleaned = normalizeIdentifier(channel, identifier)
         if (channel == AuthChannel.EMAIL && !cleaned.isValidEmail()) {
             return AuthOutcome.Failed("请输入正确的邮箱地址")
+        }
+        if (channel == AuthChannel.PHONE && !cleaned.isLikelyE164Phone()) {
+            return AuthOutcome.Failed("请输入正确的手机号")
         }
         if (cleaned.isBlank() || token.trim().length < 4) return AuthOutcome.Failed("验证码不完整")
         return if (supabaseClient.isConfigured) {
@@ -131,9 +137,9 @@ class AuthRepository(
     }
 
     suspend fun requestIdentityChange(channel: AuthChannel, identifier: String): AuthOutcome {
-        val cleaned = identifier.trim()
+        val cleaned = normalizeIdentifier(channel, identifier)
         if (channel == AuthChannel.EMAIL && !cleaned.isValidEmail()) return AuthOutcome.Failed("请输入正确的邮箱地址")
-        if (channel == AuthChannel.PHONE && !cleaned.startsWith("+") ) return AuthOutcome.Failed("手机号请使用国际格式，例如 +8613800138000")
+        if (channel == AuthChannel.PHONE && !cleaned.isLikelyE164Phone()) return AuthOutcome.Failed("请输入正确的手机号")
         return runCatching {
             withFreshAccessToken { token ->
                 supabaseClient.requestIdentityChange(token, channel, cleaned)
@@ -143,18 +149,18 @@ class AuthRepository(
     }
 
     suspend fun verifyIdentityChange(channel: AuthChannel, identifier: String, code: String): AuthOutcome {
-        val cleaned = identifier.trim()
-        if (channel == AuthChannel.PHONE && code.trim().length < 4) return AuthOutcome.Failed("验证码不完整")
+        val cleaned = normalizeIdentifier(channel, identifier)
+        if (channel == AuthChannel.EMAIL && !cleaned.isValidEmail()) return AuthOutcome.Failed("请输入正确的邮箱地址")
+        if (channel == AuthChannel.PHONE && !cleaned.isLikelyE164Phone()) return AuthOutcome.Failed("请输入正确的手机号")
+        if (code.trim().length < 4) return AuthOutcome.Failed("验证码不完整")
         return runCatching {
             val session = sessionStore.currentSession() ?: error("请先登录云端账号")
             val identity = withFreshAccessToken { token ->
-                if (code.isNotBlank()) {
-                    supabaseClient.verifyIdentityChange(token, channel, cleaned, code.trim())
-                }
+                supabaseClient.verifyIdentityChange(token, channel, cleaned, code.trim())
                 supabaseClient.fetchCurrentIdentity(token)
             }
             val changed = if (channel == AuthChannel.EMAIL) identity.email == cleaned else identity.phone == cleaned
-            check(changed) { if (channel == AuthChannel.EMAIL) "请先在新邮箱中完成确认" else "手机号尚未完成验证" }
+            check(changed) { if (channel == AuthChannel.EMAIL) "邮箱验证码尚未通过" else "手机号验证码尚未通过" }
             val updated = session.copy(email = identity.email, phone = identity.phone)
             sessionStore.saveSession(updated)
             AuthOutcome.SignedIn(updated, if (channel == AuthChannel.EMAIL) "邮箱换绑成功" else "手机号换绑成功")
@@ -233,6 +239,24 @@ class AuthRepository(
         return if (value.length <= 4) "本地账本" else value.take(3) + "****" + value.takeLast(2)
     }
 
+    private fun normalizeIdentifier(channel: AuthChannel, identifier: String): String {
+        val cleaned = identifier.trim()
+        return when (channel) {
+            AuthChannel.EMAIL -> cleaned.lowercase()
+            AuthChannel.PHONE -> normalizePhone(cleaned)
+        }
+    }
+
+    private fun normalizePhone(raw: String): String {
+        val compact = raw.filter { it.isDigit() || it == '+' }
+        if (compact.isBlank()) return ""
+        if (compact.startsWith("+")) return compact
+        if (compact.startsWith("00") && compact.length > 4) return "+${compact.drop(2)}"
+        if (compact.length == 11 && compact.startsWith("1")) return "+86$compact"
+        if (compact.startsWith("86") && compact.length == 13) return "+$compact"
+        return "+$compact"
+    }
+
     private fun Throwable.toFriendlyAuthMessage(fallback: String): String {
         val raw = message.orEmpty()
         val lower = raw.lowercase()
@@ -263,3 +287,6 @@ class AuthRepository(
 
 private fun String.isValidEmail(): Boolean =
     length in 5..254 && matches(Regex("^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+$"))
+
+private fun String.isLikelyE164Phone(): Boolean =
+    matches(Regex("^\\+[1-9]\\d{6,14}$"))

@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.8.6-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.8.7-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -20,7 +20,7 @@
 - 参考图风格的四项底栏、独立记账页、日期分组账单和可交互日历。
 - 环形图与柱状图并列统计，每页使用独立且与场景匹配的短标语。
 - Room 本地优先存储，离线仍可正常记账。
-- 邮箱验证码注册、密码登录和独立本地模式。
+- 邮箱验证码注册、邮箱密码/一次性验证码登录、手机号验证码入口和独立本地模式。
 - 登录后使用 Supabase 同步账本、资料和私有头像。
 - 稳定的本地头像缓存、昵称、年龄、生日、性别和邮箱/手机号换绑。
 - 应用信箱、用户反馈和管理员身份；公测期间现有功能全部免费。
@@ -77,6 +77,14 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载器会优先使用 Supabase Storage，失败后自动重试并切换 GitHub Release 备用源；下载后必须通过 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.8.7
+
+- 登录页改为邮箱、手机、本地三入口，邮箱登录可在密码和一次性验证码之间切换。
+- 邮箱换绑改为输入验证码确认；手机号换绑新增区号选择，默认中国大陆 +86。
+- 微信和 QQ 入口替换为彩色品牌图标，资料页与登录页的账号入口更真实。
+- 统计页周支出趋势改为 `1~7`、`8~14` 这类自然日期区间，并统一支出构成与趋势卡片高度。
+- 我的-设置新增暖黄、绒粉、黑白、淡绿、冰蓝五种主题。
 
 ### v0.8.6
 

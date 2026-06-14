@@ -112,6 +112,12 @@ class SessionStore(private val secureStore: SecureStore) {
         secureStore.putBoolean("dark_mode", enabled)
     }
 
+    fun themeTone(): String = secureStore.getString("theme_tone") ?: "warm"
+
+    fun setThemeTone(tone: String) {
+        secureStore.putString("theme_tone", tone)
+    }
+
     private fun localCredentialKey(username: String): String =
         PinHasher.stableLocalUserId("credential:${username.trim().lowercase()}")
 }

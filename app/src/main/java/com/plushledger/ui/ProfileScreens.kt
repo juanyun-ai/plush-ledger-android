@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Paid
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Phone
@@ -645,9 +646,9 @@ private fun ProfileScreen(
         item {
             PlushCard {
                 ProfileSectionTitle("账号绑定")
-                ProfileListRow(Icons.Default.ChatBubble, "微信", if (profile?.wechatBound == true) "已绑定" else "未绑定", palette.moss, onClick = { onBind("微信绑定") })
+                ProfileProviderRow(R.drawable.logo_wechat, "微信", if (profile?.wechatBound == true) "已绑定" else "未绑定", palette.moss, onClick = { onBind("微信绑定") })
                 ProfileDivider()
-                ProfileListRow(Icons.Default.AccountCircle, "QQ", if (profile?.qqBound == true) "已绑定" else "未绑定", palette.blue, onClick = { onBind("QQ绑定") })
+                ProfileProviderRow(R.drawable.logo_qq, "QQ", if (profile?.qqBound == true) "已绑定" else "未绑定", palette.blue, onClick = { onBind("QQ绑定") })
                 ProfileDivider()
                 ProfileListRow(Icons.Default.Email, "邮箱", (profile?.email ?: state.session?.email ?: "本地账号").maskIf(privacyOn), palette.coral, enabled = remoteMode, onClick = {
                     identityChannel = "email"
@@ -889,6 +890,43 @@ private fun ProfileListRow(
 }
 
 @Composable
+private fun ProfileProviderRow(
+    logoRes: Int,
+    label: String,
+    value: String,
+    color: Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(shape = CircleShape, color = color.copy(alpha = 0.12f), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+            Image(painterResource(logoRes), contentDescription = label, modifier = Modifier.size(34.dp).padding(6.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(label, modifier = Modifier.weight(0.9f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text(
+            value,
+            modifier = Modifier.weight(1.2f),
+            color = if (enabled) palette.muted else palette.muted.copy(alpha = 0.5f),
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End
+        )
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted.copy(alpha = if (enabled) 1f else 0.35f))
+    }
+}
+
+@Composable
 private fun ProfileTextEditDialog(
     title: String,
     value: String,
@@ -1025,6 +1063,7 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
     var showReminder by rememberSaveable { mutableStateOf(false) }
     var showCurrency by rememberSaveable { mutableStateOf(false) }
     var showDownloadLine by rememberSaveable { mutableStateOf(false) }
+    var showTheme by rememberSaveable { mutableStateOf(false) }
     var showCache by rememberSaveable { mutableStateOf(false) }
     var showLicense by rememberSaveable { mutableStateOf(false) }
     var reminderEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("ledger_reminder", true)) }
@@ -1063,7 +1102,9 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
         item {
             PlushCard {
                 ProfileSectionTitle("通用设置")
-                ToggleRow(Icons.Default.DarkMode, "主题模式", state.darkMode, viewModel::setDarkMode)
+                SettingsValueRow(Icons.Default.Palette, "主题", plushThemeName(state.themeTone), palette.rose) { showTheme = true }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                ToggleRow(Icons.Default.DarkMode, "深色模式", state.darkMode, viewModel::setDarkMode)
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 SettingsValueRow(Icons.Default.Notifications, "记账提醒", if (reminderEnabled) "每天 21:00" else "已关闭", palette.coral) { showReminder = true }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
@@ -1165,6 +1206,16 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
             showDelete = false
         }
     }
+    if (showTheme) {
+        ThemeChoiceDialog(
+            currentTone = state.themeTone,
+            onDismiss = { showTheme = false },
+            onChoose = {
+                viewModel.setThemeTone(it)
+                showTheme = false
+            }
+        )
+    }
     if (showReminder) {
         AlertDialog(
             onDismissRequest = { showReminder = false },
@@ -1248,6 +1299,37 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
             confirmButton = { TextButton(onClick = { showLicense = false }) { Text("知道了") } }
         )
     }
+}
+
+@Composable
+private fun ThemeChoiceDialog(currentTone: String, onDismiss: () -> Unit, onChoose: (String) -> Unit) {
+    val palette = LocalPlushPalette.current
+    val options = listOf(
+        Triple("warm", "暖黄", Color(0xFFFFA126)),
+        Triple("pink", "绒粉", Color(0xFFFF8DAE)),
+        Triple("mono", "黑白", Color(0xFF4C4742)),
+        Triple("green", "淡绿", Color(0xFF79C98D)),
+        Triple("blue", "冰蓝", Color(0xFF7BB6F3))
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("主题", fontWeight = FontWeight.Bold, color = palette.ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { (key, label, color) ->
+                    OutlinedButton(onClick = { onChoose(key) }, modifier = Modifier.fillMaxWidth()) {
+                        Box(Modifier.size(18.dp).clip(CircleShape).background(color))
+                        Spacer(Modifier.width(10.dp))
+                        Text(label, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold)
+                        Text(if (currentTone == key) "当前" else "切换", color = if (currentTone == key) color else palette.muted)
+                    }
+                }
+                Text("所有主题都保持低饱和、柔和毛绒质感，只改变主色氛围。", color = palette.muted, fontSize = 12.sp)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = {}
+    )
 }
 
 @Composable
@@ -1388,27 +1470,45 @@ private fun IdentityChangeDialog(
 ) {
     var value by rememberSaveable(channel) { mutableStateOf("") }
     var code by rememberSaveable(channel) { mutableStateOf("") }
+    var countryCode by rememberSaveable(channel) { mutableStateOf("+86") }
     val isEmail = channel == "email"
+    val target = if (isEmail) value.trim() else "$countryCode${value.filter(Char::isDigit)}"
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isEmail) "换绑邮箱" else "换绑手机号", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    if (isEmail) "邮件可能包含验证码或确认链接。输入验证码，或点完确认链接后返回这里继续。"
-                    else "手机号请填写国际格式，例如 +8613800138000。",
-                    fontSize = 12.sp
+                    if (isEmail) "请输入新邮箱收到的验证码后完成换绑。若邮件仍显示确认链接，需要先把 Supabase 邮件模板改为验证码。"
+                    else "选择区号后输入日常手机号即可，默认中国大陆 +86。",
+                    color = LocalPlushPalette.current.muted,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
                 )
-                OutlinedTextField(
-                    value,
-                    { value = it.trim().take(80) },
-                    label = { Text(if (isEmail) "新邮箱" else "新手机号") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = if (isEmail) KeyboardType.Email else KeyboardType.Phone)
-                )
+                if (isEmail) {
+                    OutlinedTextField(
+                        value,
+                        { value = it.trim().take(80) },
+                        label = { Text("新邮箱") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                    )
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ProfileCountryCodeButton(countryCode, Modifier.width(92.dp)) { countryCode = it }
+                        OutlinedTextField(
+                            value,
+                            { value = it.filter(Char::isDigit).take(15) },
+                            label = { Text("新手机号") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                        )
+                    }
+                }
                 OutlinedButton(
-                    onClick = { onSend(value) },
+                    onClick = { onSend(target) },
                     enabled = !busy && cooldown == 0 && value.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1426,12 +1526,50 @@ private fun IdentityChangeDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         confirmButton = {
-            TextButton(onClick = { onVerify(value, code) }, enabled = !busy && value.isNotBlank() && (isEmail || code.length >= 4)) {
-                Text(if (isEmail && code.isBlank()) "已点链接，完成换绑" else "确认换绑")
+            TextButton(onClick = { onVerify(target, code) }, enabled = !busy && value.isNotBlank() && code.length >= 4) {
+                Text("确认换绑")
             }
         }
     )
 }
+
+@Composable
+private fun ProfileCountryCodeButton(value: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
+    var showPicker by rememberSaveable { mutableStateOf(false) }
+    OutlinedButton(onClick = { showPicker = true }, modifier = modifier.height(56.dp)) {
+        Text(value, fontWeight = FontWeight.Bold)
+    }
+    if (showPicker) {
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text("选择区号", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    profilePhoneCountryOptions.forEach { (name, code) ->
+                        OutlinedButton(
+                            onClick = {
+                                onChange(code)
+                                showPicker = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("$name  $code")
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+}
+
+private val profilePhoneCountryOptions = listOf(
+    "中国大陆" to "+86",
+    "中国香港" to "+852",
+    "中国澳门" to "+853",
+    "中国台湾" to "+886",
+    "美国/加拿大" to "+1"
+)
 
 @Composable
 private fun BindRow(provider: String, bound: Boolean, onBind: () -> Unit) {

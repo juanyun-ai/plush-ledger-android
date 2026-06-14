@@ -59,7 +59,7 @@ data class PlushPalette(
     val border: Color
 )
 
-private val LightPalette = PlushPalette(
+private val WarmPalette = PlushPalette(
     background = Color(0xFFFFFCF8),
     surface = Color(0xFFFFFFFF),
     surfaceAlt = Color(0xFFFFF5E8),
@@ -72,6 +72,66 @@ private val LightPalette = PlushPalette(
     lilac = Color(0xFFA28ADC),
     coral = Color(0xFFFF887A),
     border = Color(0xFFF2E2D2)
+)
+
+private val PinkPalette = PlushPalette(
+    background = Color(0xFFFFFBFC),
+    surface = Color(0xFFFFFFFF),
+    surfaceAlt = Color(0xFFFFEEF4),
+    ink = Color(0xFF4E3840),
+    muted = Color(0xFFA88D96),
+    rose = Color(0xFFFF8DAE),
+    moss = Color(0xFF78C8A3),
+    blue = Color(0xFF8CB8EF),
+    pink = Color(0xFFFF9EC0),
+    lilac = Color(0xFFBCA0ED),
+    coral = Color(0xFFFFA182),
+    border = Color(0xFFF3DCE5)
+)
+
+private val MonoPalette = PlushPalette(
+    background = Color(0xFFFBFAF8),
+    surface = Color(0xFFFFFFFF),
+    surfaceAlt = Color(0xFFF2F0ED),
+    ink = Color(0xFF34312F),
+    muted = Color(0xFF938B85),
+    rose = Color(0xFF4C4742),
+    moss = Color(0xFF7FA08F),
+    blue = Color(0xFF7B93AA),
+    pink = Color(0xFFB8899B),
+    lilac = Color(0xFF9690B2),
+    coral = Color(0xFFB28A74),
+    border = Color(0xFFE1DBD4)
+)
+
+private val GreenPalette = PlushPalette(
+    background = Color(0xFFFBFEFA),
+    surface = Color(0xFFFFFFFF),
+    surfaceAlt = Color(0xFFEEF8EC),
+    ink = Color(0xFF33463B),
+    muted = Color(0xFF879B8D),
+    rose = Color(0xFF79C98D),
+    moss = Color(0xFF66C79A),
+    blue = Color(0xFF83BFE7),
+    pink = Color(0xFFF59AB4),
+    lilac = Color(0xFFA79AE6),
+    coral = Color(0xFFFFA06F),
+    border = Color(0xFFDCEBDB)
+)
+
+private val IceBluePalette = PlushPalette(
+    background = Color(0xFFFAFDFF),
+    surface = Color(0xFFFFFFFF),
+    surfaceAlt = Color(0xFFEFF7FF),
+    ink = Color(0xFF34404F),
+    muted = Color(0xFF8998AA),
+    rose = Color(0xFF7BB6F3),
+    moss = Color(0xFF70C9B0),
+    blue = Color(0xFF70A8F2),
+    pink = Color(0xFFFF96B8),
+    lilac = Color(0xFFA99EF1),
+    coral = Color(0xFFFFA071),
+    border = Color(0xFFDCE9F5)
 )
 
 private val DarkPalette = PlushPalette(
@@ -89,11 +149,29 @@ private val DarkPalette = PlushPalette(
     border = Color(0xFF514347)
 )
 
-val LocalPlushPalette = compositionLocalOf { LightPalette }
+val LocalPlushPalette = compositionLocalOf { WarmPalette }
+
+fun plushThemeName(tone: String): String = when (tone) {
+    "pink" -> "绒粉"
+    "mono" -> "黑白"
+    "green" -> "淡绿"
+    "blue" -> "冰蓝"
+    else -> "暖黄"
+}
 
 @Composable
-fun PlushLedgerTheme(darkMode: Boolean, content: @Composable () -> Unit) {
-    val palette = if (darkMode) DarkPalette else LightPalette
+fun PlushLedgerTheme(darkMode: Boolean, themeTone: String = "warm", content: @Composable () -> Unit) {
+    val palette = if (darkMode) {
+        DarkPalette
+    } else {
+        when (themeTone) {
+            "pink" -> PinkPalette
+            "mono" -> MonoPalette
+            "green" -> GreenPalette
+            "blue" -> IceBluePalette
+            else -> WarmPalette
+        }
+    }
     androidx.compose.runtime.CompositionLocalProvider(LocalPlushPalette provides palette) {
         MaterialTheme(
             colorScheme = if (darkMode) {
