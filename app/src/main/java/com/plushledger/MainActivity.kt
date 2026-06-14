@@ -315,9 +315,9 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
     ) {
         item {
             Image(
-                painter = painterResource(R.drawable.brand_logo),
+                painter = painterResource(R.drawable.brand_logo_transparent),
                 contentDescription = "绒绒记账",
-                modifier = Modifier.fillMaxWidth(0.76f).heightIn(max = 210.dp).clip(RoundedCornerShape(8.dp)),
+                modifier = Modifier.fillMaxWidth(0.76f).heightIn(max = 210.dp),
                 contentScale = ContentScale.Fit
             )
             Spacer(Modifier.height(14.dp))

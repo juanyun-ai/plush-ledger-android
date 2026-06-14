@@ -1,6 +1,9 @@
 package com.plushledger.ui
 
 import android.app.DatePickerDialog
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -35,6 +38,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DarkMode
@@ -101,6 +105,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 
+private const val SUPPORT_EMAIL = "support@xiaoxing.online"
+
 @Composable
 fun InboxScreen(
     messages: List<OfficialMessage>,
@@ -111,6 +117,7 @@ fun InboxScreen(
     val palette = LocalPlushPalette.current
     var feedback by rememberSaveable { mutableStateOf("") }
     var pendingDownload by remember { mutableStateOf<AppVersionInfo?>(null) }
+    var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 112.dp),
@@ -118,7 +125,16 @@ fun InboxScreen(
     ) {
         item { SectionTitle("官方消息", Icons.Default.Notifications) }
         items(messages.take(5), key = { it.id }) { message ->
-            PlushCard(Modifier.fillMaxWidth().height(126.dp), padding = 12.dp) {
+            val expanded = message.id in expandedIds
+            PlushCard(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (expanded) Modifier else Modifier.height(126.dp))
+                    .clickable {
+                        expandedIds = if (expanded) expandedIds - message.id else expandedIds + message.id
+                    },
+                padding = 12.dp
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     PlushBadge(Icons.Default.Inbox, palette.blue, 40.dp)
                     Spacer(Modifier.width(10.dp))
@@ -132,7 +148,14 @@ fun InboxScreen(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text(message.body, color = palette.muted, lineHeight = 18.sp, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    message.body,
+                    color = palette.muted,
+                    lineHeight = 18.sp,
+                    fontSize = 12.sp,
+                    maxLines = if (expanded) 20 else 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 message.updateInfo?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }?.let { update ->
                     Spacer(Modifier.height(6.dp))
                     OutlinedButton(
@@ -374,6 +397,8 @@ private fun MyRoot(
 @Composable
 private fun AboutScreen(onBack: () -> Unit) {
     val palette = LocalPlushPalette.current
+    val context = LocalContext.current
+    var showMailPrompt by rememberSaveable { mutableStateOf(false) }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 112.dp),
@@ -422,7 +447,9 @@ private fun AboutScreen(onBack: () -> Unit) {
             PlushCard(padding = 16.dp) {
                 SectionTitle("联系我们", Icons.Default.Email)
                 Spacer(Modifier.height(10.dp))
-                MenuRow(Icons.Default.Email, "support@rongrong.app", "用户反馈和合作联系", palette.rose)
+                Box(Modifier.fillMaxWidth().clickable { showMailPrompt = true }) {
+                    MenuRow(Icons.Default.Email, SUPPORT_EMAIL, "用户反馈和合作联系", palette.rose)
+                }
             }
         }
         item {
@@ -437,6 +464,25 @@ private fun AboutScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+    if (showMailPrompt) {
+        AlertDialog(
+            onDismissRequest = { showMailPrompt = false },
+            title = { Text("联系绒绒记账", fontWeight = FontWeight.Bold, color = palette.ink) },
+            text = { Text("将打开本机默认邮箱，收件人会自动填入 $SUPPORT_EMAIL。") },
+            dismissButton = { TextButton(onClick = { showMailPrompt = false }) { Text("取消") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    val intent = Intent(Intent.ACTION_SENDTO).apply {
+                        data = Uri.parse("mailto:$SUPPORT_EMAIL")
+                        putExtra(Intent.EXTRA_SUBJECT, "绒绒记账用户反馈")
+                    }
+                    runCatching { context.startActivity(intent) }
+                        .onFailure { Toast.makeText(context, "没有找到可用的邮箱 App", Toast.LENGTH_SHORT).show() }
+                    showMailPrompt = false
+                }) { Text("打开邮箱") }
+            }
+        )
     }
 }
 
@@ -661,11 +707,21 @@ private fun ProfileShortcut(icon: ImageVector, label: String, color: Color, modi
 @Composable
 private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewModel: LedgerViewModel, onBack: () -> Unit) {
     val palette = LocalPlushPalette.current
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("plush_user_settings", Context.MODE_PRIVATE) }
     val profile = state.ledger.profile
     var pin by rememberSaveable { mutableStateOf("") }
     var exportPin by rememberSaveable { mutableStateOf("") }
     var showSignOut by rememberSaveable { mutableStateOf(false) }
     var showDelete by rememberSaveable { mutableStateOf(false) }
+    var showReminder by rememberSaveable { mutableStateOf(false) }
+    var showCurrency by rememberSaveable { mutableStateOf(false) }
+    var showDownloadLine by rememberSaveable { mutableStateOf(false) }
+    var showCache by rememberSaveable { mutableStateOf(false) }
+    var showLicense by rememberSaveable { mutableStateOf(false) }
+    var reminderEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("ledger_reminder", true)) }
+    var currency by rememberSaveable { mutableStateOf(prefs.getString("currency_unit", "人民币  ¥") ?: "人民币  ¥") }
+    var downloadLine by rememberSaveable { mutableStateOf(prefs.getString("download_line", "国内优先") ?: "国内优先") }
     var deleteSeconds by remember { mutableIntStateOf(15) }
 
     LaunchedEffect(showDelete) {
@@ -701,11 +757,11 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                 ProfileSectionTitle("通用设置")
                 ToggleRow(Icons.Default.DarkMode, "主题模式", state.darkMode, viewModel::setDarkMode)
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                SettingsValueRow(Icons.Default.Notifications, "记账提醒", "已开启", palette.coral)
+                SettingsValueRow(Icons.Default.Notifications, "记账提醒", if (reminderEnabled) "每天 21:00" else "已关闭", palette.coral) { showReminder = true }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                SettingsValueRow(Icons.Default.Paid, "货币单位", "人民币  ¥", palette.moss)
+                SettingsValueRow(Icons.Default.Paid, "货币单位", currency, palette.moss) { showCurrency = true }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                SettingsValueRow(Icons.Default.Badge, "每月起始日", "1日", palette.rose)
+                SettingsValueRow(Icons.Default.SystemUpdate, "更新下载线路", downloadLine, palette.rose) { showDownloadLine = true }
             }
         }
         item {
@@ -744,16 +800,16 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
         item {
             PlushCard {
                 ProfileSectionTitle("更多")
-                ActionRow(Icons.Default.ChatBubble, "帮助与反馈", "在“我的-通知提醒”里发送建议", palette.coral) {}
-                Spacer(Modifier.height(8.dp))
-                ActionRow(Icons.Default.AccountCircle, "关于我们", "当前版本 ${BuildConfig.VERSION_NAME}", palette.blue) {}
-                Spacer(Modifier.height(8.dp))
                 ActionRow(
                     Icons.Default.SystemUpdate,
                     "检查更新",
                     if (state.isCheckingUpdate) "正在检查" else "当前版本 ${BuildConfig.VERSION_NAME}",
                     palette.moss
                 ) { viewModel.checkForUpdates() }
+                Spacer(Modifier.height(8.dp))
+                ActionRow(Icons.Default.DeleteForever, "清理缓存", "清除临时图片和下载残留", palette.coral) { showCache = true }
+                Spacer(Modifier.height(8.dp))
+                ActionRow(Icons.Default.AccountCircle, "开源许可", "仅允许非商业用途", palette.blue) { showLicense = true }
             }
         }
         item {
@@ -800,6 +856,89 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
             viewModel.deleteAccountPermanently()
             showDelete = false
         }
+    }
+    if (showReminder) {
+        AlertDialog(
+            onDismissRequest = { showReminder = false },
+            title = { Text("记账提醒", fontWeight = FontWeight.Bold) },
+            text = { Text("开启后，应用会保存每天 21:00 作为记账提醒时间。系统通知权限接入后会按此时间提醒。") },
+            dismissButton = {
+                TextButton(onClick = {
+                    reminderEnabled = false
+                    prefs.edit().putBoolean("ledger_reminder", false).apply()
+                    showReminder = false
+                }) { Text("关闭提醒") }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    reminderEnabled = true
+                    prefs.edit().putBoolean("ledger_reminder", true).apply()
+                    showReminder = false
+                    Toast.makeText(context, "记账提醒已保存", Toast.LENGTH_SHORT).show()
+                }) { Text("开启提醒") }
+            }
+        )
+    }
+    if (showCurrency) {
+        val options = listOf("人民币  ¥", "美元  $", "欧元  €", "日元  ¥")
+        AlertDialog(
+            onDismissRequest = { showCurrency = false },
+            title = { Text("货币单位", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    options.forEach { option ->
+                        OutlinedButton(
+                            onClick = {
+                                currency = option
+                                prefs.edit().putString("currency_unit", option).apply()
+                                showCurrency = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(option) }
+                    }
+                    Text("当前账目金额仍按最小货币单位保存，切换只改变新界面显示偏好。", color = palette.muted, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {}
+        )
+    }
+    if (showDownloadLine) {
+        val options = listOf("国内优先", "GitHub 备用", "自动选择")
+        AlertDialog(
+            onDismissRequest = { showDownloadLine = false },
+            title = { Text("更新下载线路", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("国内网络访问 GitHub 可能较慢。发布端优先使用 Supabase/国内对象存储地址，GitHub 仅作为备用归档。", color = palette.muted, fontSize = 12.sp)
+                    options.forEach { option ->
+                        OutlinedButton(
+                            onClick = {
+                                downloadLine = option
+                                prefs.edit().putString("download_line", option).apply()
+                                showDownloadLine = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(option) }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+    if (showCache) {
+        ConfirmDialog("清理缓存", "是否清除临时缓存？账本数据不会被删除。", onDismiss = { showCache = false }) {
+            val success = runCatching { context.cacheDir.deleteRecursively() }.getOrDefault(false)
+            Toast.makeText(context, if (success) "缓存已清理" else "缓存清理完成", Toast.LENGTH_SHORT).show()
+            showCache = false
+        }
+    }
+    if (showLicense) {
+        AlertDialog(
+            onDismissRequest = { showLicense = false },
+            title = { Text("开源许可", fontWeight = FontWeight.Bold) },
+            text = { Text("绒绒记账当前以 PolyForm Noncommercial License 发布，可学习、研究、测试和个人非商业使用。商业使用需另行取得授权。") },
+            confirmButton = { TextButton(onClick = { showLicense = false }) { Text("知道了") } }
+        )
     }
 }
 
@@ -877,9 +1016,9 @@ private fun MenuRow(icon: ImageVector, title: String, subtitle: String, color: C
 }
 
 @Composable
-private fun SettingsValueRow(icon: ImageVector, title: String, value: String, color: Color) {
+private fun SettingsValueRow(icon: ImageVector, title: String, value: String, color: Color, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         PlushBadge(icon, color, 34.dp)
         Spacer(Modifier.width(12.dp))
         Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, color = palette.ink)
@@ -1017,9 +1156,9 @@ private fun Avatar(url: String?, size: androidx.compose.ui.unit.Dp) {
                 contentDescription = "用户头像",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                placeholder = painterResource(R.drawable.ic_launcher),
-                error = painterResource(R.drawable.ic_launcher),
-                fallback = painterResource(R.drawable.ic_launcher)
+                placeholder = painterResource(R.drawable.ic_launcher_transparent),
+                error = painterResource(R.drawable.ic_launcher_transparent),
+                fallback = painterResource(R.drawable.ic_launcher_transparent)
             )
         }
     }

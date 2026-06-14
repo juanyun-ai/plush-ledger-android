@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -81,6 +83,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -159,10 +162,10 @@ fun HomeScreen(
                         contentScale = ContentScale.Fit
                     )
                     Image(
-                        painterResource(R.drawable.ic_launcher),
+                        painterResource(R.drawable.ic_launcher_transparent),
                         contentDescription = null,
-                        modifier = Modifier.size(68.dp).clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop
+                        modifier = Modifier.size(68.dp),
+                        contentScale = ContentScale.Fit
                     )
                 }
             }
@@ -545,10 +548,12 @@ fun RecordScreen(
     var showAccounts by rememberSaveable { mutableStateOf(false) }
     var showBudget by rememberSaveable { mutableStateOf(false) }
     var showManage by rememberSaveable { mutableStateOf(false) }
+    var showOtherCategory by rememberSaveable { mutableStateOf(false) }
     var budgetAmount by rememberSaveable { mutableStateOf("") }
     var budgetCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var newAccount by rememberSaveable { mutableStateOf("") }
     var newCategory by rememberSaveable { mutableStateOf("") }
+    var otherCategoryName by rememberSaveable { mutableStateOf("") }
     var deleteAccount by remember { mutableStateOf<AccountEntity?>(null) }
     var deleteCategory by remember { mutableStateOf<CategoryEntity?>(null) }
     var managePage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -621,9 +626,13 @@ fun RecordScreen(
         }
         item {
             ReferenceSegment(
-                items = listOf("expense" to "↓  支出", "income" to "↑  收入", "transfer" to "⇄  转账"),
+                items = listOf("expense" to "↓  支出", "income" to "↑  收入"),
                 selected = type,
-                onSelected = { type = it; categoryId = null }
+                onSelected = {
+                    type = it
+                    categoryId = null
+                    showOtherCategory = false
+                }
             )
         }
         item {
@@ -649,6 +658,29 @@ fun RecordScreen(
                 PlushCard(Modifier.fillMaxWidth(), padding = 12.dp) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         categories.take(8).forEach { CategoryChoice(it, categoryId == it.id) { categoryId = it.id } }
+                        OtherCategoryChoice(showOtherCategory) {
+                            showOtherCategory = !showOtherCategory
+                            categoryId = null
+                        }
+                    }
+                    if (showOtherCategory) {
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            otherCategoryName,
+                            { otherCategoryName = it.take(12) },
+                            placeholder = { Text("自定义分类名称") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        PlushButton("添加到${if (type == "income") "收入" else "支出"}分类", Icons.Default.Add, Modifier.fillMaxWidth()) {
+                            val clean = otherCategoryName.trim()
+                            if (clean.isNotBlank()) {
+                                onAddCategory(clean, type)
+                                otherCategoryName = ""
+                                showOtherCategory = false
+                            }
+                        }
                     }
                 }
             }
@@ -755,34 +787,81 @@ fun CategoryManagementScreen(
     var kind by rememberSaveable { mutableStateOf("expense") }
     var newName by rememberSaveable { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<CategoryEntity?>(null) }
+    var editMode by rememberSaveable { mutableStateOf(false) }
     val categories = ledger.categories.filter { it.kind == kind }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 112.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { ManagementHeader("分类管理", onBack) }
-        item { ReferenceSegment(listOf("expense" to "支出分类", "income" to "收入分类"), kind, { kind = it }) }
-        item { Text("轻点三条杠下移，双击上移；长按可删除分类。", color = palette.muted, fontSize = 12.sp) }
+        item { ReferenceSegment(listOf("expense" to "支出分类", "income" to "收入分类"), kind, { kind = it; editMode = false }) }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (editMode) "编辑中：拖动分类可调整顺序，点右上角叉叉删除。"
+                    else "长按任意分类进入编辑状态，再拖动排序或点叉叉删除。",
+                    color = palette.muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                if (editMode) TextButton(onClick = { editMode = false }) { Text("完成") }
+            }
+        }
         item {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 categories.forEach { category ->
-                    PlushCard(Modifier.width(164.dp), padding = 10.dp) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CategoryArt(category.name, 46.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(category.name, color = palette.ink, fontWeight = FontWeight.Bold, maxLines = 1)
-                                Text(if (category.kind == "income") "收入" else "支出", color = palette.muted, fontSize = 11.sp)
+                    var dragOffset by remember(category.id) { mutableStateOf(0f) }
+                    Box(
+                        modifier = Modifier
+                            .width(164.dp)
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = { editMode = true }
+                            )
+                            .pointerInput(category.id, editMode) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        editMode = true
+                                        dragOffset = 0f
+                                    },
+                                    onDragEnd = { dragOffset = 0f },
+                                    onDragCancel = { dragOffset = 0f },
+                                    onDrag = { _, dragAmount ->
+                                        dragOffset += dragAmount.y
+                                        when {
+                                            dragOffset > 44f -> {
+                                                onReorder(category.id, 1)
+                                                dragOffset = 0f
+                                            }
+                                            dragOffset < -44f -> {
+                                                onReorder(category.id, -1)
+                                                dragOffset = 0f
+                                            }
+                                        }
+                                    }
+                                )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .combinedClickable(
-                                        onClick = { onReorder(category.id, 1) },
-                                        onDoubleClick = { onReorder(category.id, -1) },
-                                        onLongClick = { pendingDelete = category }
-                                    ),
-                                contentAlignment = Alignment.Center
+                    ) {
+                        PlushCard(Modifier.fillMaxWidth(), padding = 10.dp) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CategoryArt(category.name, 46.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(category.name, color = palette.ink, fontWeight = FontWeight.Bold, maxLines = 1)
+                                    Text(if (category.kind == "income") "收入" else "支出", color = palette.muted, fontSize = 11.sp)
+                                }
+                                Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Menu, contentDescription = "拖动${category.name}", tint = palette.muted, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                        if (editMode) {
+                            Surface(
+                                modifier = Modifier.align(Alignment.TopEnd).size(26.dp),
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                color = palette.coral,
+                                shadowElevation = 4.dp
                             ) {
-                                Icon(Icons.Default.Menu, contentDescription = "长按删除${category.name}", tint = palette.muted, modifier = Modifier.size(18.dp))
+                                IconButton(onClick = { pendingDelete = category }, modifier = Modifier.size(26.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "删除${category.name}", tint = Color.White, modifier = Modifier.size(14.dp))
+                                }
                             }
                         }
                     }
@@ -1364,6 +1443,31 @@ private fun CategoryChoice(category: CategoryEntity, selected: Boolean, onClick:
             CategoryBadge(category, category.categoryColor(), 40.dp)
             Spacer(Modifier.height(4.dp))
             Text(category.name, color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun OtherCategoryChoice(selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = Modifier.width(68.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Transparent,
+        border = androidx.compose.foundation.BorderStroke(2.dp, if (selected) palette.rose else Color.Transparent)
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(palette.surfaceAlt),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.MoreHoriz, contentDescription = null, tint = palette.rose, modifier = Modifier.size(24.dp))
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("其他", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }
 }

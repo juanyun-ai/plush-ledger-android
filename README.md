@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="app/src/main/res/drawable-nodpi/brand_logo.png" width="320" alt="绒绒记账 Logo" />
+  <img src="app/src/main/res/drawable-nodpi/brand_logo_transparent.png" width="320" alt="绒绒记账 Logo" />
 
   # 绒绒记账
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.8.0-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.8.1-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -16,7 +16,7 @@
 
 ## 功能
 
-- 收入、支出、转账、分类、账户、预算与搜索。
+- 收入、支出、分类、账户、预算与搜索；旧版转账数据结构保留，普通记账入口先收起。
 - 参考图风格的四项底栏、独立记账页、日期分组账单和可交互日历。
 - 环形图与柱状图并列统计，每页使用独立且与场景匹配的短标语。
 - Room 本地优先存储，离线仍可正常记账。
@@ -76,6 +76,15 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载后必须通过版本表中的 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.8.1
+
+- 消息通知支持点击展开详情，版本更新消息仍保留确认下载按钮。
+- UI 内展示 logo 改用透明底素材，减少白底贴片感，让页面和暖色背景更融合。
+- 记账入口收起“转账”，收入/支出分类新增“其他”自定义入口。
+- 分类管理改为长按进入编辑态，拖动调整顺序，右上角叉叉才会触发删除确认。
+- “联系我们”改为唤起本机邮箱并自动填写支持邮箱；设置里的记账提醒、货币单位、更新线路、清理缓存和开源许可都改为可点击交互。
+- 更新下载失败提示更明确；国内网络下建议优先使用 Supabase Storage 或国内 OSS/CDN 作为 APK 下载源，GitHub Release 仅作备用归档。
 
 ### v0.8.0
 

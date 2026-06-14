@@ -175,9 +175,9 @@ class AppUpdateManager(private val activity: Activity) {
         DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "下载失败：旧安装包未能替换，请重试"
         DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "下载失败：下载地址跳转异常"
         DownloadManager.ERROR_UNHANDLED_HTTP_CODE,
-        DownloadManager.ERROR_HTTP_DATA_ERROR -> "下载失败：服务器暂时无法提供安装包"
-        DownloadManager.ERROR_CANNOT_RESUME -> "下载中断且无法续传，请重新下载"
-        else -> "下载失败，请检查网络后重试（错误 $reason）"
+        DownloadManager.ERROR_HTTP_DATA_ERROR -> "下载失败：更新源连接不稳定，请切换 Wi-Fi 或稍后重试"
+        DownloadManager.ERROR_CANNOT_RESUME -> "下载中断且无法续传，请切换更稳定网络后重新下载"
+        else -> "下载失败，请检查网络或切换下载线路后重试（错误 $reason）"
     }
 
     private companion object {

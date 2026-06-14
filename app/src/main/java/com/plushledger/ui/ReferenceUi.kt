@@ -55,10 +55,10 @@ fun ReferenceHeader(
     ) {
         if (branded || mascot) {
             Image(
-                painter = painterResource(R.drawable.ic_launcher),
+                painter = painterResource(R.drawable.ic_launcher_transparent),
                 contentDescription = null,
-                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)),
-                contentScale = ContentScale.Crop
+                modifier = Modifier.size(56.dp),
+                contentScale = ContentScale.Fit
             )
             Spacer(Modifier.width(8.dp))
         }
@@ -148,10 +148,10 @@ fun ReferenceSegment(
 @Composable
 fun MascotArt(size: Dp = 88.dp) {
     Image(
-        painter = painterResource(R.drawable.ic_launcher),
+        painter = painterResource(R.drawable.ic_launcher_transparent),
         contentDescription = null,
-        modifier = Modifier.size(size).clip(RoundedCornerShape(size * 0.22f)),
-        contentScale = ContentScale.Crop
+        modifier = Modifier.size(size),
+        contentScale = ContentScale.Fit
     )
 }
 
