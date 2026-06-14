@@ -1,2 +1,8 @@
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your_publishable_key
+
+# Release signing values belong in ~/.gradle/gradle.properties, never in Git.
+RONGRONG_RELEASE_STORE_FILE=/absolute/path/to/release-keystore.jks
+RONGRONG_RELEASE_STORE_PASSWORD=replace_me
+RONGRONG_RELEASE_KEY_ALIAS=release-key-alias
+RONGRONG_RELEASE_KEY_PASSWORD=replace_me

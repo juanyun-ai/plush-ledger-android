@@ -1260,13 +1260,13 @@ private fun StatsOverviewCard(expense: Long, income: Long, balance: Long) {
     val palette = LocalPlushPalette.current
     WarmPanel(padding = 18.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
                 StatsMetric("本月支出", expense, palette.coral, Modifier.weight(1f))
                 StatsMetric("本月收入", income, palette.moss, Modifier.weight(1f))
                 StatsMetric("结余", balance, palette.rose, Modifier.weight(1f))
             }
-            Spacer(Modifier.width(8.dp))
-            MascotArt(72.dp)
+            Spacer(Modifier.width(4.dp))
+            MascotArt(60.dp)
         }
     }
 }
@@ -1276,9 +1276,10 @@ private fun StatsMetric(label: String, value: Long, color: Color, modifier: Modi
     val palette = LocalPlushPalette.current
     val text = Money.formatCny(value)
     val size = when {
-        text.length >= 12 -> 12.sp
-        text.length >= 10 -> 14.sp
-        else -> 17.sp
+        text.length >= 12 -> 10.sp
+        text.length >= 10 -> 11.sp
+        text.length >= 9 -> 13.sp
+        else -> 15.sp
     }
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1295,11 +1296,7 @@ private fun StatsMetric(label: String, value: Long, color: Color, modifier: Modi
 private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modifier: Modifier = Modifier) {
     val palette = LocalPlushPalette.current
     WarmPanel(modifier, padding = 12.dp) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            ProfileSectionLine("支出构成")
-            Spacer(Modifier.weight(1f))
-            Text("总支出 ${Money.formatCny(totalExpense)}", color = palette.muted, fontSize = 11.sp, maxLines = 1)
-        }
+        ProfileSectionLine("支出构成")
         DonutChart(spend, compact = true)
         spend.take(6).forEachIndexed { index, item ->
             val percent = item.amountMinor * 1000 / totalExpense.coerceAtLeast(1)
@@ -1413,7 +1410,7 @@ private fun MonthWeekTrendChart(spend: List<WeekSpend>) {
                             .background(Brush.verticalGradient(listOf(statsColor(index).copy(alpha = 0.58f), statsColor(index))))
                     )
                     Spacer(Modifier.height(6.dp))
-                    Text(week.label, color = palette.muted, fontSize = 9.sp, maxLines = 1)
+                    Text(week.label.substringBefore('-'), color = palette.muted, fontSize = 9.sp, maxLines = 1)
                 }
             }
         }

@@ -71,6 +71,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -447,6 +448,7 @@ private fun SocialLoginRow(viewModel: LedgerViewModel) {
 @Composable
 private fun AgreementDialog(onDismiss: () -> Unit, onAccepted: () -> Unit) {
     var seconds by remember { mutableIntStateOf(3) }
+    val uriHandler = LocalUriHandler.current
     LaunchedEffect(Unit) {
         while (seconds > 0) {
             delay(1_000)
@@ -464,6 +466,11 @@ private fun AgreementDialog(onDismiss: () -> Unit, onAccepted: () -> Unit) {
                 item { Text("4. 用户应妥善保护密码和验证码，不得利用本应用从事违法活动。") }
                 item { Text("5. 邮件服务商会处理验证码投递信息，但不会获得账目内容。") }
                 item { Text("6. 服务和条款发生重要变化时，将通过应用信箱通知。") }
+                item {
+                    TextButton(onClick = { uriHandler.openUri("https://privacy.xiaoxing.online/privacy.html") }) {
+                        Text("查看完整隐私政策")
+                    }
+                }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },

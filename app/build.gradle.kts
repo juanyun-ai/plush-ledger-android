@@ -9,12 +9,30 @@ android {
     namespace = "com.plushledger"
     compileSdk = 36
 
+    val releaseStorePath = providers.gradleProperty("RONGRONG_RELEASE_STORE_FILE").orNull
+    val releaseStorePassword = providers.gradleProperty("RONGRONG_RELEASE_STORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.gradleProperty("RONGRONG_RELEASE_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.gradleProperty("RONGRONG_RELEASE_KEY_PASSWORD").orNull
+
+    signingConfigs {
+        if (!releaseStorePath.isNullOrBlank() && !releaseStorePassword.isNullOrBlank() &&
+            !releaseKeyAlias.isNullOrBlank() && !releaseKeyPassword.isNullOrBlank()
+        ) {
+            create("release") {
+                storeFile = file(releaseStorePath)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     defaultConfig {
-        applicationId = "com.plushledger"
+        applicationId = "online.xiaoxing.rongrongledger"
         minSdk = 26
         targetSdk = 36
-        versionCode = 85
-        versionName = "0.8.5"
+        versionCode = 86
+        versionName = "0.8.6"
 
         val supabaseUrl = providers.gradleProperty("SUPABASE_URL").orNull ?: ""
         val supabaseAnonKey = providers.gradleProperty("SUPABASE_ANON_KEY").orNull ?: ""
@@ -22,6 +40,13 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.findByName("release")
+            isMinifyEnabled = false
+        }
     }
 
     buildFeatures {

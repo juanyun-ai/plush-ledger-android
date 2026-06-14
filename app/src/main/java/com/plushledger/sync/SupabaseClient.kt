@@ -31,6 +31,7 @@ data class AppVersionInfo(
     val versionCode: Int,
     val versionName: String,
     val apkUrl: String,
+    val backupApkUrl: String?,
     val sha256: String,
     val fileSizeBytes: Long,
     val releaseNotes: String,
@@ -192,7 +193,7 @@ class SupabaseClient {
     suspend fun fetchLatestAppVersion(): AppVersionInfo? {
         val text = request(
             method = "GET",
-            path = "/rest/v1/app_versions?select=version_code,version_name,apk_url,sha256,file_size_bytes,release_notes,is_mandatory&platform=eq.android&active=eq.true&order=version_code.desc&limit=1"
+            path = "/rest/v1/app_versions?select=*&platform=eq.android&active=eq.true&order=version_code.desc&limit=1"
         )
         val rows = if (text.isBlank()) JSONArray() else JSONArray(text)
         if (rows.length() == 0) return null
@@ -202,7 +203,7 @@ class SupabaseClient {
     suspend fun fetchAppVersion(versionCode: Int): AppVersionInfo? {
         val text = request(
             method = "GET",
-            path = "/rest/v1/app_versions?select=version_code,version_name,apk_url,sha256,file_size_bytes,release_notes,is_mandatory&platform=eq.android&version_code=eq.$versionCode&active=eq.true&limit=1"
+            path = "/rest/v1/app_versions?select=*&platform=eq.android&version_code=eq.$versionCode&active=eq.true&limit=1"
         )
         val rows = if (text.isBlank()) JSONArray() else JSONArray(text)
         return if (rows.length() == 0) null else rows.getJSONObject(0).toAppVersionInfo()
@@ -332,6 +333,7 @@ private fun JSONObject.toAppVersionInfo() = AppVersionInfo(
     versionCode = getInt("version_code"),
     versionName = getString("version_name"),
     apkUrl = getString("apk_url"),
+    backupApkUrl = optString("backup_apk_url").takeIf(String::isNotBlank),
     sha256 = getString("sha256"),
     fileSizeBytes = getLong("file_size_bytes"),
     releaseNotes = optString("release_notes"),

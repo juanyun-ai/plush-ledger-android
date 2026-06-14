@@ -42,13 +42,45 @@ class AppUpdateManager(private val activity: Activity) {
     }
 
     fun download(info: AppVersionInfo) {
+        val manager = activity.getSystemService(DownloadManager::class.java)
+        preferences.getLong(KEY_DOWNLOAD_ID, -1L).takeIf { it >= 0 }?.let { manager.remove(it) }
+        val sources = listOfNotNull(info.apkUrl, info.backupApkUrl)
+            .map(String::trim)
+            .filter { it.startsWith("https://") }
+            .distinct()
+        if (sources.isEmpty()) {
+            Toast.makeText(activity, "更新地址无效，请稍后重试", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        preferences.edit()
+            .putString(KEY_PRIMARY_URL, sources.first())
+            .putString(KEY_BACKUP_URL, sources.getOrNull(1))
+            .putString(KEY_SHA256, info.sha256.lowercase())
+            .putString(KEY_VERSION_NAME, info.versionName)
+            .putInt(KEY_SOURCE_INDEX, 0)
+            .putInt(KEY_SOURCE_ATTEMPT, 0)
+            .putBoolean(KEY_WAITING_INSTALL_PERMISSION, false)
+            .putBoolean(KEY_PERMISSION_REQUESTED, false)
+            .apply()
+        enqueueCurrentSource(showStartedMessage = true)
+    }
+
+    private fun enqueueCurrentSource(showStartedMessage: Boolean) {
+        val sourceIndex = preferences.getInt(KEY_SOURCE_INDEX, 0)
+        val url = sourceAt(sourceIndex) ?: run {
+            clearPending()
+            Toast.makeText(activity, "所有下载线路均不可用，请稍后重试", Toast.LENGTH_LONG).show()
+            return
+        }
+        val versionName = preferences.getString(KEY_VERSION_NAME, null) ?: return
         val downloadsDir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-        val fileName = "plush-ledger-${info.versionName}.apk"
+        val fileName = "rongrong-ledger-$versionName.apk"
         downloadsDir?.let { File(it, fileName).delete() }
 
-        val request = DownloadManager.Request(Uri.parse(info.apkUrl))
-            .setTitle("绒绒记账 ${info.versionName}")
-            .setDescription("正在下载应用更新")
+        val request = DownloadManager.Request(Uri.parse(url))
+            .setTitle("绒绒记账 $versionName")
+            .setDescription(if (sourceIndex == 0) "正在从主线路下载更新" else "正在从备用线路下载更新")
             .setMimeType(APK_MIME)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(
@@ -64,15 +96,13 @@ class AppUpdateManager(private val activity: Activity) {
             .onSuccess { id ->
                 preferences.edit()
                     .putLong(KEY_DOWNLOAD_ID, id)
-                    .putString(KEY_SHA256, info.sha256.lowercase())
-                    .putString(KEY_VERSION_NAME, info.versionName)
-                    .putBoolean(KEY_WAITING_INSTALL_PERMISSION, false)
-                    .putBoolean(KEY_PERMISSION_REQUESTED, false)
                     .apply()
-                Toast.makeText(activity, "v${info.versionName} 已开始下载", Toast.LENGTH_SHORT).show()
+                if (showStartedMessage) {
+                    Toast.makeText(activity, "v$versionName 已开始下载", Toast.LENGTH_SHORT).show()
+                }
             }
             .onFailure {
-                Toast.makeText(activity, "无法开始下载，请检查网络后重试", Toast.LENGTH_LONG).show()
+                retryOrFallback("无法连接当前下载线路")
             }
     }
 
@@ -92,15 +122,15 @@ class AppUpdateManager(private val activity: Activity) {
         manager.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
             if (!cursor.moveToFirst()) {
                 checking.set(false)
+                retryOrFallback("下载任务已失效")
                 return
             }
             when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
                 DownloadManager.STATUS_SUCCESSFUL -> verifyAndInstall(id)
                 DownloadManager.STATUS_FAILED -> {
                     val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    clearPending()
                     checking.set(false)
-                    Toast.makeText(activity, downloadFailureMessage(reason), Toast.LENGTH_LONG).show()
+                    retryOrFallback(downloadFailureMessage(reason))
                 }
                 else -> checking.set(false)
             }
@@ -120,8 +150,7 @@ class AppUpdateManager(private val activity: Activity) {
                 if (valid) {
                     openInstaller(id)
                 } else {
-                    clearPending()
-                    Toast.makeText(activity, "更新包校验失败，已拒绝安装", Toast.LENGTH_LONG).show()
+                    retryOrFallback("更新包校验失败，正在更换下载线路")
                 }
             }
         }.start()
@@ -167,8 +196,49 @@ class AppUpdateManager(private val activity: Activity) {
 
     private fun clearPending() {
         preferences.edit().remove(KEY_DOWNLOAD_ID).remove(KEY_SHA256).remove(KEY_VERSION_NAME)
+            .remove(KEY_PRIMARY_URL).remove(KEY_BACKUP_URL)
+            .remove(KEY_SOURCE_INDEX).remove(KEY_SOURCE_ATTEMPT)
             .remove(KEY_WAITING_INSTALL_PERMISSION).remove(KEY_PERMISSION_REQUESTED).apply()
     }
+
+    private fun retryOrFallback(message: String) {
+        val manager = activity.getSystemService(DownloadManager::class.java)
+        preferences.getLong(KEY_DOWNLOAD_ID, -1L).takeIf { it >= 0 }?.let { manager.remove(it) }
+
+        val sourceIndex = preferences.getInt(KEY_SOURCE_INDEX, 0)
+        val attempt = preferences.getInt(KEY_SOURCE_ATTEMPT, 0)
+        val nextIndex: Int
+        val nextAttempt: Int
+        if (attempt + 1 < MAX_ATTEMPTS_PER_SOURCE) {
+            nextIndex = sourceIndex
+            nextAttempt = attempt + 1
+        } else if (sourceAt(sourceIndex + 1) != null) {
+            nextIndex = sourceIndex + 1
+            nextAttempt = 0
+        } else {
+            clearPending()
+            Toast.makeText(activity, "$message。请检查网络后重新下载", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        preferences.edit()
+            .remove(KEY_DOWNLOAD_ID)
+            .putInt(KEY_SOURCE_INDEX, nextIndex)
+            .putInt(KEY_SOURCE_ATTEMPT, nextAttempt)
+            .apply()
+        Toast.makeText(
+            activity,
+            if (nextIndex == sourceIndex) "下载中断，正在自动重试" else "主线路不稳定，正在切换备用线路",
+            Toast.LENGTH_SHORT
+        ).show()
+        enqueueCurrentSource(showStartedMessage = false)
+    }
+
+    private fun sourceAt(index: Int): String? = when (index) {
+        0 -> preferences.getString(KEY_PRIMARY_URL, null)
+        1 -> preferences.getString(KEY_BACKUP_URL, null)
+        else -> null
+    }?.takeIf(String::isNotBlank)
 
     private fun downloadFailureMessage(reason: Int): String = when (reason) {
         DownloadManager.ERROR_INSUFFICIENT_SPACE -> "下载失败：设备存储空间不足"
@@ -185,7 +255,12 @@ class AppUpdateManager(private val activity: Activity) {
         const val KEY_DOWNLOAD_ID = "download_id"
         const val KEY_SHA256 = "sha256"
         const val KEY_VERSION_NAME = "version_name"
+        const val KEY_PRIMARY_URL = "primary_url"
+        const val KEY_BACKUP_URL = "backup_url"
+        const val KEY_SOURCE_INDEX = "source_index"
+        const val KEY_SOURCE_ATTEMPT = "source_attempt"
         const val KEY_WAITING_INSTALL_PERMISSION = "waiting_install_permission"
         const val KEY_PERMISSION_REQUESTED = "permission_requested"
+        const val MAX_ATTEMPTS_PER_SOURCE = 2
     }
 }

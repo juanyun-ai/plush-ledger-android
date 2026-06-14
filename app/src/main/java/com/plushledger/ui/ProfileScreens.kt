@@ -245,7 +245,7 @@ fun MyScreen(
             InboxScreen(state.officialMessages, state.isBusy, viewModel::submitFeedback, onDownloadUpdate)
         }
         MyPage.SETTINGS -> SettingsScreen(state, biometricAvailable, viewModel, onBack = { page = MyPage.ROOT })
-        MyPage.MEMBERSHIP -> MembershipScreen(state, onBack = { page = MyPage.ROOT }, onPay = viewModel::startMembershipPurchase)
+        MyPage.MEMBERSHIP -> MembershipScreen(state, onBack = { page = MyPage.ROOT })
         MyPage.BUDGET -> BudgetManagementScreen(state.ledger, onBack = { page = MyPage.ROOT }, onBudget = viewModel::setBudget)
         MyPage.CATEGORY -> CategoryManagementScreen(
             ledger = state.ledger,
@@ -1251,13 +1251,10 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
 }
 
 @Composable
-private fun MembershipScreen(state: UiState, onBack: () -> Unit, onPay: (String, String) -> Unit) {
+private fun MembershipScreen(state: UiState, onBack: () -> Unit) {
     val palette = LocalPlushPalette.current
     val profile = state.ledger.profile
     val hasRights = profile?.role == "admin" || profile?.membershipTier == "permanent"
-    var showPayment by rememberSaveable { mutableStateOf(false) }
-    var selectedProvider by rememberSaveable { mutableStateOf("微信支付") }
-    var paymentReference by rememberSaveable { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { BackHeader("会员", onBack) }
         item {
@@ -1267,68 +1264,30 @@ private fun MembershipScreen(state: UiState, onBack: () -> Unit, onPay: (String,
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(membershipLabel(profile?.role, profile?.membershipTier), fontWeight = FontWeight.Black, fontSize = 22.sp, color = palette.ink)
-                        Text(if (hasRights) "权益永久有效" else "一次购买，永久有效", color = palette.muted)
+                        Text(if (hasRights) "权益永久有效" else "公测期间全部功能免费", color = palette.muted)
                     }
                 }
                 if (!hasRights) {
                     Spacer(Modifier.height(16.dp))
-                    Text("¥0.01", fontWeight = FontWeight.Black, fontSize = 34.sp, color = palette.rose)
-                    Spacer(Modifier.height(10.dp))
-                    PlushButton("开通永久会员", Icons.Default.Paid, Modifier.fillMaxWidth()) { showPayment = true }
+                    Surface(shape = RoundedCornerShape(16.dp), color = palette.moss.copy(alpha = 0.12f)) {
+                        Text(
+                            "当前版本不收取会员费用，所有记账、统计、云同步和数据管理功能均可免费使用。",
+                            modifier = Modifier.padding(14.dp),
+                            color = palette.ink,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 21.sp
+                        )
+                    }
                 }
             }
         }
         item {
             PlushCard {
-                InfoRow(Icons.Default.Star, "永久铭牌", "已包含")
-                InfoRow(Icons.Default.CloudSync, "优先云同步", "已包含")
-                InfoRow(Icons.Default.CreditCard, "账单智能导入", "商户接口开放后提供")
+                InfoRow(Icons.Default.Star, "公测权益", "全部免费")
+                InfoRow(Icons.Default.CloudSync, "云端同步", "免费开放")
+                InfoRow(Icons.Default.CreditCard, "账单智能导入", "后续开放")
             }
         }
-    }
-    if (showPayment) {
-        AlertDialog(
-            onDismissRequest = { showPayment = false },
-            title = { Text("会员充值 ¥0.01", fontWeight = FontWeight.Bold, color = palette.ink) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "当前采用人工核验：付款后填写交易单号后 6 位、付款备注或截图编号。管理员确认到账后升级为永久会员。",
-                        color = palette.muted,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SoftChip("微信支付", selectedProvider == "微信支付", palette.moss) { selectedProvider = "微信支付" }
-                        SoftChip("支付宝", selectedProvider == "支付宝", palette.blue) { selectedProvider = "支付宝" }
-                    }
-                    OutlinedTextField(
-                        paymentReference,
-                        { paymentReference = it.take(80) },
-                        label = { Text("交易单号/付款备注") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Text(
-                        "正式自动开通需要微信支付/支付宝商户号和支付回调；个人收款码不会被打包进公开 APK。",
-                        color = palette.muted,
-                        fontSize = 11.sp,
-                        lineHeight = 16.sp
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onPay(selectedProvider, paymentReference)
-                        showPayment = false
-                        paymentReference = ""
-                    },
-                    enabled = !state.isBusy && paymentReference.trim().length >= 2
-                ) { Text("提交核验") }
-            },
-            dismissButton = { TextButton(onClick = { showPayment = false }) { Text("取消") } }
-        )
     }
 }
 
