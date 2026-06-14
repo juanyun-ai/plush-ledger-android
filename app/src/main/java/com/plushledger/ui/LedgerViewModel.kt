@@ -208,7 +208,12 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun socialLogin(provider: String) {
-        state.value = state.value.copy(message = "$provider 登录需要开放平台 AppID 和审核，当前尚未启用")
+        val name = when {
+            provider.contains("微信") -> "微信"
+            provider.contains("QQ", ignoreCase = true) -> "QQ"
+            else -> provider
+        }
+        state.value = state.value.copy(message = "$name 绑定需要腾讯开放平台 AppID、移动应用审核和回调地址；未配置前不会写入假的绑定状态")
     }
 
     fun unlockWithPin(pin: String) {
@@ -505,13 +510,26 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun startMembershipPurchase(provider: String) {
+    fun startMembershipPurchase(provider: String, reference: String) {
         val profile = state.value.ledger.profile
         if (profile?.role == "admin" || profile?.membershipTier == "permanent") {
             state.value = state.value.copy(message = "当前账号已经拥有永久权益")
             return
         }
-        state.value = state.value.copy(message = "$provider 商户通道尚未完成审核，本次不会扣款")
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true, message = null)
+            runCatching { ledger.createMembershipOrder(provider, reference) }
+                .onSuccess {
+                    app.enqueueImmediateSync()
+                    state.value = state.value.copy(
+                        isBusy = false,
+                        message = "$it，管理员确认到账后会升级永久会员"
+                    )
+                }
+                .onFailure {
+                    state.value = state.value.copy(isBusy = false, message = it.message ?: "会员订单提交失败")
+                }
+        }
     }
 
     fun setSecureScreen(enabled: Boolean) {

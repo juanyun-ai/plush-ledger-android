@@ -37,6 +37,15 @@ data class AppVersionInfo(
     val isMandatory: Boolean
 )
 
+data class MembershipOrderInfo(
+    val id: String,
+    val provider: String,
+    val amountMinor: Long,
+    val status: String,
+    val providerOrderId: String?,
+    val createdAt: Long
+)
+
 class SupabaseClient {
     private val baseUrl = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
     private val anonKey = BuildConfig.SUPABASE_ANON_KEY.trim()
@@ -142,6 +151,32 @@ class SupabaseClient {
             accessToken = accessToken,
             prefer = "return=minimal"
         )
+    }
+
+    suspend fun createMembershipOrder(
+        accessToken: String,
+        userId: String,
+        provider: String,
+        providerOrderId: String
+    ): MembershipOrderInfo {
+        val payload = JSONArray().put(
+            JSONObject()
+                .put("user_id", userId)
+                .put("provider", provider)
+                .put("amount_minor", 1)
+                .put("status", "pending")
+                .put("provider_order_id", providerOrderId)
+        )
+        val text = request(
+            method = "POST",
+            path = "/rest/v1/membership_orders",
+            body = payload,
+            accessToken = accessToken,
+            prefer = "return=representation"
+        )
+        val rows = if (text.isBlank()) JSONArray() else JSONArray(text)
+        check(rows.length() > 0) { "会员订单创建失败" }
+        return rows.getJSONObject(0).toMembershipOrderInfo()
     }
 
     suspend fun fetchOfficialMessages(accessToken: String? = null): List<JSONObject> {
@@ -301,6 +336,15 @@ private fun JSONObject.toAppVersionInfo() = AppVersionInfo(
     fileSizeBytes = getLong("file_size_bytes"),
     releaseNotes = optString("release_notes"),
     isMandatory = optBoolean("is_mandatory", false)
+)
+
+private fun JSONObject.toMembershipOrderInfo() = MembershipOrderInfo(
+    id = getString("id"),
+    provider = getString("provider"),
+    amountMinor = getLong("amount_minor"),
+    status = getString("status"),
+    providerOrderId = optString("provider_order_id").takeIf(String::isNotBlank),
+    createdAt = getLong("created_at")
 )
 
 private fun Any.toJson(): JSONObject = when (this) {

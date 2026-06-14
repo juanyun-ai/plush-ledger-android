@@ -489,6 +489,22 @@ class LedgerRepository(
         supabaseClient.submitFeedback(token, session.userId, session.email, trimmed)
     }
 
+    suspend fun createMembershipOrder(providerName: String, reference: String): String {
+        val session = sessionStore.currentSession() ?: error("请先登录云端账号")
+        if (session.accessToken == null) error("会员充值需要先使用邮箱或手机号登录云端账号")
+        val provider = when {
+            providerName.contains("微信") || providerName.equals("wechat", ignoreCase = true) -> "wechat"
+            providerName.contains("支付宝") || providerName.equals("alipay", ignoreCase = true) -> "alipay"
+            else -> error("请选择微信或支付宝")
+        }
+        val trimmed = reference.trim()
+        require(trimmed.length in 2..80) { "请填写交易单号后 6 位、付款备注或截图编号，方便核验" }
+        val order = withFreshAccessToken { token ->
+            supabaseClient.createMembershipOrder(token, session.userId, provider, trimmed)
+        }
+        return "会员付款核验已提交：${order.id.take(8)}"
+    }
+
     suspend fun deleteCloudAccount() {
         val session = sessionStore.currentSession() ?: return
         session.accessToken?.let { supabaseClient.deleteAccount(it) }

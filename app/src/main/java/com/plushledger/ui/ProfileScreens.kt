@@ -1251,11 +1251,13 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
 }
 
 @Composable
-private fun MembershipScreen(state: UiState, onBack: () -> Unit, onPay: (String) -> Unit) {
+private fun MembershipScreen(state: UiState, onBack: () -> Unit, onPay: (String, String) -> Unit) {
     val palette = LocalPlushPalette.current
     val profile = state.ledger.profile
     val hasRights = profile?.role == "admin" || profile?.membershipTier == "permanent"
     var showPayment by rememberSaveable { mutableStateOf(false) }
+    var selectedProvider by rememberSaveable { mutableStateOf("微信支付") }
+    var paymentReference by rememberSaveable { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { BackHeader("会员", onBack) }
         item {
@@ -1287,14 +1289,44 @@ private fun MembershipScreen(state: UiState, onBack: () -> Unit, onPay: (String)
     if (showPayment) {
         AlertDialog(
             onDismissRequest = { showPayment = false },
-            title = { Text("选择支付方式") },
+            title = { Text("会员充值 ¥0.01", fontWeight = FontWeight.Bold, color = palette.ink) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = { onPay("微信支付"); showPayment = false }, modifier = Modifier.fillMaxWidth()) { Text("微信支付  ¥0.01") }
-                    OutlinedButton(onClick = { onPay("支付宝"); showPayment = false }, modifier = Modifier.fillMaxWidth()) { Text("支付宝  ¥0.01") }
+                    Text(
+                        "当前采用人工核验：付款后填写交易单号后 6 位、付款备注或截图编号。管理员确认到账后升级为永久会员。",
+                        color = palette.muted,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SoftChip("微信支付", selectedProvider == "微信支付", palette.moss) { selectedProvider = "微信支付" }
+                        SoftChip("支付宝", selectedProvider == "支付宝", palette.blue) { selectedProvider = "支付宝" }
+                    }
+                    OutlinedTextField(
+                        paymentReference,
+                        { paymentReference = it.take(80) },
+                        label = { Text("交易单号/付款备注") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Text(
+                        "正式自动开通需要微信支付/支付宝商户号和支付回调；个人收款码不会被打包进公开 APK。",
+                        color = palette.muted,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
                 }
             },
-            confirmButton = {},
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onPay(selectedProvider, paymentReference)
+                        showPayment = false
+                        paymentReference = ""
+                    },
+                    enabled = !state.isBusy && paymentReference.trim().length >= 2
+                ) { Text("提交核验") }
+            },
             dismissButton = { TextButton(onClick = { showPayment = false }) { Text("取消") } }
         )
     }
