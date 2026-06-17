@@ -379,7 +379,7 @@ private fun MyRoot(
             title = { Text("导出数据", fontWeight = FontWeight.Bold, color = palette.ink) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("请选择保存位置。导出的 CSV 只包含本机当前可见账目。", color = palette.muted, fontSize = 13.sp)
+                    Text("请选择保存位置。导出的 CSV 会包含账目时间、分类、账户、金额、备注等完整字段。", color = palette.muted, fontSize = 13.sp)
                     ProfileWarmPanel(padding = 12.dp) {
                         Text("文件名", color = palette.muted, fontSize = 12.sp)
                         Text("rongrong-ledger-${LocalDate.now()}.csv", color = palette.ink, fontWeight = FontWeight.Bold)
@@ -1057,19 +1057,31 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
     val prefs = remember { context.getSharedPreferences("plush_user_settings", Context.MODE_PRIVATE) }
     val profile = state.ledger.profile
     var pin by rememberSaveable { mutableStateOf("") }
-    var exportPin by rememberSaveable { mutableStateOf("") }
     var showSignOut by rememberSaveable { mutableStateOf(false) }
     var showDelete by rememberSaveable { mutableStateOf(false) }
     var showReminder by rememberSaveable { mutableStateOf(false) }
     var showCurrency by rememberSaveable { mutableStateOf(false) }
     var showDownloadLine by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
+    var showExportDialog by rememberSaveable { mutableStateOf(false) }
     var showCache by rememberSaveable { mutableStateOf(false) }
     var showLicense by rememberSaveable { mutableStateOf(false) }
     var reminderEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("ledger_reminder", true)) }
     var currency by rememberSaveable { mutableStateOf(prefs.getString("currency_unit", "人民币  ¥") ?: "人民币  ¥") }
     var downloadLine by rememberSaveable { mutableStateOf(prefs.getString("download_line", "国内优先") ?: "国内优先") }
     var deleteSeconds by remember { mutableIntStateOf(15) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(buildCsv(state.ledger)) }
+                    ?: error("无法打开导出位置")
+            }.onSuccess {
+                Toast.makeText(context, "导出成功", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "导出失败：${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     LaunchedEffect(showDelete) {
         if (!showDelete) return@LaunchedEffect
@@ -1116,10 +1128,7 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
         item {
             PlushCard {
                 ProfileSectionTitle("数据与安全")
-                ActionRow(Icons.Default.Download, "数据导出", "输入 PIN 后导出 CSV", palette.moss) { viewModel.exportCsv(exportPin) }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(exportPin, { exportPin = it.filter(Char::isDigit).take(12) }, label = { Text("导出 PIN") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                state.exportPath?.let { Text(it, color = palette.muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                ActionRow(Icons.Default.Download, "数据导出", "确认后选择本机保存位置", palette.moss) { showExportDialog = true }
                 Spacer(Modifier.height(10.dp))
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 ToggleRow(Icons.Default.Security, "隐私防截图", state.secureScreen, viewModel::setSecureScreen)
@@ -1205,6 +1214,33 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
             viewModel.deleteAccountPermanently()
             showDelete = false
         }
+    }
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = { Text("确认导出数据", fontWeight = FontWeight.Bold, color = palette.ink) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "导出文件将包含账目时间、分类、账户、金额、备注等完整字段。请选择你信任的本机位置保存。",
+                        color = palette.muted,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
+                    )
+                    ProfileWarmPanel(padding = 12.dp) {
+                        Text("文件名", color = palette.muted, fontSize = 12.sp)
+                        Text("rongrong-ledger-${LocalDate.now()}.csv", color = palette.ink, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text("取消") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExportDialog = false
+                    exportLauncher.launch("rongrong-ledger-${LocalDate.now()}.csv")
+                }) { Text("确认导出") }
+            }
+        )
     }
     if (showTheme) {
         ThemeChoiceDialog(
@@ -1631,14 +1667,36 @@ private fun ProfileWarmPanel(
 private fun buildCsv(ledger: LedgerState): String {
     val categories = ledger.categories.associateBy { it.id }
     val accounts = ledger.accounts.associateBy { it.id }
+    val localFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
     return buildString {
-        appendLine("date,type,category,account,amount_minor,note")
+        appendLine("\ufeffid,date,time,datetime,occurred_at,created_at,updated_at,type,type_label,category,category_kind,category_icon,category_color,account,account_kind,to_account,amount_minor,amount_cny,currency,note")
         ledger.transactions.sortedByDescending { it.occurredAt }.forEach { record ->
-            val date = Instant.ofEpochMilli(record.occurredAt).atZone(ZoneId.systemDefault()).toLocalDate()
-            val category = categories[record.categoryId]?.name.orEmpty().csvCell()
-            val account = accounts[record.accountId]?.name.orEmpty().csvCell()
+            val occurred = Instant.ofEpochMilli(record.occurredAt).atZone(ZoneId.systemDefault())
+            val categoryEntity = categories[record.categoryId]
+            val accountEntity = accounts[record.accountId]
+            val toAccountEntity = accounts[record.toAccountId]
+            val id = record.id.csvCell()
+            val date = occurred.toLocalDate().toString()
+            val time = occurred.toLocalTime().format(timeFormatter)
+            val datetime = occurred.format(localFormatter).csvCell()
+            val type = record.type.csvCell()
+            val typeLabel = when (record.type) {
+                "income" -> "收入"
+                "transfer" -> "转账"
+                else -> "支出"
+            }.csvCell()
+            val category = categoryEntity?.name.orEmpty().csvCell()
+            val categoryKind = categoryEntity?.kind.orEmpty().csvCell()
+            val categoryIcon = categoryEntity?.icon.orEmpty().csvCell()
+            val categoryColor = categoryEntity?.colorHex.orEmpty().csvCell()
+            val account = accountEntity?.name.orEmpty().csvCell()
+            val accountKind = accountEntity?.kind.orEmpty().csvCell()
+            val toAccount = toAccountEntity?.name.orEmpty().csvCell()
+            val amountCny = "%.2f".format(java.util.Locale.US, record.amountMinor / 100.0)
+            val currency = record.currency.csvCell()
             val note = record.note.csvCell()
-            appendLine("$date,${record.type},$category,$account,${record.amountMinor},$note")
+            appendLine("$id,$date,$time,$datetime,${record.occurredAt},${record.createdAt},${record.updatedAt},$type,$typeLabel,$category,$categoryKind,$categoryIcon,$categoryColor,$account,$accountKind,$toAccount,${record.amountMinor},$amountCny,$currency,$note")
         }
     }
 }

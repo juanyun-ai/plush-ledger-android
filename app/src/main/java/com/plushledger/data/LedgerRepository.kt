@@ -9,6 +9,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -434,12 +436,48 @@ class LedgerRepository(
         val dir = File(context.getExternalFilesDir(null), "exports").apply { mkdirs() }
         val file = File(dir, "plush-ledger-${LocalDate.now()}.csv")
         val records = dao.transactionsSnapshot(userId)
+        val categories = dao.categoriesSnapshot(userId).associateBy { it.id }
+        val accounts = dao.accountsSnapshot(userId).associateBy { it.id }
+        val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
         file.writeText(
             buildString {
-                appendLine("id,type,amount_cny,note,occurred_at")
+                appendLine("\ufeffid,date,time,datetime,occurred_at,created_at,updated_at,type,type_label,category,category_kind,category_icon,category_color,account,account_kind,to_account,amount_minor,amount_cny,currency,note")
                 records.forEach {
-                    val amount = Money.formatCny(it.amountMinor).replace(",", "")
-                    appendLine("${it.id},${it.type},$amount,\"${it.note.replace("\"", "\"\"")}\",${it.occurredAt}")
+                    val occurred = Instant.ofEpochMilli(it.occurredAt).atZone(ZoneId.systemDefault())
+                    val category = it.categoryId?.let(categories::get)
+                    val account = accounts[it.accountId]
+                    val toAccount = accounts[it.toAccountId]
+                    val amount = "%.2f".format(Locale.US, it.amountMinor / 100.0)
+                    val typeLabel = when (it.type) {
+                        "income" -> "收入"
+                        "transfer" -> "转账"
+                        else -> "支出"
+                    }
+                    appendLine(
+                        listOf(
+                            it.id,
+                            occurred.toLocalDate().toString(),
+                            occurred.toLocalTime().format(timeFormatter),
+                            occurred.format(dateTimeFormatter),
+                            it.occurredAt.toString(),
+                            it.createdAt.toString(),
+                            it.updatedAt.toString(),
+                            it.type,
+                            typeLabel,
+                            category?.name.orEmpty(),
+                            category?.kind.orEmpty(),
+                            category?.icon.orEmpty(),
+                            category?.colorHex.orEmpty(),
+                            account?.name.orEmpty(),
+                            account?.kind.orEmpty(),
+                            toAccount?.name.orEmpty(),
+                            it.amountMinor.toString(),
+                            amount,
+                            it.currency,
+                            it.note
+                        ).joinToString(",") { value -> csvCell(value) }
+                    )
                 }
             }
         )
@@ -748,3 +786,4 @@ private fun JSONObject.toBudget() = BudgetEntity(
 private fun JSONObject.nullableString(name: String): String? = if (isNull(name)) null else optString(name)
 private fun JSONObject.nullableInt(name: String): Int? = if (isNull(name)) null else optInt(name)
 private fun JSONObject.nullableLong(name: String): Long? = if (isNull(name)) null else optLong(name)
+private fun csvCell(value: String): String = "\"${value.replace("\"", "\"\"")}\""
