@@ -125,7 +125,7 @@ fun InboxScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { SectionTitle("官方消息", Icons.Default.Notifications) }
-        items(messages.take(5), key = { it.id }) { message ->
+        items(messages, key = { it.id }) { message ->
             val expanded = message.id in expandedIds
             PlushCard(
                 Modifier

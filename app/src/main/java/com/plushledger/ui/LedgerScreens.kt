@@ -534,6 +534,7 @@ fun RecordScreen(
     state: UiState,
     onBack: () -> Unit,
     onAdd: (String, String, String?, String?, String?, String, LocalDate) -> Unit,
+    onDefaultAccount: (String) -> Unit,
     onBudget: (String, String?) -> Unit,
     onAddAccount: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
@@ -548,7 +549,7 @@ fun RecordScreen(
     var note by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
-    var accountId by rememberSaveable { mutableStateOf<String?>(null) }
+    var accountId by rememberSaveable(state.defaultAccountId) { mutableStateOf(state.defaultAccountId) }
     var toAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var date by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var showDate by rememberSaveable { mutableStateOf(false) }
@@ -701,10 +702,18 @@ fun RecordScreen(
                     PlushCalendar(date, YearMonth.from(date), onSelect = { date = it; showDate = false })
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                RecordInfoRow(Icons.Default.AccountBalanceWallet, "账户", ledger.accounts.firstOrNull { it.id == accountId }?.name ?: "默认账户（现金）") { showAccounts = !showAccounts }
+                val defaultAccount = ledger.accounts.firstOrNull { it.id == accountId }
+                    ?: ledger.accounts.firstOrNull { it.id == state.defaultAccountId }
+                    ?: ledger.accounts.firstOrNull { it.name == "现金" }
+                RecordInfoRow(Icons.Default.AccountBalanceWallet, "账户", defaultAccount?.name ?: "默认账户（现金）") { showAccounts = !showAccounts }
                 if (showAccounts) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ledger.accounts.forEach { SoftChip(it.name, accountId == it.id, palette.blue) { accountId = it.id } }
+                        ledger.accounts.forEach {
+                            SoftChip(it.name, accountId == it.id, palette.blue) {
+                                accountId = it.id
+                                onDefaultAccount(it.id)
+                            }
+                        }
                     }
                 }
                 if (type == "transfer") {
@@ -1394,7 +1403,7 @@ private fun MonthWeekTrendChart(spend: List<WeekSpend>) {
         }
         Row(
             Modifier.fillMaxSize().padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.Bottom
         ) {
             spend.forEachIndexed { index, week ->
@@ -1410,7 +1419,15 @@ private fun MonthWeekTrendChart(spend: List<WeekSpend>) {
                             .background(Brush.verticalGradient(listOf(statsColor(index).copy(alpha = 0.58f), statsColor(index))))
                     )
                     Spacer(Modifier.height(6.dp))
-                    Text(week.label, color = palette.muted, fontSize = 9.sp, maxLines = 1)
+                    Text(
+                        week.label,
+                        modifier = Modifier.fillMaxWidth(),
+                        color = palette.muted,
+                        fontSize = 7.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
             }
         }

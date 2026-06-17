@@ -38,6 +38,14 @@ class LedgerRepository(
                     updatedAt = now
                 )
             )
+        } else if ((existingProfile.avatarKey.isBlank() || existingProfile.avatarKey == "sunny") && cachedAvatarFile(userId).exists()) {
+            dao.upsertProfile(
+                existingProfile.copy(
+                    avatarKey = "file:${cachedAvatarFile(userId).absolutePath}",
+                    updatedAt = now,
+                    syncState = SYNC_DIRTY
+                )
+            )
         }
 
         val book = dao.getDefaultBook(userId)
@@ -61,6 +69,7 @@ class LedgerRepository(
         if (dao.categoryCount(userId) == 0) {
             dao.upsertCategories(defaultCategories(userId, bookId, now))
         }
+        migrateDefaultCategories(userId, bookId, now)
     }
 
     fun observeState(userId: String, month: YearMonth): Flow<LedgerState> {
@@ -84,7 +93,16 @@ class LedgerRepository(
                     else -> 0
                 }
             }
-            val categoriesById = categories.associateBy { it.id }
+            val usageByCategory = transactions
+                .mapNotNull { it.categoryId }
+                .groupingBy { it }
+                .eachCount()
+            val orderedCategories = categories.sortedWith(
+                compareBy<CategoryEntity> { if (it.kind == "expense") 0 else 1 }
+                    .thenByDescending { usageByCategory[it.id] ?: 0 }
+                    .thenBy { it.sortOrder }
+            )
+            val categoriesById = orderedCategories.associateBy { it.id }
             val categorySpend = monthTransactions
                 .filter { it.type == "expense" && it.categoryId != null }
                 .groupBy { it.categoryId }
@@ -97,7 +115,7 @@ class LedgerRepository(
             LedgerState(
                 books = books,
                 accounts = accounts,
-                categories = categories,
+                categories = orderedCategories,
                 transactions = transactions,
                 budgets = budgets,
                 summary = LedgerSummary(
@@ -189,11 +207,11 @@ class LedgerRepository(
     }
 
     suspend fun resolveAvatarUrl(avatarKey: String?): String? {
-        if (avatarKey.isNullOrBlank() || avatarKey == "sunny") return null
         sessionStore.currentSession()?.userId?.let { userId ->
-            val cached = File(File(context.filesDir, "avatars"), "$userId.jpg")
+            val cached = cachedAvatarFile(userId)
             if (cached.exists()) return "file://${cached.absolutePath}"
         }
+        if (avatarKey.isNullOrBlank() || avatarKey == "sunny") return null
         if (avatarKey.startsWith("file:")) return "file://${avatarKey.removePrefix("file:")}"
         if (sessionStore.currentSession()?.accessToken == null) return null
         return runCatching {
@@ -556,6 +574,7 @@ class LedgerRepository(
     }
 
     private fun defaultAccounts(userId: String, bookId: String, now: Long) = listOf(
+        AccountEntity(newId(), userId, bookId, "现金", "cash", "#F9A35E", createdAt = now, updatedAt = now),
         AccountEntity(newId(), userId, bookId, "银行卡", "bank", "#6E8DBF", createdAt = now, updatedAt = now),
         AccountEntity(newId(), userId, bookId, "微信", "wechat", "#5E9B83", createdAt = now, updatedAt = now),
         AccountEntity(newId(), userId, bookId, "支付宝", "alipay", "#5C8ED6", createdAt = now, updatedAt = now)
@@ -571,8 +590,23 @@ class LedgerRepository(
         if (missing.isNotEmpty()) dao.upsertAccounts(missing)
     }
 
+    private suspend fun migrateDefaultCategories(userId: String, bookId: String, now: Long) {
+        val existing = dao.categoriesSnapshot(userId)
+        val defaults = defaultCategories(userId, bookId, now)
+        val existingByNameKind = existing.associateBy { it.kind to it.name }
+        val missing = defaults.filter { (it.kind to it.name) !in existingByNameKind }
+        val reordered = defaults.mapNotNull { default ->
+            existingByNameKind[default.kind to default.name]?.takeIf { it.sortOrder != default.sortOrder }?.copy(
+                sortOrder = default.sortOrder,
+                updatedAt = now,
+                syncState = SYNC_DIRTY
+            )
+        }
+        if (missing.isNotEmpty() || reordered.isNotEmpty()) dao.upsertCategories(reordered + missing)
+    }
+
     private fun defaultCategories(userId: String, bookId: String, now: Long): List<CategoryEntity> {
-        val expense = listOf("餐饮", "交通", "购物", "住房", "娱乐", "医疗", "学习", "人情")
+        val expense = listOf("餐饮", "奶茶", "日常消费", "娱乐", "交通", "购物", "住房", "医疗", "学习", "人情", "其他")
         val income = listOf("工资", "兼职", "理财", "礼金")
         return expense.mapIndexed { index, name ->
             CategoryEntity(newId(), userId, bookId, name, "expense", expenseColors[index % expenseColors.size], "tag", index, now, now)
@@ -583,6 +617,7 @@ class LedgerRepository(
 
     private fun now() = System.currentTimeMillis()
     private fun newId() = UUID.randomUUID().toString()
+    private fun cachedAvatarFile(userId: String) = File(File(context.filesDir, "avatars"), "$userId.jpg")
 
     private fun builtInMessages() = listOf(
         OfficialMessage(

@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.8.7-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.8.8-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -77,6 +77,15 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载器会优先使用 Supabase Storage，失败后自动重试并切换 GitHub Release 备用源；下载后必须通过 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.8.8
+
+- 修复升级后本地头像偶发丢失的问题，优先从本机缓存恢复头像。
+- 修复周支出趋势底部日期区间在窄屏卡片中被裁切的问题。
+- 默认账户改为可由用户选择并长期记住，默认补回现金账户。
+- 新增奶茶、日常消费、其他等常用支出分类，并按使用频率与常用顺序展示。
+- 官方消息恢复完整历史记录，可继续向下滚动查看旧版本通知。
+- 微信、QQ 绑定入口改为真实接入前置提示，密钥只允许放在后端，不写入 App 或仓库。
 
 ### v0.8.7
 

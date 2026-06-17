@@ -706,6 +706,7 @@ private fun LedgerShell(
                     state = state,
                     onBack = { viewModel.navigateBack() },
                     onAdd = viewModel::addTransaction,
+                    onDefaultAccount = viewModel::setDefaultAccount,
                     onBudget = viewModel::setBudget,
                     onAddAccount = viewModel::addAccount,
                     onDeleteAccount = viewModel::deleteAccount,

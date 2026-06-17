@@ -118,6 +118,12 @@ class SessionStore(private val secureStore: SecureStore) {
         secureStore.putString("theme_tone", tone)
     }
 
+    fun defaultAccountId(userId: String): String? = secureStore.getString("default_account_$userId")
+
+    fun setDefaultAccountId(userId: String, accountId: String) {
+        secureStore.putString("default_account_$userId", accountId)
+    }
+
     private fun localCredentialKey(username: String): String =
         PinHasher.stableLocalUserId("credential:${username.trim().lowercase()}")
 }

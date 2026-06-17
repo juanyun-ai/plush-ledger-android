@@ -49,6 +49,7 @@ data class UiState(
     val biometricUnlock: Boolean = false,
     val darkMode: Boolean = false,
     val themeTone: String = "warm",
+    val defaultAccountId: String? = null,
     val exportPath: String? = null,
     val isBusy: Boolean = false
 )
@@ -78,7 +79,8 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             lockOnLaunch = lockOnLaunch,
             biometricUnlock = sessions.isBiometricUnlockEnabled(),
             darkMode = sessions.isDarkModeEnabled(),
-            themeTone = sessions.themeTone()
+            themeTone = sessions.themeTone(),
+            defaultAccountId = session?.let { sessions.defaultAccountId(it.userId) }
         )
         session?.let {
             viewModelScope.launch {
@@ -249,7 +251,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             provider.contains("QQ", ignoreCase = true) -> "QQ"
             else -> provider
         }
-        state.value = state.value.copy(message = "$name 绑定需要腾讯开放平台 AppID、移动应用审核和回调地址；未配置前不会写入假的绑定状态")
+        state.value = state.value.copy(message = "$name 绑定已准备接入；密钥只能放后端。Android 原生绑定还需要腾讯开放平台移动应用 AppID、包名签名和回调配置，未完成前不会写入假的绑定状态")
     }
 
     fun unlockWithPin(pin: String) {
@@ -312,7 +314,10 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             state.value = state.value.copy(message = "金额需要大于 0")
             return
         }
-        val account = accountId ?: state.value.ledger.accounts.firstOrNull()?.id
+        val account = accountId
+            ?: state.value.defaultAccountId?.takeIf { id -> state.value.ledger.accounts.any { it.id == id } }
+            ?: state.value.ledger.accounts.firstOrNull { it.name == "现金" }?.id
+            ?: state.value.ledger.accounts.firstOrNull()?.id
         if (account == null) {
             state.value = state.value.copy(message = "请先添加账户")
             return
@@ -356,8 +361,17 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             ledger.deleteAccount(userId, id)
             app.enqueueImmediateSync()
-            state.value = state.value.copy(message = "账户已删除")
+            val nextDefault = state.value.defaultAccountId?.takeIf { it != id }
+            state.value = state.value.copy(defaultAccountId = nextDefault, message = "账户已删除")
         }
+    }
+
+    fun setDefaultAccount(accountId: String) {
+        val session = state.value.session ?: return
+        if (state.value.ledger.accounts.none { it.id == accountId }) return
+        sessions.setDefaultAccountId(session.userId, accountId)
+        val name = state.value.ledger.accounts.firstOrNull { it.id == accountId }?.name ?: "账户"
+        state.value = state.value.copy(defaultAccountId = accountId, message = "已设为默认账户：$name")
     }
 
     fun addCategory(name: String, kind: String) {
@@ -660,7 +674,8 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             passwordSetupSession = null,
             isBusy = false,
             message = syncWarning ?: message,
-            selectedTab = AppTab.HOME
+            selectedTab = AppTab.HOME,
+            defaultAccountId = sessions.defaultAccountId(session.userId)
         )
         tabHistory.clear()
         observeLedger(session.userId)
@@ -670,9 +685,17 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         ledgerJob?.cancel()
         ledgerJob = viewModelScope.launch {
             ledger.observeState(userId, state.value.selectedMonth).collectLatest {
-                state.value = state.value.copy(ledger = it)
+                val activeAccountIds = it.accounts.map { account -> account.id }.toSet()
+                val preferred = state.value.defaultAccountId?.takeIf { id -> id in activeAccountIds }
+                    ?: sessions.defaultAccountId(userId)?.takeIf { id -> id in activeAccountIds }
+                    ?: it.accounts.firstOrNull { account -> account.name == "现金" }?.id
+                    ?: it.accounts.firstOrNull()?.id
+                if (preferred != null && preferred != state.value.defaultAccountId) {
+                    sessions.setDefaultAccountId(userId, preferred)
+                }
+                state.value = state.value.copy(ledger = it, defaultAccountId = preferred)
                 val avatarKey = it.profile?.avatarKey
-                if (avatarKey != lastAvatarKey) {
+                if (avatarKey != lastAvatarKey || state.value.avatarUrl.isNullOrBlank()) {
                     lastAvatarKey = avatarKey
                     state.value = state.value.copy(avatarUrl = ledger.resolveAvatarUrl(avatarKey))
                 }
