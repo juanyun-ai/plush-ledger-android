@@ -47,6 +47,16 @@ data class MembershipOrderInfo(
     val createdAt: Long
 )
 
+data class RemoteAiLedgerParse(
+    val type: String,
+    val amountMinor: Long,
+    val categoryName: String?,
+    val parentCategoryName: String?,
+    val accountName: String?,
+    val note: String?,
+    val occurredAt: Long?
+)
+
 class SupabaseClient {
     private val baseUrl = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
     private val anonKey = BuildConfig.SUPABASE_ANON_KEY.trim()
@@ -135,6 +145,46 @@ class SupabaseClient {
             path = "/functions/v1/delete-account",
             body = JSONObject(),
             accessToken = accessToken
+        )
+    }
+
+    suspend fun parseAiLedger(
+        accessToken: String,
+        text: String,
+        categories: List<CategoryEntity>,
+        accounts: List<AccountEntity>
+    ): RemoteAiLedgerParse {
+        val byId = categories.associateBy { it.id }
+        val categoryPayload = JSONArray().apply {
+            categories.filter { it.kind == "expense" || it.kind == "income" }.forEach { category ->
+                put(
+                    JSONObject()
+                        .put("name", category.name)
+                        .put("type", category.kind)
+                        .put("parent", category.parentId?.let(byId::get)?.name)
+                )
+            }
+        }
+        val accountPayload = JSONArray().apply {
+            accounts.forEach { account -> put(account.name) }
+        }
+        val response = requestObject(
+            method = "POST",
+            path = "/functions/v1/ai-ledger-parse",
+            body = JSONObject()
+                .put("text", text.take(160))
+                .put("categories", categoryPayload)
+                .put("accounts", accountPayload),
+            accessToken = accessToken
+        )
+        return RemoteAiLedgerParse(
+            type = response.optString("type", "expense"),
+            amountMinor = response.optLong("amount_minor", 0),
+            categoryName = response.optString("category_name").takeIf(String::isNotBlank),
+            parentCategoryName = response.optString("category_parent").takeIf(String::isNotBlank),
+            accountName = response.optString("account_name").takeIf(String::isNotBlank),
+            note = response.optString("note").takeIf(String::isNotBlank),
+            occurredAt = response.optLong("occurred_at", 0).takeIf { it > 0 }
         )
     }
 
@@ -397,6 +447,7 @@ private fun Any.toJson(): JSONObject = when (this) {
         .put("created_at", createdAt)
         .put("updated_at", updatedAt)
         .put("deleted_at", deletedAt)
+        .put("parent_id", parentId)
     is TransactionEntity -> JSONObject()
         .put("id", id)
         .put("user_id", userId)

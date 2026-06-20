@@ -42,6 +42,7 @@ create table if not exists public.categories (
   color_hex text not null,
   icon text not null,
   sort_order integer not null default 0,
+  parent_id uuid,
   created_at bigint not null,
   updated_at bigint not null,
   deleted_at bigint
@@ -79,6 +80,7 @@ create table if not exists public.budgets (
 create index if not exists books_user_idx on public.books(user_id);
 create index if not exists accounts_user_book_idx on public.accounts(user_id, book_id);
 create index if not exists categories_user_book_idx on public.categories(user_id, book_id);
+create index if not exists categories_parent_idx on public.categories(user_id, book_id, parent_id, sort_order) where deleted_at is null;
 create index if not exists transactions_user_book_time_idx on public.transactions(user_id, book_id, occurred_at desc);
 create index if not exists budgets_user_month_idx on public.budgets(user_id, month);
 

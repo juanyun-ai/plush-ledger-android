@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.8.9-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.9.0-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -17,6 +17,9 @@
 ## 功能
 
 - 收入、支出、分类、账户、预算与搜索；旧版转账数据结构保留，普通记账入口先收起。
+- 支出分类采用一级主类加二级细分：餐饮、交通、购物、日常、娱乐、人情社交、宠物、学习工作、医疗健康、其他；CSV 同时导出主类、细分、分类路径和层级。
+- 首页提供 AI 智能记账：可输入或调用系统语音识别，例如“午饭 28 元，用微信”；离线规则可直接使用，云端模型仅用于增强识别且必须由用户确认后才会记账。
+- 支持选择用户主动从微信/支付宝导出的 CSV，在本机解析、预览并确认导入；不读取支付账号、密码或云端账单。
 - 参考图风格的四项底栏、独立记账页、日期分组账单和可交互日历。
 - 环形图与柱状图并列统计，每页使用独立且与场景匹配的短标语。
 - Room 本地优先存储，离线仍可正常记账。
@@ -35,6 +38,7 @@
 - PIN 只保存 salted hash；登录凭证由 Android Keystore 加密保护。
 - 不集成广告、第三方埋点或分析 SDK，不在日志中记录账目明细。
 - Supabase publishable key 可用于客户端，但严禁在 App 或仓库中加入 `service_role` 或 secret key。
+- AI 模型 Key 仅配置在 Supabase Edge Function Secrets；具体部署方式见 [AI 智能记账配置](docs/AI_智能记账配置.md)。
 
 ## 本地运行
 
@@ -74,9 +78,19 @@ app/build/outputs/apk/debug/app-debug.apk
 
 数据库结构和安全策略位于 `supabase/migrations/`。用户反馈可由项目所有者在自己的 Supabase Table Editor 中查看 `feedback` 表。
 
+在把二级分类发布给已登录用户前，需要先把 [category hierarchy migration](supabase/migrations/20260620034509_category_hierarchy.sql) 应用到 Supabase 项目。`ai-ledger-parse` Edge Function 也已随仓库提供，但只有配置好服务端模型 Secret 后才会被启用；未配置时应用会自动使用离线规则，不会中断记账。
+
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载器会优先使用 Supabase Storage，失败后自动重试并切换 GitHub Release 备用源；下载后必须通过 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.9.0
+
+1. 支出分类升级为一级主类与二级细分，覆盖餐饮、交通、购物、日常、娱乐、人情社交、宠物、学习工作、医疗健康和其他。
+2. 首页新增 AI 智能记账，支持文字与系统语音输入；离线规则可直接使用，登录后由 DeepSeek 增强自然语言识别，并在用户确认后才写入账本。
+3. 新增微信、支付宝导出 CSV 的本机智能导入，先预览再确认，自动跳过退款、转账和无效记录，不读取支付账号或密码。
+4. CSV 增加主类、父分类 ID、分类路径与层级字段，并同步适配小程序导入，保留完整日期、时间、账户和分类语义。
+5. 强化差异化体验：本地优先、跨平台账单汇总、细分消费洞察、云端同步与隐私保护在同一套账本中协同工作。
 
 ### v0.8.9
 

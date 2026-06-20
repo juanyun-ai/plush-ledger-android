@@ -65,7 +65,7 @@ data class AccountEntity(
 
 @Entity(
     tableName = "categories",
-    indices = [Index("user_id"), Index("book_id"), Index("kind")]
+    indices = [Index("user_id"), Index("book_id"), Index("kind"), Index("parent_id")]
 )
 data class CategoryEntity(
     @PrimaryKey val id: String,
@@ -79,7 +79,8 @@ data class CategoryEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     @ColumnInfo(name = "deleted_at") val deletedAt: Long? = null,
-    @ColumnInfo(name = "sync_state") val syncState: String = SYNC_DIRTY
+    @ColumnInfo(name = "sync_state") val syncState: String = SYNC_DIRTY,
+    @ColumnInfo(name = "parent_id") val parentId: String? = null
 )
 
 @Entity(

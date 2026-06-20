@@ -34,7 +34,7 @@ private fun PreviewFrame(content: @Composable () -> Unit) {
 @Preview(name = "首页", showBackground = true, widthDp = 393, heightDp = 852)
 @Composable
 private fun HomePreview() = PreviewFrame {
-    HomeScreen(previewLedger, previewDate, {}, {}, {}, {}, {})
+    HomeScreen(previewLedger, previewDate, {}, {}, {}, {}, {}, null, false, {}, {}, {})
 }
 
 @Preview(name = "账单", showBackground = true, widthDp = 393, heightDp = 852)

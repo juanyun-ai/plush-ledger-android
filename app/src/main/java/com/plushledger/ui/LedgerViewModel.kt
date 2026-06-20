@@ -11,6 +11,9 @@ import com.plushledger.PlushLedgerApplication
 import com.plushledger.auth.AuthChannel
 import com.plushledger.auth.AuthOutcome
 import com.plushledger.auth.UserSession
+import com.plushledger.data.AiLedgerAnalysis
+import com.plushledger.data.ExternalBillCsvParser
+import com.plushledger.data.ExternalBillPreview
 import com.plushledger.data.LedgerState
 import com.plushledger.data.Money
 import com.plushledger.data.OfficialMessage
@@ -19,10 +22,12 @@ import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class AppTab { HOME, BILLS, RECORD, STATS, MY }
 enum class AuthPage { LOGIN, REGISTER, RESET }
@@ -51,6 +56,9 @@ data class UiState(
     val themeTone: String = "warm",
     val defaultAccountId: String? = null,
     val exportPath: String? = null,
+    val aiSuggestion: AiLedgerAnalysis? = null,
+    val isAiAnalyzing: Boolean = false,
+    val billImportPreview: ExternalBillPreview? = null,
     val isBusy: Boolean = false
 )
 
@@ -306,12 +314,16 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         accountId: String?,
         toAccountId: String?,
         note: String,
-        occurredDate: LocalDate
+        occurredDateTime: java.time.LocalDateTime
     ) {
         val session = state.value.session ?: return
         val amount = Money.parseToMinor(amountText)
         if (amount == null) {
             state.value = state.value.copy(message = "金额需要大于 0")
+            return
+        }
+        if (type != "transfer" && categoryId == null) {
+            state.value = state.value.copy(message = "请选择具体分类")
             return
         }
         val account = accountId
@@ -331,11 +343,115 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                 accountId = account,
                 toAccountId = toAccountId,
                 note = note,
-                occurredAt = occurredDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                occurredAt = occurredDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             )
             app.enqueueImmediateSync()
             state.value = state.value.copy(message = "记账成功")
         }
+    }
+
+    fun analyzeAiEntry(text: String) {
+        val trimmed = text.trim().take(160)
+        if (trimmed.isBlank()) {
+            state.value = state.value.copy(message = "先输入或说出一笔账目")
+            return
+        }
+        if (state.value.isAiAnalyzing) return
+        val currentLedger = state.value.ledger
+        viewModelScope.launch {
+            state.value = state.value.copy(isAiAnalyzing = true, aiSuggestion = null, message = null)
+            runCatching { ledger.analyzeAiEntry(trimmed, currentLedger) }
+                .onSuccess { suggestion ->
+                    state.value = if (suggestion == null) {
+                        state.value.copy(isAiAnalyzing = false, message = "没有听清金额，请试试“午饭 28 元，用微信”")
+                    } else {
+                        state.value.copy(isAiAnalyzing = false, aiSuggestion = suggestion)
+                    }
+                }
+                .onFailure { error ->
+                    state.value = state.value.copy(
+                        isAiAnalyzing = false,
+                        message = "智能识别暂时不可用：${error.message.orEmpty().take(60)}"
+                    )
+                }
+        }
+    }
+
+    fun saveAiSuggestion(suggestion: AiLedgerAnalysis) {
+        val session = state.value.session ?: return
+        val categoryId = suggestion.categoryId
+        if (categoryId == null) {
+            state.value = state.value.copy(message = "请在记一笔中补充具体分类")
+            return
+        }
+        val accountId = suggestion.accountId
+            ?: state.value.defaultAccountId?.takeIf { id -> state.value.ledger.accounts.any { it.id == id } }
+            ?: state.value.ledger.accounts.firstOrNull { it.name == "现金" }?.id
+            ?: state.value.ledger.accounts.firstOrNull()?.id
+        if (accountId == null) {
+            state.value = state.value.copy(message = "请先添加账户")
+            return
+        }
+        viewModelScope.launch {
+            ledger.addTransaction(
+                userId = session.userId,
+                type = suggestion.type,
+                amountMinor = suggestion.amountMinor,
+                categoryId = categoryId,
+                accountId = accountId,
+                toAccountId = null,
+                note = suggestion.note,
+                occurredAt = suggestion.occurredAt
+            )
+            app.enqueueImmediateSync()
+            state.value = state.value.copy(aiSuggestion = null, message = "智能记账已保存")
+        }
+    }
+
+    fun clearAiSuggestion() {
+        state.value = state.value.copy(aiSuggestion = null)
+    }
+
+    fun previewExternalBill(uri: Uri, provider: String) {
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true, message = null)
+            runCatching {
+                val raw = withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
+                        reader.readText()
+                    } ?: error("无法读取账单文件")
+                }
+                ExternalBillCsvParser.parse(provider, raw)
+            }.onSuccess { preview ->
+                state.value = state.value.copy(isBusy = false, billImportPreview = preview)
+            }.onFailure { error ->
+                state.value = state.value.copy(isBusy = false, message = "账单导入失败：${error.message.orEmpty().take(80)}")
+            }
+        }
+    }
+
+    fun confirmExternalBillImport() {
+        val session = state.value.session ?: return
+        val preview = state.value.billImportPreview ?: return
+        viewModelScope.launch {
+            state.value = state.value.copy(isBusy = true)
+            runCatching { ledger.importExternalBills(session.userId, preview) }
+                .onSuccess { result ->
+                    app.enqueueImmediateSync()
+                    state.value = state.value.copy(
+                        isBusy = false,
+                        billImportPreview = null,
+                        message = "已导入 ${result.imported} 笔账单${if (result.skipped > 0) "，跳过 ${result.skipped} 笔" else ""}"
+                    )
+                }
+                .onFailure { error ->
+                    state.value = state.value.copy(isBusy = false, message = "账单导入失败：${error.message.orEmpty().take(80)}")
+                }
+        }
+    }
+
+    fun dismissExternalBillImport() {
+        state.value = state.value.copy(billImportPreview = null)
     }
 
     fun deleteTransaction(id: String) {

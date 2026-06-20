@@ -66,7 +66,11 @@ class AppContainer(application: Application) {
         application,
         AppDatabase::class.java,
         "plush-ledger.db"
-    ).addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3).build()
+    ).addMigrations(
+        AppDatabase.MIGRATION_1_2,
+        AppDatabase.MIGRATION_2_3,
+        AppDatabase.MIGRATION_3_4
+    ).build()
 
     val secureStore = SecureStore(application)
     val sessionStore = SessionStore(secureStore)

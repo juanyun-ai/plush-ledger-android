@@ -1,6 +1,13 @@
 package com.plushledger.ui
 
+import android.app.Activity
+import android.app.TimePickerDialog
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -34,6 +41,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -46,6 +54,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.DirectionsBus
@@ -55,6 +64,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Redeem
@@ -78,6 +88,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -91,7 +102,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.plushledger.data.AccountEntity
+import com.plushledger.data.AiLedgerAnalysis
 import com.plushledger.R
 import com.plushledger.data.CategoryEntity
 import com.plushledger.data.CategorySpend
@@ -100,6 +113,8 @@ import com.plushledger.data.Money
 import com.plushledger.data.TransactionEntity
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -113,10 +128,62 @@ fun HomeScreen(
     onDate: (LocalDate) -> Unit,
     onDelete: (String) -> Unit,
     onRecord: () -> Unit,
-    onBills: () -> Unit
+    onBills: () -> Unit,
+    aiSuggestion: AiLedgerAnalysis?,
+    isAiAnalyzing: Boolean,
+    onAnalyzeAi: (String) -> Unit,
+    onSaveAi: (AiLedgerAnalysis) -> Unit,
+    onDismissAi: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
+    val context = LocalContext.current
     var showCalendar by rememberSaveable { mutableStateOf(false) }
+    var showAiDialog by rememberSaveable { mutableStateOf(false) }
+    var aiText by rememberSaveable { mutableStateOf("") }
+    var voiceHint by rememberSaveable { mutableStateOf<String?>(null) }
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val recognized = if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        } else {
+            null
+        }
+        if (recognized.isNullOrBlank()) {
+            voiceHint = "没有识别到语音，可以直接输入。"
+        } else {
+            aiText = recognized.take(160)
+            voiceHint = null
+            showAiDialog = true
+        }
+    }
+    val requestAudioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) {
+            voiceHint = "未获得麦克风权限，仍可直接输入。"
+        } else {
+            runCatching {
+                voiceLauncher.launch(
+                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                        .putExtra(RecognizerIntent.EXTRA_PROMPT, "例如：午饭 28 元，用微信")
+                )
+            }.onFailure { voiceHint = "当前设备没有可用的语音识别服务。" }
+        }
+    }
+    val startVoiceRecognition: () -> Unit = {
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            runCatching {
+                voiceLauncher.launch(
+                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                        .putExtra(RecognizerIntent.EXTRA_PROMPT, "例如：午饭 28 元，用微信")
+                )
+            }.onFailure { voiceHint = "当前设备没有可用的语音识别服务。" }
+        } else {
+            requestAudioPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+        Unit
+    }
     val month = YearMonth.from(selectedDate)
     val todayExpense = ledger.transactions.filter { it.type == "expense" && it.localDate() == selectedDate }.sumOf { it.amountMinor }
     val yesterdayExpense = ledger.transactions.filter { it.type == "expense" && it.localDate() == selectedDate.minusDays(1) }.sumOf { it.amountMinor }
@@ -214,7 +281,16 @@ fun HomeScreen(
             }
         }
         item {
-            PlushButton("记一笔", Icons.Default.EditNote, Modifier.fillMaxWidth(), onClick = onRecord)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PlushButton("记一笔", Icons.Default.EditNote, Modifier.weight(1f), onClick = onRecord)
+                PlushButton(
+                    "AI 记账",
+                    Icons.Default.AutoAwesome,
+                    Modifier.weight(1f),
+                    color = palette.moss,
+                    onClick = { showAiDialog = true }
+                )
+            }
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -233,6 +309,77 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    if (showAiDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isAiAnalyzing) showAiDialog = false },
+            title = { Text("AI 智能记账", fontWeight = FontWeight.Black) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("说一句或输入一笔账，例如“午饭 28 元，用微信”。", color = palette.muted, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = aiText,
+                        onValueChange = { aiText = it.take(160); voiceHint = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        placeholder = { Text("输入账目内容") },
+                        trailingIcon = {
+                            IconButton(onClick = startVoiceRecognition) {
+                                Icon(Icons.Default.Mic, contentDescription = "语音输入", tint = palette.moss)
+                            }
+                        }
+                    )
+                    voiceHint?.let { Text(it, color = palette.rose, fontSize = 12.sp) }
+                    if (isAiAnalyzing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = palette.moss)
+                    Text("识别结果会先由你确认，未确认不会写入账本。", color = palette.muted, fontSize = 12.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAiDialog = false }, enabled = !isAiAnalyzing) { Text("取消") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onAnalyzeAi(aiText)
+                        showAiDialog = false
+                    },
+                    enabled = aiText.isNotBlank() && !isAiAnalyzing
+                ) { Text("开始识别", color = palette.moss) }
+            },
+            containerColor = palette.surface
+        )
+    }
+
+    aiSuggestion?.let { suggestion ->
+        AlertDialog(
+            onDismissRequest = onDismissAi,
+            title = { Text("确认这笔账", fontWeight = FontWeight.Black) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text(suggestion.sourceText, color = palette.muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    AiResultRow("类型", if (suggestion.type == "income") "收入" else "支出")
+                    AiResultRow("金额", Money.formatCny(suggestion.amountMinor))
+                    AiResultRow("分类", suggestion.categoryLabel)
+                    AiResultRow("账户", suggestion.accountLabel)
+                    if (suggestion.note != suggestion.sourceText) AiResultRow("备注", suggestion.note)
+                    suggestion.notice?.let { Text(it, color = palette.muted, fontSize = 11.sp) }
+                    Text(if (suggestion.cloudAssisted) "已由已配置的 AI 服务辅助识别。" else "本次使用离线规则识别，不会上传文字。", color = palette.muted, fontSize = 11.sp)
+                }
+            },
+            dismissButton = { TextButton(onClick = onDismissAi) { Text("取消") } },
+            confirmButton = { TextButton(onClick = { onSaveAi(suggestion) }) { Text("确认记账", color = palette.moss) } },
+            containerColor = palette.surface
+        )
+    }
+}
+
+@Composable
+private fun AiResultRow(label: String, value: String) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = palette.muted, fontSize = 12.sp, modifier = Modifier.width(42.dp))
+        Text(value, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -533,7 +680,7 @@ private fun BudgetNumber(label: String, value: Long, color: Color, modifier: Mod
 fun RecordScreen(
     state: UiState,
     onBack: () -> Unit,
-    onAdd: (String, String, String?, String?, String?, String, LocalDate) -> Unit,
+    onAdd: (String, String, String?, String?, String?, String, LocalDateTime) -> Unit,
     onDefaultAccount: (String) -> Unit,
     onBudget: (String, String?) -> Unit,
     onAddAccount: (String, String) -> Unit,
@@ -544,29 +691,33 @@ fun RecordScreen(
 ) {
     val ledger = state.ledger
     val palette = LocalPlushPalette.current
+    val context = LocalContext.current
     var type by rememberSaveable { mutableStateOf("expense") }
     var amount by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedParentId by rememberSaveable { mutableStateOf<String?>(null) }
     var accountId by rememberSaveable(state.defaultAccountId) { mutableStateOf(state.defaultAccountId) }
     var toAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var date by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    var timeText by rememberSaveable { mutableStateOf(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))) }
     var showDate by rememberSaveable { mutableStateOf(false) }
     var showCategories by rememberSaveable { mutableStateOf(false) }
     var showAccounts by rememberSaveable { mutableStateOf(false) }
     var showBudget by rememberSaveable { mutableStateOf(false) }
     var showManage by rememberSaveable { mutableStateOf(false) }
-    var showOtherCategory by rememberSaveable { mutableStateOf(false) }
     var budgetAmount by rememberSaveable { mutableStateOf("") }
     var budgetCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var newAccount by rememberSaveable { mutableStateOf("") }
     var newCategory by rememberSaveable { mutableStateOf("") }
-    var otherCategoryName by rememberSaveable { mutableStateOf("") }
     var deleteAccount by remember { mutableStateOf<AccountEntity?>(null) }
     var deleteCategory by remember { mutableStateOf<CategoryEntity?>(null) }
     var managePage by rememberSaveable { mutableStateOf<String?>(null) }
     val categories = ledger.categories.filter { it.kind == type }
+    val categoryRoots = categories.filter { it.parentId == null }
+    val selectedParent = categoryRoots.firstOrNull { it.id == selectedParentId }
+    val childCategories = selectedParent?.let { parent -> categories.filter { it.parentId == parent.id } }.orEmpty()
     val categoryMap = ledger.categories.associateBy { it.id }
     val filtered = ledger.transactions.filter {
         query.isNotBlank() && (
@@ -640,7 +791,7 @@ fun RecordScreen(
                 onSelected = {
                     type = it
                     categoryId = null
-                    showOtherCategory = false
+                    selectedParentId = null
                 }
             )
         }
@@ -665,29 +816,33 @@ fun RecordScreen(
         if (type != "transfer") {
             item {
                 PlushCard(Modifier.fillMaxWidth(), padding = 12.dp) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        categories.take(8).forEach { CategoryChoice(it, categoryId == it.id) { categoryId = it.id } }
-                        OtherCategoryChoice(showOtherCategory) {
-                            showOtherCategory = !showOtherCategory
-                            categoryId = null
-                        }
-                    }
-                    if (showOtherCategory) {
-                        Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            otherCategoryName,
-                            { otherCategoryName = it.take(12) },
-                            placeholder = { Text("自定义分类名称") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+                    if (type == "expense") {
+                        Text("选择主类", color = palette.muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(8.dp))
-                        PlushButton("添加到${if (type == "income") "收入" else "支出"}分类", Icons.Default.Add, Modifier.fillMaxWidth()) {
-                            val clean = otherCategoryName.trim()
-                            if (clean.isNotBlank()) {
-                                onAddCategory(clean, type)
-                                otherCategoryName = ""
-                                showOtherCategory = false
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            categoryRoots.forEach { root ->
+                                CategoryChoice(root, selectedParentId == root.id) {
+                                    selectedParentId = root.id
+                                    categoryId = null
+                                }
+                            }
+                        }
+                        if (selectedParent != null) {
+                            Spacer(Modifier.height(12.dp))
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                            Spacer(Modifier.height(10.dp))
+                            Text("${selectedParent.name}细分", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                childCategories.forEach { child ->
+                                    CategoryChoice(child, categoryId == child.id) { categoryId = child.id }
+                                }
+                            }
+                        }
+                    } else {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            categoryRoots.forEach { category ->
+                                CategoryChoice(category, categoryId == category.id) { categoryId = category.id }
                             }
                         }
                     }
@@ -700,6 +855,19 @@ fun RecordScreen(
                 if (showDate) {
                     Spacer(Modifier.height(8.dp))
                     PlushCalendar(date, YearMonth.from(date), onSelect = { date = it; showDate = false })
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                RecordInfoRow(Icons.Default.Schedule, "时间", timeText) {
+                    val current = runCatching {
+                        LocalTime.parse(timeText, DateTimeFormatter.ofPattern("HH:mm"))
+                    }.getOrDefault(LocalTime.now())
+                    TimePickerDialog(
+                        context,
+                        { _, hour, minute -> timeText = String.format(Locale.US, "%02d:%02d", hour, minute) },
+                        current.hour,
+                        current.minute,
+                        true
+                    ).show()
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 val defaultAccount = ledger.accounts.firstOrNull { it.id == accountId }
@@ -752,7 +920,10 @@ fun RecordScreen(
             Icons.Default.EditNote,
             Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 18.dp).fillMaxWidth()
         ) {
-            onAdd(type, amount, categoryId, accountId, toAccountId, note, date)
+            val time = runCatching {
+                LocalTime.parse(timeText, DateTimeFormatter.ofPattern("HH:mm"))
+            }.getOrDefault(LocalTime.now())
+            onAdd(type, amount, categoryId, accountId, toAccountId, note, LocalDateTime.of(date, time))
             if (amount.isNotBlank()) {
                 amount = ""
                 note = ""
@@ -1034,7 +1205,7 @@ fun BudgetManagementScreen(ledger: LedgerState, onBack: () -> Unit, onBudget: (S
             Spacer(Modifier.height(10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SoftChip("总预算", categoryId == null, palette.rose) { categoryId = null }
-                ledger.categories.filter { it.kind == "expense" }.forEach { category ->
+                ledger.categories.filter { it.kind == "expense" && it.parentId == null }.forEach { category ->
                     SoftChip(category.name, categoryId == category.id, category.categoryColor()) { categoryId = category.id }
                 }
             }
@@ -1190,7 +1361,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
     detailSpend?.let { spend ->
         val categories = ledger.categories.associateBy { it.id }
         val records = monthRecords
-            .filter { it.type == "expense" && it.categoryId == spend.category.id }
+            .filter { it.type == "expense" && it.categoryId in spend.memberCategoryIds }
             .sortedByDescending { it.occurredAt }
         AlertDialog(
             onDismissRequest = { detailSpend = null },

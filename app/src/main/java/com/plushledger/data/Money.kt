@@ -34,5 +34,6 @@ data class LedgerSummary(
 
 data class CategorySpend(
     val category: CategoryEntity,
-    val amountMinor: Long
+    val amountMinor: Long,
+    val memberCategoryIds: Set<String> = setOf(category.id)
 )

@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TransactionEntity::class,
         BudgetEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,6 +38,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE profiles ADD COLUMN age INTEGER")
                 db.execSQL("ALTER TABLE profiles ADD COLUMN birth_date TEXT")
                 db.execSQL("ALTER TABLE profiles ADD COLUMN gender TEXT")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE categories ADD COLUMN parent_id TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_categories_parent_id ON categories(parent_id)")
             }
         }
     }

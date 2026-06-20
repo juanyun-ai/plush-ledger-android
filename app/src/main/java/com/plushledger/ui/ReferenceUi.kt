@@ -1,6 +1,5 @@
 package com.plushledger.ui
 
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -20,10 +19,43 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.Commute
+import androidx.compose.material.icons.filled.Cookie
+import androidx.compose.material.icons.filled.DeliveryDining
+import androidx.compose.material.icons.filled.DirectionsTransit
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.FlightTakeoff
+import androidx.compose.material.icons.filled.FreeBreakfast
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.LocalTaxi
+import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Redeem
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.ShoppingBasket
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Train
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -34,6 +66,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -180,28 +214,76 @@ fun MascotArt(size: Dp = 88.dp) {
 
 @Composable
 fun CategoryArt(name: String?, size: Dp = 48.dp) {
-    val res = categoryArtResource(name)
-    Image(
-        painter = painterResource(res),
-        contentDescription = name,
-        modifier = Modifier.size(size).clip(CircleShape),
-        contentScale = ContentScale.Crop
-    )
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = Modifier.size(size),
+        shape = CircleShape,
+        color = categoryArtColor(name).copy(alpha = 0.16f),
+        border = BorderStroke(1.dp, categoryArtColor(name).copy(alpha = 0.22f)),
+        shadowElevation = 3.dp
+    ) {
+        Icon(
+            imageVector = categoryArtIcon(name),
+            contentDescription = name,
+            tint = categoryArtColor(name),
+            modifier = Modifier.padding(size * 0.22f)
+        )
+    }
 }
 
-@DrawableRes
-fun categoryArtResource(name: String?): Int = when (name) {
-    "餐饮", "饮食" -> R.drawable.art_food
-    "交通" -> R.drawable.art_transport
-    "购物" -> R.drawable.art_shopping
-    "娱乐" -> R.drawable.art_entertainment
-    "住房", "居住" -> R.drawable.art_home
-    "学习" -> R.drawable.art_study
-    "医疗" -> R.drawable.art_medical
-    "工资" -> R.drawable.art_salary
-    "兼职", "理财" -> R.drawable.art_parttime
-    "生活费", "礼金", "人情" -> R.drawable.art_living
-    else -> R.drawable.art_food
+private fun categoryArtIcon(name: String?): ImageVector = when (name) {
+    "餐饮" -> Icons.Default.Restaurant
+    "早餐" -> Icons.Default.FreeBreakfast
+    "正餐" -> Icons.Default.Restaurant
+    "外卖" -> Icons.Default.DeliveryDining
+    "奶茶咖啡", "奶茶", "咖啡" -> Icons.Default.LocalCafe
+    "零食" -> Icons.Default.Cookie
+    "聚餐" -> Icons.Default.Groups
+    "交通", "通勤" -> Icons.Default.Commute
+    "公交地铁" -> Icons.Default.DirectionsTransit
+    "打车" -> Icons.Default.LocalTaxi
+    "火车高铁" -> Icons.Default.Train
+    "购物", "日用百货" -> Icons.Default.ShoppingBasket
+    "服饰鞋包" -> Icons.Default.Checkroom
+    "数码配件" -> Icons.Default.Headphones
+    "美妆个护" -> Icons.Default.Palette
+    "日常", "生活用品", "住房", "居住" -> Icons.Default.Home
+    "快递物流" -> Icons.Default.LocalShipping
+    "话费网络" -> Icons.Default.PhoneAndroid
+    "水电房租" -> Icons.Default.Bolt
+    "娱乐", "影视会员" -> Icons.Default.Movie
+    "游戏" -> Icons.Default.SportsEsports
+    "旅游出行" -> Icons.Default.FlightTakeoff
+    "兴趣爱好" -> Icons.Default.Palette
+    "人情社交", "人情红包", "人情" -> Icons.Default.Redeem
+    "请客送礼", "礼金" -> Icons.Default.CardGiftcard
+    "恋爱约会" -> Icons.Default.Favorite
+    "宠物", "宠物食品", "宠物用品" -> Icons.Default.Pets
+    "宠物医疗" -> Icons.Default.Medication
+    "学习工作", "书籍资料" -> Icons.Default.MenuBook
+    "课程考试" -> Icons.Default.School
+    "文具打印" -> Icons.Default.Print
+    "软件工具" -> Icons.Default.Terminal
+    "医疗健康", "就诊体检", "医疗" -> Icons.Default.LocalHospital
+    "药品" -> Icons.Default.Medication
+    "运动健身" -> Icons.Default.FitnessCenter
+    "工资" -> Icons.Default.CardGiftcard
+    "兼职", "理财" -> Icons.Default.Terminal
+    "其他", "临时支出", "无法归类" -> Icons.Default.MoreHoriz
+    else -> Icons.Default.HelpOutline
+}
+
+private fun categoryArtColor(name: String?): Color = when (name) {
+    "餐饮", "早餐", "正餐", "外卖", "奶茶咖啡", "奶茶", "咖啡", "零食", "聚餐" -> Color(0xFFF39C43)
+    "交通", "通勤", "公交地铁", "打车", "火车高铁" -> Color(0xFF6498D5)
+    "购物", "日用百货", "服饰鞋包", "数码配件", "美妆个护" -> Color(0xFFEA7FA7)
+    "日常", "生活用品", "快递物流", "话费网络", "水电房租", "住房", "居住" -> Color(0xFF6FAE85)
+    "娱乐", "游戏", "影视会员", "旅游出行", "兴趣爱好" -> Color(0xFF9B7BDA)
+    "人情社交", "人情红包", "请客送礼", "恋爱约会", "人情" -> Color(0xFFDE8374)
+    "宠物", "宠物食品", "宠物用品", "宠物医疗" -> Color(0xFFB98563)
+    "学习工作", "书籍资料", "课程考试", "文具打印", "软件工具", "学习" -> Color(0xFF7198CD)
+    "医疗健康", "药品", "就诊体检", "运动健身", "医疗" -> Color(0xFFDE7676)
+    else -> Color(0xFF9E978E)
 }
 
 @Composable

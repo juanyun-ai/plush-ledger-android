@@ -97,6 +97,7 @@ import coil.compose.AsyncImage
 import com.plushledger.BuildConfig
 import com.plushledger.R
 import com.plushledger.data.LedgerState
+import com.plushledger.data.Money
 import com.plushledger.data.OfficialMessage
 import com.plushledger.sync.AppVersionInfo
 import java.time.Instant
@@ -1064,6 +1065,8 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
     var showDownloadLine by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
     var showExportDialog by rememberSaveable { mutableStateOf(false) }
+    var showBillImportSource by rememberSaveable { mutableStateOf(false) }
+    var billImportProvider by rememberSaveable { mutableStateOf("微信") }
     var showCache by rememberSaveable { mutableStateOf(false) }
     var showLicense by rememberSaveable { mutableStateOf(false) }
     var reminderEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("ledger_reminder", true)) }
@@ -1081,6 +1084,11 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                 Toast.makeText(context, "导出失败：${it.message}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+    val billImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.previewExternalBill(it, billImportProvider) }
     }
 
     LaunchedEffect(showDelete) {
@@ -1130,6 +1138,8 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                 ProfileSectionTitle("数据与安全")
                 ActionRow(Icons.Default.Download, "数据导出", "确认后选择本机保存位置", palette.moss) { showExportDialog = true }
                 Spacer(Modifier.height(10.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                ActionRow(Icons.Default.CreditCard, "账单智能导入", "导入微信或支付宝导出的 CSV", palette.blue) { showBillImportSource = true }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 ToggleRow(Icons.Default.Security, "隐私防截图", state.secureScreen, viewModel::setSecureScreen)
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
@@ -1240,6 +1250,67 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                     exportLauncher.launch("rongrong-ledger-${LocalDate.now()}.csv")
                 }) { Text("确认导出") }
             }
+        )
+    }
+    if (showBillImportSource) {
+        AlertDialog(
+            onDismissRequest = { showBillImportSource = false },
+            title = { Text("选择账单来源", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("仅支持你从微信或支付宝主动导出的 CSV 文件。应用不会读取你的支付账号、密码或云端账单。", color = palette.muted, fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { billImportProvider = "微信" },
+                            modifier = Modifier.weight(1f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (billImportProvider == "微信") palette.moss else palette.border)
+                        ) { Text("微信账单", color = if (billImportProvider == "微信") palette.moss else palette.ink) }
+                        OutlinedButton(
+                            onClick = { billImportProvider = "支付宝" },
+                            modifier = Modifier.weight(1f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (billImportProvider == "支付宝") palette.blue else palette.border)
+                        ) { Text("支付宝账单", color = if (billImportProvider == "支付宝") palette.blue else palette.ink) }
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showBillImportSource = false }) { Text("取消") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBillImportSource = false
+                    billImportLauncher.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel"))
+                }) { Text("选择 CSV", color = palette.moss) }
+            },
+            containerColor = palette.surface
+        )
+    }
+    state.billImportPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissExternalBillImport,
+            title = { Text("确认导入${preview.provider}账单", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("识别到 ${preview.entries.size} 笔成功收支${if (preview.skippedRows > 0) "，已跳过 ${preview.skippedRows} 笔退款、转账或无效记录" else ""}。", color = palette.ink, fontSize = 13.sp)
+                    ProfileWarmPanel(padding = 12.dp) {
+                        preview.entries.take(3).forEach { entry ->
+                            Text(
+                                "${if (entry.type == "income") "收入" else "支出"} ${Money.formatCny(entry.amountMinor)}  ${entry.note.ifBlank { "未填写备注" }}",
+                                color = palette.muted,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Text("账单文件不会上传；仅在确认后保存账目，登录云端账号时账目会按你的同步设置备份。", color = palette.muted, fontSize = 12.sp)
+                }
+            },
+            dismissButton = { TextButton(onClick = viewModel::dismissExternalBillImport) { Text("取消") } },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmExternalBillImport, enabled = !state.isBusy) {
+                    Text(if (state.isBusy) "正在导入" else "确认导入", color = palette.moss)
+                }
+            },
+            containerColor = palette.surface
         )
     }
     if (showTheme) {
@@ -1670,10 +1741,11 @@ private fun buildCsv(ledger: LedgerState): String {
     val localFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
     return buildString {
-        appendLine("\ufeffid,date,time,datetime,occurred_at,created_at,updated_at,type,type_label,category,category_kind,category_icon,category_color,account,account_kind,to_account,amount_minor,amount_cny,currency,note")
+        appendLine("\ufeffid,date,time,datetime,occurred_at,created_at,updated_at,type,type_label,category,category_parent,category_parent_id,category_path,category_level,category_kind,category_icon,category_color,account,account_kind,to_account,amount_minor,amount_cny,currency,note")
         ledger.transactions.sortedByDescending { it.occurredAt }.forEach { record ->
             val occurred = Instant.ofEpochMilli(record.occurredAt).atZone(ZoneId.systemDefault())
             val categoryEntity = categories[record.categoryId]
+            val parentCategory = categoryEntity?.parentId?.let(categories::get)
             val accountEntity = accounts[record.accountId]
             val toAccountEntity = accounts[record.toAccountId]
             val id = record.id.csvCell()
@@ -1687,6 +1759,10 @@ private fun buildCsv(ledger: LedgerState): String {
                 else -> "支出"
             }.csvCell()
             val category = categoryEntity?.name.orEmpty().csvCell()
+            val categoryParent = parentCategory?.name.orEmpty().csvCell()
+            val categoryParentId = parentCategory?.id.orEmpty().csvCell()
+            val categoryPath = listOfNotNull(parentCategory?.name, categoryEntity?.name).joinToString("/").csvCell()
+            val categoryLevel = if (parentCategory == null) "1" else "2"
             val categoryKind = categoryEntity?.kind.orEmpty().csvCell()
             val categoryIcon = categoryEntity?.icon.orEmpty().csvCell()
             val categoryColor = categoryEntity?.colorHex.orEmpty().csvCell()
@@ -1696,7 +1772,7 @@ private fun buildCsv(ledger: LedgerState): String {
             val amountCny = "%.2f".format(java.util.Locale.US, record.amountMinor / 100.0)
             val currency = record.currency.csvCell()
             val note = record.note.csvCell()
-            appendLine("$id,$date,$time,$datetime,${record.occurredAt},${record.createdAt},${record.updatedAt},$type,$typeLabel,$category,$categoryKind,$categoryIcon,$categoryColor,$account,$accountKind,$toAccount,${record.amountMinor},$amountCny,$currency,$note")
+            appendLine("$id,$date,$time,$datetime,${record.occurredAt},${record.createdAt},${record.updatedAt},$type,$typeLabel,$category,$categoryParent,$categoryParentId,$categoryPath,$categoryLevel,$categoryKind,$categoryIcon,$categoryColor,$account,$accountKind,$toAccount,${record.amountMinor},$amountCny,$currency,$note")
         }
     }
 }

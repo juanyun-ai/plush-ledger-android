@@ -68,9 +68,6 @@ class LedgerRepository(
             dao.upsertAccounts(defaultAccounts(userId, bookId, now))
         }
         migrateDefaultAccounts(userId, bookId, now)
-        if (dao.categoryCount(userId) == 0) {
-            dao.upsertCategories(defaultCategories(userId, bookId, now))
-        }
         migrateDefaultCategories(userId, bookId, now)
     }
 
@@ -101,16 +98,25 @@ class LedgerRepository(
                 .eachCount()
             val orderedCategories = categories.sortedWith(
                 compareBy<CategoryEntity> { if (it.kind == "expense") 0 else 1 }
+                    .thenBy { if (it.parentId == null) 0 else 1 }
                     .thenByDescending { usageByCategory[it.id] ?: 0 }
                     .thenBy { it.sortOrder }
             )
             val categoriesById = orderedCategories.associateBy { it.id }
             val categorySpend = monthTransactions
                 .filter { it.type == "expense" && it.categoryId != null }
-                .groupBy { it.categoryId }
-                .mapNotNull { (categoryId, records) ->
-                    val category = categoriesById[categoryId] ?: return@mapNotNull null
-                    CategorySpend(category, records.sumOf { it.amountMinor })
+                .groupBy { transaction ->
+                    transaction.categoryId
+                        ?.let(categoriesById::get)
+                        ?.let { CategoryCatalog.rootOf(it, categoriesById).id }
+                }
+                .mapNotNull { (rootCategoryId, records) ->
+                    val category = rootCategoryId?.let(categoriesById::get) ?: return@mapNotNull null
+                    CategorySpend(
+                        category = category,
+                        amountMinor = records.sumOf { it.amountMinor },
+                        memberCategoryIds = records.mapNotNull { it.categoryId }.toSet()
+                    )
                 }
                 .sortedByDescending { it.amountMinor }
             val budgetLimit = budgets.sumOf { it.limitMinor }
@@ -175,6 +181,42 @@ class LedgerRepository(
 
     suspend fun deleteCategory(userId: String, id: String) {
         dao.softDeleteCategory(id, userId, now())
+    }
+
+    suspend fun importExternalBills(userId: String, preview: ExternalBillPreview): ExternalBillImportResult {
+        val book = dao.getDefaultBook(userId) ?: error("默认账本不存在")
+        val categories = dao.categoriesSnapshot(userId)
+        val accounts = dao.accountsSnapshot(userId)
+        val providerAccount = accounts.firstOrNull { account ->
+            account.name.contains(preview.provider) || preview.provider.contains(account.name)
+        } ?: accounts.firstOrNull { it.name == "现金" } ?: accounts.firstOrNull()
+            ?: error("请先创建一个账户")
+        val now = now()
+        val records = preview.entries.map { entry ->
+            val recognition = LocalAiLedgerParser.parse(
+                "${entry.note} ${entry.amountMinor / 100.0} ${preview.provider} ${entry.accountHint}",
+                categories,
+                accounts
+            )
+            val account = accounts.firstOrNull { account ->
+                entry.accountHint.contains(account.name) || account.name.contains(entry.accountHint)
+            } ?: providerAccount
+            TransactionEntity(
+                id = deterministicImportId(userId, preview.provider, entry.sourceId),
+                userId = userId,
+                bookId = book.id,
+                type = entry.type,
+                amountMinor = entry.amountMinor,
+                categoryId = recognition?.categoryId,
+                accountId = account.id,
+                note = entry.note.ifBlank { "${preview.provider}账单" },
+                occurredAt = entry.occurredAt,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
+        dao.upsertTransactions(records)
+        return ExternalBillImportResult(records.size, preview.skippedRows)
     }
 
     suspend fun updateProfile(userId: String, displayName: String, age: Int?, birthDate: String?, gender: String?) {
@@ -315,7 +357,7 @@ class LedgerRepository(
         if (direction == 0) return
         val all = dao.categoriesSnapshot(userId)
         val current = all.firstOrNull { it.id == categoryId } ?: return
-        val siblings = all.filter { it.kind == current.kind }.sortedBy { it.sortOrder }
+        val siblings = all.filter { it.kind == current.kind && it.parentId == current.parentId }.sortedBy { it.sortOrder }
         val from = siblings.indexOfFirst { it.id == categoryId }
         if (from == -1) return
         val to = (from + direction).coerceIn(0, siblings.lastIndex)
@@ -377,14 +419,14 @@ class LedgerRepository(
         val day5 = month.atDay((today.dayOfMonth - 4).coerceAtLeast(1))
 
         val rows = listOf(
-            demoTransaction(userId, book.id, "expense", 3_200, category["餐饮"]?.id, cash.id, "今天 · 12:30", today.atTime(12, 30), now),
-            demoTransaction(userId, book.id, "expense", 1_850, category["交通"]?.id, cash.id, "今天 · 08:15", today.atTime(8, 15), now),
-            demoTransaction(userId, book.id, "expense", 16_800, category["购物"]?.id, accounts["支付宝"]?.id ?: cash.id, "昨天 · 20:45", yesterday.atTime(20, 45), now),
+            demoTransaction(userId, book.id, "expense", 3_200, category["正餐"]?.id, cash.id, "今天 · 12:30", today.atTime(12, 30), now),
+            demoTransaction(userId, book.id, "expense", 1_850, category["公交地铁"]?.id, cash.id, "今天 · 08:15", today.atTime(8, 15), now),
+            demoTransaction(userId, book.id, "expense", 16_800, category["日用百货"]?.id, accounts["支付宝"]?.id ?: cash.id, "昨天 · 20:45", yesterday.atTime(20, 45), now),
             demoTransaction(userId, book.id, "income", 120_000, category["兼职"]?.id ?: category["工资"]?.id, accounts["银行卡"]?.id ?: cash.id, "昨天 · 18:30", yesterday.atTime(18, 30), now),
-            demoTransaction(userId, book.id, "expense", 8_700, category["学习"]?.id, cash.id, "买书 · 设计心理学", day3.atTime(10, 30), now),
-            demoTransaction(userId, book.id, "expense", 10_000, category["购物"]?.id, accounts["微信"]?.id ?: cash.id, "生活用品 · 超市", day3.atTime(12, 20), now),
-            demoTransaction(userId, book.id, "expense", 26_000, category["娱乐"]?.id, cash.id, "电影 · 周末放松", day4.atTime(18, 30), now),
-            demoTransaction(userId, book.id, "expense", 59_100, category["住房"]?.id, accounts["银行卡"]?.id ?: cash.id, "房租 · 月度", day5.atTime(9, 0), now),
+            demoTransaction(userId, book.id, "expense", 8_700, category["书籍资料"]?.id, cash.id, "买书 · 设计心理学", day3.atTime(10, 30), now),
+            demoTransaction(userId, book.id, "expense", 10_000, category["生活用品"]?.id, accounts["微信"]?.id ?: cash.id, "生活用品 · 超市", day3.atTime(12, 20), now),
+            demoTransaction(userId, book.id, "expense", 26_000, category["影视会员"]?.id, cash.id, "电影 · 周末放松", day4.atTime(18, 30), now),
+            demoTransaction(userId, book.id, "expense", 59_100, category["水电房租"]?.id, accounts["银行卡"]?.id ?: cash.id, "房租 · 月度", day5.atTime(9, 0), now),
             demoTransaction(userId, book.id, "income", 248_000, category["工资"]?.id, accounts["银行卡"]?.id ?: cash.id, "6月工资", day5.atTime(9, 30), now)
         )
         dao.upsertTransactions(rows)
@@ -400,12 +442,8 @@ class LedgerRepository(
     }
 
     private suspend fun defaultCategoriesForUser(userId: String): List<CategoryEntity> {
-        val book = dao.getDefaultBook(userId) ?: return emptyList()
         val existing = dao.categoriesSnapshot(userId)
-        if (existing.isNotEmpty()) return existing
-        val defaults = defaultCategories(userId, book.id, now())
-        dao.upsertCategories(defaults)
-        return defaults
+        return existing
     }
 
     private fun demoTransaction(
@@ -442,10 +480,11 @@ class LedgerRepository(
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
         file.writeText(
             buildString {
-                appendLine("\ufeffid,date,time,datetime,occurred_at,created_at,updated_at,type,type_label,category,category_kind,category_icon,category_color,account,account_kind,to_account,amount_minor,amount_cny,currency,note")
+                appendLine("\ufeffid,date,time,datetime,occurred_at,created_at,updated_at,type,type_label,category,category_parent,category_parent_id,category_path,category_level,category_kind,category_icon,category_color,account,account_kind,to_account,amount_minor,amount_cny,currency,note")
                 records.forEach {
                     val occurred = Instant.ofEpochMilli(it.occurredAt).atZone(ZoneId.systemDefault())
                     val category = it.categoryId?.let(categories::get)
+                    val parentCategory = category?.parentId?.let(categories::get)
                     val account = accounts[it.accountId]
                     val toAccount = accounts[it.toAccountId]
                     val amount = "%.2f".format(Locale.US, it.amountMinor / 100.0)
@@ -466,6 +505,10 @@ class LedgerRepository(
                             it.type,
                             typeLabel,
                             category?.name.orEmpty(),
+                            parentCategory?.name.orEmpty(),
+                            parentCategory?.id.orEmpty(),
+                            listOfNotNull(parentCategory?.name, category?.name).joinToString("/"),
+                            if (parentCategory == null) "1" else "2",
                             category?.kind.orEmpty(),
                             category?.icon.orEmpty(),
                             category?.colorHex.orEmpty(),
@@ -535,6 +578,37 @@ class LedgerRepository(
                 )
             }.ifEmpty { builtInMessages() }
         }.getOrElse { builtInMessages() }
+    }
+
+    suspend fun analyzeAiEntry(text: String, ledgerState: LedgerState): AiLedgerAnalysis? {
+        val local = LocalAiLedgerParser.parse(text, ledgerState.categories, ledgerState.accounts) ?: return null
+        val session = sessionStore.currentSession()
+        val token = session?.accessToken ?: return local
+        val remote = runCatching {
+            supabaseClient.parseAiLedger(token, text, ledgerState.categories, ledgerState.accounts)
+        }.getOrNull() ?: return local
+        if (remote.amountMinor <= 0) return local
+        val type = remote.type.takeIf { it == "income" || it == "expense" } ?: local.type
+        val category = LocalAiLedgerParser.resolveCategory(
+            type = type,
+            categoryName = remote.categoryName,
+            parentName = remote.parentCategoryName,
+            categories = ledgerState.categories,
+            sourceText = text
+        )
+        val account = LocalAiLedgerParser.resolveAccount(remote.accountName, ledgerState.accounts, text)
+        return AiLedgerAnalysis(
+            sourceText = text.trim().take(160),
+            type = type,
+            amountMinor = remote.amountMinor,
+            categoryId = category?.id,
+            categoryLabel = category?.name ?: "无法归类",
+            accountId = account?.id,
+            accountLabel = account?.name ?: "默认账户",
+            note = remote.note ?: text.trim().take(80),
+            occurredAt = remote.occurredAt ?: System.currentTimeMillis(),
+            cloudAssisted = true
+        )
     }
 
     suspend fun submitFeedback(content: String) {
@@ -630,31 +704,59 @@ class LedgerRepository(
 
     private suspend fun migrateDefaultCategories(userId: String, bookId: String, now: Long) {
         val existing = dao.categoriesSnapshot(userId)
-        val defaults = defaultCategories(userId, bookId, now)
-        val existingByNameKind = existing.associateBy { it.kind to it.name }
-        val missing = defaults.filter { (it.kind to it.name) !in existingByNameKind }
-        val reordered = defaults.mapNotNull { default ->
-            existingByNameKind[default.kind to default.name]?.takeIf { it.sortOrder != default.sortOrder }?.copy(
+        val defaults = CategoryCatalog.defaultCategories(userId, bookId, now)
+        val existingByName = existing.groupBy { it.kind to it.name }
+        val resolvedIds = mutableMapOf<String, String>()
+        CategoryCatalog.specs.filter { it.parentKey == null }.forEach { spec ->
+            val default = defaults.first { it.name == spec.name && it.kind == spec.kind }
+            val existingRoot = existingByName[spec.kind to spec.name]?.firstOrNull()
+            resolvedIds[spec.key] = existingRoot?.id ?: default.id
+        }
+
+        val merged = defaults.map { default ->
+            val spec = CategoryCatalog.specs.first { it.name == default.name && it.kind == default.kind && it.icon == default.icon }
+            val existingMatch = existingByName[default.kind to default.name]?.firstOrNull()
+            val parentId = spec.parentKey?.let(resolvedIds::get) ?: default.parentId
+            val target = (existingMatch ?: default).copy(
+                userId = userId,
+                bookId = bookId,
+                name = default.name,
+                kind = default.kind,
+                colorHex = default.colorHex,
+                icon = default.icon,
                 sortOrder = default.sortOrder,
+                parentId = parentId,
                 updatedAt = now,
                 syncState = SYNC_DIRTY
             )
-        }
-        if (missing.isNotEmpty() || reordered.isNotEmpty()) dao.upsertCategories(reordered + missing)
-    }
+            target
+        }.toMutableList()
 
-    private fun defaultCategories(userId: String, bookId: String, now: Long): List<CategoryEntity> {
-        val expense = listOf("餐饮", "奶茶", "日常消费", "娱乐", "交通", "购物", "住房", "医疗", "学习", "人情", "其他")
-        val income = listOf("工资", "兼职", "理财", "礼金")
-        return expense.mapIndexed { index, name ->
-            CategoryEntity(newId(), userId, bookId, name, "expense", expenseColors[index % expenseColors.size], "tag", index, now, now)
-        } + income.mapIndexed { index, name ->
-            CategoryEntity(newId(), userId, bookId, name, "income", incomeColors[index % incomeColors.size], "spark", index, now, now)
+        existing.forEach { category ->
+            val parentKey = CategoryCatalog.legacyParentKey(category.name) ?: return@forEach
+            val parentId = resolvedIds[parentKey] ?: return@forEach
+            if (category.parentId != parentId && merged.none { it.id == category.id }) {
+                merged += category.copy(parentId = parentId, updatedAt = now, syncState = SYNC_DIRTY)
+            }
         }
+
+        val changed = merged
+            .groupBy { it.id }
+            .mapValues { (_, rows) -> rows.last() }
+            .values
+            .filter { candidate ->
+                val current = existing.firstOrNull { it.id == candidate.id }
+                current == null || current.name != candidate.name || current.kind != candidate.kind ||
+                    current.colorHex != candidate.colorHex || current.icon != candidate.icon ||
+                    current.sortOrder != candidate.sortOrder || current.parentId != candidate.parentId
+            }
+        if (changed.isNotEmpty()) dao.upsertCategories(changed)
     }
 
     private fun now() = System.currentTimeMillis()
     private fun newId() = UUID.randomUUID().toString()
+    private fun deterministicImportId(userId: String, provider: String, sourceId: String): String =
+        UUID.nameUUIDFromBytes("rongrong-ledger:import:$userId:$provider:$sourceId".toByteArray()).toString()
     private fun cachedAvatarFile(userId: String) = File(File(context.filesDir, "avatars"), "$userId.jpg")
 
     private fun builtInMessages() = listOf(
@@ -749,7 +851,8 @@ private fun JSONObject.toCategory() = CategoryEntity(
     createdAt = getLong("created_at"),
     updatedAt = getLong("updated_at"),
     deletedAt = nullableLong("deleted_at"),
-    syncState = SYNC_SYNCED
+    syncState = SYNC_SYNCED,
+    parentId = nullableString("parent_id")
 )
 
 private fun JSONObject.toTransaction() = TransactionEntity(
