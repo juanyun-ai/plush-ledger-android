@@ -51,7 +51,13 @@ class AuthRepository(
         return if (supabaseClient.isConfigured) {
             runCatching {
                 supabaseClient.sendOtp(channel, cleaned, shouldCreateUser)
-                AuthOutcome.OtpSent(if (channel == AuthChannel.PHONE) "验证码已提交给短信服务商" else "验证码已发送")
+                AuthOutcome.OtpSent(
+                    if (channel == AuthChannel.PHONE) {
+                        "验证码请求已提交；首次验证会自动创建云端账号。若 1 分钟未收到，请检查短信拦截或稍后重试"
+                    } else {
+                        "验证码已发送"
+                    }
+                )
             }.getOrElse { AuthOutcome.Failed(it.toFriendlyAuthMessage("验证码发送失败")) }
         } else {
             AuthOutcome.OtpSent("云端未配置，当前使用本地安全模式", "000000")

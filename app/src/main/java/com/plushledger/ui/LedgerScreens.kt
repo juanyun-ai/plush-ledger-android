@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Category
@@ -703,7 +705,8 @@ fun RecordScreen(
     var date by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var timeText by rememberSaveable { mutableStateOf(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))) }
     var showDate by rememberSaveable { mutableStateOf(false) }
-    var showCategories by rememberSaveable { mutableStateOf(false) }
+    var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
+    var showNote by rememberSaveable { mutableStateOf(false) }
     var showAccounts by rememberSaveable { mutableStateOf(false) }
     var showBudget by rememberSaveable { mutableStateOf(false) }
     var showManage by rememberSaveable { mutableStateOf(false) }
@@ -723,6 +726,24 @@ fun RecordScreen(
         query.isNotBlank() && (
             it.note.contains(query, true) || categoryMap[it.categoryId]?.name?.contains(query, true) == true
         )
+    }
+
+    if (showCategoryPicker && type == "expense") {
+        val activeRootId = selectedParentId ?: categoryRoots.firstOrNull()?.id
+        BackHandler { showCategoryPicker = false }
+        SubcategorySelectionScreen(
+            categories = categories,
+            selectedRootId = activeRootId,
+            selectedCategoryId = categoryId,
+            onBack = { showCategoryPicker = false },
+            onRootSelected = { rootId ->
+                selectedParentId = rootId
+                categoryId = categories.filter { it.parentId == rootId }.minByOrNull { it.sortOrder }?.id
+            },
+            onCategorySelected = { categoryId = it },
+            onConfirm = { if (categoryId != null) showCategoryPicker = false }
+        )
+        return
     }
 
     if (managePage != null) {
@@ -817,27 +838,37 @@ fun RecordScreen(
             item {
                 PlushCard(Modifier.fillMaxWidth(), padding = 12.dp) {
                     if (type == "expense") {
-                        Text("选择主类", color = palette.muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(8.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            categoryRoots.forEach { root ->
-                                CategoryChoice(root, selectedParentId == root.id) {
-                                    selectedParentId = root.id
-                                    categoryId = null
+                        val selectedCategory = categories.firstOrNull { it.id == categoryId }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    val rootId = selectedParentId ?: categoryRoots.firstOrNull()?.id
+                                    selectedParentId = rootId
+                                    if (categoryId == null) {
+                                        categoryId = categories.filter { it.parentId == rootId }.minByOrNull { it.sortOrder }?.id
+                                    }
+                                    showCategoryPicker = true
                                 }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CategoryArt(selectedCategory?.name ?: selectedParent?.name ?: "餐饮", 48.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("分类", color = palette.muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    selectedCategory?.let { child ->
+                                        val root = categoryRoots.firstOrNull { it.id == child.parentId }
+                                        listOfNotNull(root?.name, child.name).joinToString(" · ")
+                                    } ?: "选择主分类与子分类",
+                                    color = palette.ink,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
-                        }
-                        if (selectedParent != null) {
-                            Spacer(Modifier.height(12.dp))
-                            Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                            Spacer(Modifier.height(10.dp))
-                            Text("${selectedParent.name}细分", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(8.dp))
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                childCategories.forEach { child ->
-                                    CategoryChoice(child, categoryId == child.id) { categoryId = child.id }
-                                }
-                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = "选择分类", tint = palette.muted)
                         }
                     } else {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -893,8 +924,8 @@ fun RecordScreen(
                     }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                RecordInfoRow(Icons.Default.EditNote, "备注", note.ifBlank { "可输入备注信息" }) { showCategories = !showCategories }
-                if (showCategories) {
+                RecordInfoRow(Icons.Default.EditNote, "备注", note.ifBlank { "可输入备注信息" }) { showNote = !showNote }
+                if (showNote) {
                     OutlinedTextField(note, { note = it.take(80) }, placeholder = { Text("备注") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 }
             }
@@ -943,6 +974,343 @@ fun RecordScreen(
             deleteCategory = null
         }
     }
+}
+
+@Composable
+private fun SubcategorySelectionScreen(
+    categories: List<CategoryEntity>,
+    selectedRootId: String?,
+    selectedCategoryId: String?,
+    onBack: () -> Unit,
+    onRootSelected: (String) -> Unit,
+    onCategorySelected: (String) -> Unit,
+    onConfirm: () -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    val roots = categories.filter { it.parentId == null }.sortedBy { it.sortOrder }
+    val activeRoot = roots.firstOrNull { it.id == selectedRootId } ?: roots.firstOrNull()
+    val children = categories.filter { it.parentId == activeRoot?.id }.sortedBy { it.sortOrder }
+    val rows = children.chunked(2)
+
+    Column(Modifier.fillMaxSize().background(Color(0xFFFFFCF8))) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Color(0xFF4D3B32), modifier = Modifier.size(28.dp))
+            }
+            Text(
+                "子分类选择",
+                modifier = Modifier.weight(1f),
+                color = Color(0xFF4D3B32),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(Modifier.size(48.dp))
+        }
+
+        Row(Modifier.fillMaxSize().padding(start = 10.dp, end = 12.dp, bottom = 10.dp)) {
+            Surface(
+                modifier = Modifier.width(98.dp).fillMaxHeight(),
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFFFFFBF6),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF5E6D6)),
+                shadowElevation = 3.dp
+            ) {
+                Column(Modifier.fillMaxSize().padding(vertical = 6.dp), verticalArrangement = Arrangement.SpaceEvenly) {
+                    roots.forEach { root ->
+                        RootCategoryItem(
+                            category = root,
+                            selected = root.id == activeRoot?.id,
+                            onClick = { onRootSelected(root.id) }
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentPadding = PaddingValues(top = 6.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(activeRoot?.name.orEmpty(), color = Color(0xFF4D3B32), fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            Text("  ·  子分类", color = Color(0xFFA4958B), fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            subcategoryPageSubtitle(activeRoot?.name),
+                            color = Color(0xFFA9988D),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    items(rows, key = { row -> row.first().id }) { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                            row.forEach { child ->
+                                SubcategoryCard(
+                                    category = child,
+                                    selected = child.id == selectedCategoryId,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { onCategorySelected(child.id) }
+                                )
+                            }
+                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                    item { SubcategoryQuote(activeRoot?.name) }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(62.dp),
+                    onClick = onConfirm,
+                    enabled = selectedCategoryId != null,
+                    shape = RoundedCornerShape(30.dp),
+                    color = if (selectedCategoryId != null) Color(0xFFFF9D22) else Color(0xFFFFD29B),
+                    border = androidx.compose.foundation.BorderStroke(4.dp, Color.White.copy(alpha = 0.78f)),
+                    shadowElevation = 7.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("确认选择", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RootCategoryItem(category: CategoryEntity, selected: Boolean, onClick: () -> Unit) {
+    val contentColor = if (selected) Color(0xFFFF8A18) else Color(0xFF5B4A41)
+    Surface(
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        onClick = onClick,
+        color = if (selected) Color.White else Color.Transparent,
+        shape = RoundedCornerShape(18.dp),
+        shadowElevation = if (selected) 5.dp else 0.dp
+    ) {
+        Box {
+            if (selected) {
+                Box(
+                    Modifier.align(Alignment.CenterStart).width(3.dp).height(34.dp)
+                        .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
+                        .background(Color(0xFFFF9B25))
+                )
+            }
+            Row(
+                Modifier.fillMaxSize().padding(horizontal = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val art = rootCategoryArtRes(category.name)
+                if (art != null) {
+                    Image(
+                        painter = painterResource(art),
+                        contentDescription = category.name,
+                        modifier = Modifier.size(31.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    CategoryArt(category.name, 31.dp)
+                }
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    category.name,
+                    color = contentColor,
+                    fontSize = if (category.name.length >= 4) 11.sp else 13.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubcategoryCard(
+    category: CategoryEntity,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier.height(108.dp),
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFFFFCF8),
+        border = androidx.compose.foundation.BorderStroke(
+            if (selected) 2.dp else 1.dp,
+            if (selected) Color(0xFFFFA12B) else Color(0xFFF4E2D1)
+        ),
+        shadowElevation = if (selected) 6.dp else 4.dp
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            Column(
+                Modifier.fillMaxSize().padding(start = 6.dp, top = 7.dp, end = 6.dp, bottom = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                val art = subcategoryArtRes(category.name)
+                if (art != null) {
+                    Image(
+                        painter = painterResource(art),
+                        contentDescription = category.name,
+                        modifier = Modifier.fillMaxWidth(0.88f).height(64.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    CategoryArt(category.name, 68.dp)
+                }
+                Text(
+                    category.name,
+                    color = Color(0xFF4D3B32),
+                    fontSize = if (category.name.length >= 5) 13.sp else 15.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1
+                )
+                if (category.name == "单车月卡") {
+                    Text("哈啰 / 美团月卡", color = Color(0xFFA9988D), fontSize = 8.sp, maxLines = 1)
+                }
+            }
+            if (selected) {
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(25.dp),
+                    shape = CircleShape,
+                    color = Color(0xFFFF9D22),
+                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = "已选择", tint = Color.White, modifier = Modifier.padding(4.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubcategoryQuote(rootName: String?) {
+    val (title, body) = subcategoryQuote(rootName)
+    Surface(
+        modifier = Modifier.fillMaxWidth().height(76.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFFFFF8F0),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF4E2D1))
+    ) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = painterResource(subcategoryQuoteArtRes(rootName)),
+                contentDescription = null,
+                modifier = Modifier.width(88.dp).fillMaxHeight(),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(Modifier.width(5.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = Color(0xFF59453B), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Spacer(Modifier.height(3.dp))
+                Text(body, color = Color(0xFFA9988D), fontSize = 9.sp, maxLines = 2, lineHeight = 13.sp)
+            }
+        }
+    }
+}
+
+private fun subcategoryPageSubtitle(name: String?): String = when (name) {
+    "餐饮" -> "好好吃饭，认真生活"
+    "交通" -> "出行有序，记账清楚"
+    "购物" -> "精致生活，从记录开始"
+    "日常" -> "小日常，也值得认真记录"
+    "娱乐" -> "放松一下，快乐生活"
+    "人情社交" -> "礼尚往来，人情记录不乱"
+    "宠物" -> "爱宠的每一笔，都值得记录"
+    "学习工作" -> "每一份成长，都值得被记录"
+    "医疗健康" -> "照顾自己，也要记下来"
+    else -> "零碎开销，也能清楚归类"
+}
+
+private fun subcategoryQuote(name: String?): Pair<String, String> = when (name) {
+    "餐饮" -> "美食能治愈一切～" to "记下一餐的美好时光吧！"
+    "交通" -> "绿色出行每一步" to "智慧又环保，记账更轻松～"
+    "购物" -> "精致生活的小确幸" to "每一笔记录，都是对自己的宠爱～"
+    "日常" -> "财务生活的小确幸" to "每一笔记账，都陪你更安心～"
+    "娱乐" -> "快乐也是生活的调味剂！" to "认真记录，享受每一刻～"
+    "人情社交" -> "每一次心意的传递" to "都是关系的温暖联系～"
+    "宠物" -> "用心记录，点滴关爱" to "陪伴它的每一天～"
+    "学习工作" -> "学习让生活更美好～" to "点滴投入，未来可期！"
+    "医疗健康" -> "健康是最好的投资" to "好好爱自己，记得关心～"
+    else -> "每一笔，都有意义" to "把生活的点滴，都记录在这里吧～"
+}
+
+private fun rootCategoryArtRes(name: String?): Int? = when (name) {
+    "餐饮" -> R.drawable.root_food
+    "交通" -> R.drawable.root_transport
+    "购物" -> R.drawable.root_shopping
+    "日常" -> R.drawable.root_daily
+    "娱乐" -> R.drawable.root_entertainment
+    "人情社交" -> R.drawable.root_social
+    "宠物" -> R.drawable.root_pet
+    "学习工作" -> R.drawable.root_study
+    "医疗健康" -> R.drawable.root_health
+    "其他" -> R.drawable.root_other
+    else -> null
+}
+
+private fun subcategoryArtRes(name: String?): Int? = when (name) {
+    "早餐" -> R.drawable.sub_breakfast
+    "正餐" -> R.drawable.sub_meal
+    "外卖" -> R.drawable.sub_delivery
+    "奶茶咖啡" -> R.drawable.sub_tea
+    "零食" -> R.drawable.sub_snacks
+    "聚餐" -> R.drawable.sub_gathering
+    "通勤" -> R.drawable.sub_commute
+    "公交地铁" -> R.drawable.sub_metro
+    "打车" -> R.drawable.sub_taxi
+    "火车高铁" -> R.drawable.sub_rail
+    "单车月卡" -> R.drawable.sub_bike_pass
+    "日用百货" -> R.drawable.sub_basket
+    "服饰鞋包" -> R.drawable.sub_clothes
+    "数码配件" -> R.drawable.sub_digital
+    "美妆个护" -> R.drawable.sub_beauty
+    "生活用品" -> R.drawable.sub_household
+    "快递物流" -> R.drawable.sub_parcel
+    "话费网络" -> R.drawable.sub_phone
+    "水电房租" -> R.drawable.sub_utilities
+    "游戏" -> R.drawable.sub_game
+    "影视会员" -> R.drawable.sub_media
+    "旅游出行" -> R.drawable.sub_travel
+    "兴趣爱好" -> R.drawable.sub_hobby
+    "人情红包" -> R.drawable.sub_redpacket
+    "请客送礼" -> R.drawable.sub_gift
+    "恋爱约会" -> R.drawable.sub_date
+    "社交活动" -> R.drawable.sub_social_activity
+    "宠物食品" -> R.drawable.sub_pet_food
+    "宠物用品" -> R.drawable.sub_pet_supplies
+    "宠物医疗" -> R.drawable.sub_pet_health
+    "书籍资料" -> R.drawable.sub_books
+    "课程考试" -> R.drawable.sub_course
+    "文具打印" -> R.drawable.sub_stationery
+    "软件工具" -> R.drawable.sub_software
+    "药品" -> R.drawable.sub_medicine
+    "就诊体检" -> R.drawable.sub_checkup
+    "运动健身" -> R.drawable.sub_fitness
+    "临时支出" -> R.drawable.sub_temporary
+    "杂项备用" -> R.drawable.sub_miscellaneous
+    "未分类" -> R.drawable.sub_unknown
+    else -> null
+}
+
+private fun subcategoryQuoteArtRes(name: String?): Int = when (name) {
+    "餐饮" -> R.drawable.quote_food
+    "交通" -> R.drawable.quote_transport
+    "购物" -> R.drawable.quote_shopping
+    "日常" -> R.drawable.quote_daily
+    "娱乐" -> R.drawable.quote_entertainment
+    "人情社交" -> R.drawable.quote_social
+    "宠物" -> R.drawable.quote_pet
+    "学习工作" -> R.drawable.quote_study
+    "医疗健康" -> R.drawable.quote_health
+    else -> R.drawable.quote_other
 }
 
 @Composable

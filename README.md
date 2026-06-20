@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.9.0-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.9.1-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -83,6 +83,12 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载器会优先使用 Supabase Storage，失败后自动重试并切换 GitHub Release 备用源；下载后必须通过 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.9.1
+
+1. 子分类选择页按照十张设计图完整重构，新增毛绒主分类侧栏、双列子分类卡片、选中状态、场景文案和确认操作。
+2. 补齐单车月卡、社交活动、杂项备用和未分类，并将旧“无法归类”平滑迁移为“未分类”。
+3. 手机验证码入口支持首次验证自动创建云端账号，发送结果改为准确提示短信服务商投递状态。
 
 ### v0.9.0
 

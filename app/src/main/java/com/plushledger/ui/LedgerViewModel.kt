@@ -190,7 +190,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         val channel = if (channelName == "phone") AuthChannel.PHONE else AuthChannel.EMAIL
         viewModelScope.launch {
             state.value = state.value.copy(isBusy = true, message = null)
-            when (val result = auth.sendOtp(channel, identifier, shouldCreateUser = false)) {
+            when (val result = auth.sendOtp(channel, identifier, shouldCreateUser = true)) {
                 is AuthOutcome.OtpSent -> {
                     state.value = state.value.copy(isBusy = false, message = result.message)
                     startOtpCooldown()

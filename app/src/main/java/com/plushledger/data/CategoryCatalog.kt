@@ -43,6 +43,7 @@ object CategoryCatalog {
         CategorySpec("expense.transport.metro", "公交地铁", EXPENSE, "metro", "#6F9ED6", "expense.transport"),
         CategorySpec("expense.transport.taxi", "打车", EXPENSE, "taxi", "#5F91D0", "expense.transport"),
         CategorySpec("expense.transport.rail", "火车高铁", EXPENSE, "rail", "#86B6E8", "expense.transport"),
+        CategorySpec("expense.transport.bikepass", "单车月卡", EXPENSE, "bike_pass", "#79B9DB", "expense.transport"),
 
         CategorySpec("expense.shopping.daily", "日用百货", EXPENSE, "basket", "#F48FB1", "expense.shopping"),
         CategorySpec("expense.shopping.clothes", "服饰鞋包", EXPENSE, "clothes", "#E680A6", "expense.shopping"),
@@ -62,6 +63,7 @@ object CategoryCatalog {
         CategorySpec("expense.social.redpacket", "人情红包", EXPENSE, "redpacket", "#F19A78", "expense.social"),
         CategorySpec("expense.social.gift", "请客送礼", EXPENSE, "gift", "#E98770", "expense.social"),
         CategorySpec("expense.social.date", "恋爱约会", EXPENSE, "date", "#DE837E", "expense.social"),
+        CategorySpec("expense.social.activity", "社交活动", EXPENSE, "social_activity", "#E89482", "expense.social"),
 
         CategorySpec("expense.pet.food", "宠物食品", EXPENSE, "pet_food", "#C69A72", "expense.pet"),
         CategorySpec("expense.pet.supplies", "宠物用品", EXPENSE, "pet_supplies", "#B88766", "expense.pet"),
@@ -77,7 +79,8 @@ object CategoryCatalog {
         CategorySpec("expense.health.fitness", "运动健身", EXPENSE, "fitness", "#D76F79", "expense.health"),
 
         CategorySpec("expense.other.temporary", "临时支出", EXPENSE, "temporary", "#B9B3AA", "expense.other"),
-        CategorySpec("expense.other.unknown", "无法归类", EXPENSE, "unknown", "#A69F96", "expense.other"),
+        CategorySpec("expense.other.miscellaneous", "杂项备用", EXPENSE, "miscellaneous", "#C5A36F", "expense.other"),
+        CategorySpec("expense.other.unknown", "未分类", EXPENSE, "unknown", "#A69F96", "expense.other"),
 
         CategorySpec("income.salary", "工资", INCOME, "salary", "#5E9B83"),
         CategorySpec("income.parttime", "兼职", INCOME, "parttime", "#6E8DBF"),
@@ -120,6 +123,11 @@ object CategoryCatalog {
         "学习" -> "expense.study"
         "人情" -> "expense.social"
         else -> null
+    }
+
+    fun legacyNamesFor(key: String): Set<String> = when (key) {
+        "expense.other.unknown" -> setOf("无法归类")
+        else -> emptySet()
     }
 
     private fun stableId(userId: String, key: String): String =

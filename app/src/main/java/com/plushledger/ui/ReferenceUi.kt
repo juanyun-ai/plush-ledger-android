@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Commute
 import androidx.compose.material.icons.filled.Cookie
 import androidx.compose.material.icons.filled.DeliveryDining
 import androidx.compose.material.icons.filled.DirectionsTransit
+import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -243,6 +244,7 @@ private fun categoryArtIcon(name: String?): ImageVector = when (name) {
     "公交地铁" -> Icons.Default.DirectionsTransit
     "打车" -> Icons.Default.LocalTaxi
     "火车高铁" -> Icons.Default.Train
+    "单车月卡" -> Icons.Default.DirectionsBike
     "购物", "日用百货" -> Icons.Default.ShoppingBasket
     "服饰鞋包" -> Icons.Default.Checkroom
     "数码配件" -> Icons.Default.Headphones
@@ -257,7 +259,7 @@ private fun categoryArtIcon(name: String?): ImageVector = when (name) {
     "兴趣爱好" -> Icons.Default.Palette
     "人情社交", "人情红包", "人情" -> Icons.Default.Redeem
     "请客送礼", "礼金" -> Icons.Default.CardGiftcard
-    "恋爱约会" -> Icons.Default.Favorite
+    "恋爱约会", "社交活动" -> Icons.Default.Favorite
     "宠物", "宠物食品", "宠物用品" -> Icons.Default.Pets
     "宠物医疗" -> Icons.Default.Medication
     "学习工作", "书籍资料" -> Icons.Default.MenuBook
@@ -269,17 +271,17 @@ private fun categoryArtIcon(name: String?): ImageVector = when (name) {
     "运动健身" -> Icons.Default.FitnessCenter
     "工资" -> Icons.Default.CardGiftcard
     "兼职", "理财" -> Icons.Default.Terminal
-    "其他", "临时支出", "无法归类" -> Icons.Default.MoreHoriz
+    "其他", "临时支出", "杂项备用", "未分类", "无法归类" -> Icons.Default.MoreHoriz
     else -> Icons.Default.HelpOutline
 }
 
 private fun categoryArtColor(name: String?): Color = when (name) {
     "餐饮", "早餐", "正餐", "外卖", "奶茶咖啡", "奶茶", "咖啡", "零食", "聚餐" -> Color(0xFFF39C43)
-    "交通", "通勤", "公交地铁", "打车", "火车高铁" -> Color(0xFF6498D5)
+    "交通", "通勤", "公交地铁", "打车", "火车高铁", "单车月卡" -> Color(0xFF6498D5)
     "购物", "日用百货", "服饰鞋包", "数码配件", "美妆个护" -> Color(0xFFEA7FA7)
     "日常", "生活用品", "快递物流", "话费网络", "水电房租", "住房", "居住" -> Color(0xFF6FAE85)
     "娱乐", "游戏", "影视会员", "旅游出行", "兴趣爱好" -> Color(0xFF9B7BDA)
-    "人情社交", "人情红包", "请客送礼", "恋爱约会", "人情" -> Color(0xFFDE8374)
+    "人情社交", "人情红包", "请客送礼", "恋爱约会", "社交活动", "人情" -> Color(0xFFDE8374)
     "宠物", "宠物食品", "宠物用品", "宠物医疗" -> Color(0xFFB98563)
     "学习工作", "书籍资料", "课程考试", "文具打印", "软件工具", "学习" -> Color(0xFF7198CD)
     "医疗健康", "药品", "就诊体检", "运动健身", "医疗" -> Color(0xFFDE7676)

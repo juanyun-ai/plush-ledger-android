@@ -715,7 +715,10 @@ class LedgerRepository(
 
         val merged = defaults.map { default ->
             val spec = CategoryCatalog.specs.first { it.name == default.name && it.kind == default.kind && it.icon == default.icon }
-            val existingMatch = existingByName[default.kind to default.name]?.firstOrNull()
+            val existingMatch = sequenceOf(default.name)
+                .plus(CategoryCatalog.legacyNamesFor(spec.key).asSequence())
+                .mapNotNull { name -> existingByName[default.kind to name]?.firstOrNull() }
+                .firstOrNull()
             val parentId = spec.parentKey?.let(resolvedIds::get) ?: default.parentId
             val target = (existingMatch ?: default).copy(
                 userId = userId,
