@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudSync
@@ -46,14 +48,21 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Paid
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Save
@@ -66,6 +75,7 @@ import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -93,6 +103,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.plushledger.BuildConfig
 import com.plushledger.R
@@ -208,7 +220,7 @@ fun InboxScreen(
     }
 }
 
-private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP, BUDGET, CATEGORY, ABOUT }
+private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP, BUDGET, CATEGORY, ABOUT, PET }
 
 @Composable
 fun MyScreen(
@@ -229,6 +241,7 @@ fun MyScreen(
             onBudget = { page = MyPage.BUDGET },
             onCategory = { page = MyPage.CATEGORY },
             onAbout = { page = MyPage.ABOUT },
+            onPet = { page = MyPage.PET },
             onDarkMode = viewModel::setDarkMode
         )
         MyPage.PROFILE -> ProfileScreen(
@@ -257,6 +270,11 @@ fun MyScreen(
             onReorder = viewModel::moveCategory
         )
         MyPage.ABOUT -> AboutScreen(onBack = { page = MyPage.ROOT })
+        MyPage.PET -> PetRongRongScreen(
+            ledger = state.ledger,
+            onBack = { page = MyPage.ROOT },
+            onRecord = { viewModel.selectTab(AppTab.RECORD) }
+        )
     }
 }
 
@@ -270,6 +288,7 @@ private fun MyRoot(
     onBudget: () -> Unit,
     onCategory: () -> Unit,
     onAbout: () -> Unit,
+    onPet: () -> Unit,
     onDarkMode: (Boolean) -> Unit
 ) {
     val palette = LocalPlushPalette.current
@@ -305,30 +324,38 @@ private fun MyRoot(
             }
         }
         item {
-            ProfileWarmPanel(Modifier.fillMaxWidth().clickable(onClick = onProfile), padding = 14.dp) {
+            ProfileWarmPanel(Modifier.fillMaxWidth().clickable(onClick = onProfile), padding = 12.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(state.avatarUrl, 58.dp)
-                    Spacer(Modifier.width(12.dp))
+                    Avatar(state.avatarUrl, 64.dp)
+                    Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
                             profile?.displayName ?: state.session?.displayName ?: "绒绒用户",
                             fontWeight = FontWeight.Black,
-                            fontSize = 18.sp,
+                        fontSize = 21.sp,
                             color = palette.ink,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text("享受每一次记录的好习惯～", color = palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("享受每一次记录的好习惯～", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(6.dp))
-                        Text(badge, color = badgeColor(profile?.role, profile?.membershipTier), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFFFFEDC8)) {
+                            Text(
+                                badge,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                color = badgeColor(profile?.role, profile?.membershipTier),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
-                    MascotArt(76.dp)
+                    MascotArt(78.dp)
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
                 Surface(shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.78f), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
-                    Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ProfileMetric("连续记账", "$streakDays 天", palette.rose, Modifier.weight(1f))
-                        Box(Modifier.width(1.dp).height(58.dp).background(palette.border))
+                        Box(Modifier.width(1.dp).height(44.dp).background(palette.border))
                         ProfileMetric("本月已记录", "$monthCount 笔", palette.moss, Modifier.weight(1f))
                     }
                 }
@@ -361,18 +388,7 @@ private fun MyRoot(
                 }
             }
         }
-        item {
-            ProfileWarmPanel(padding = 16.dp) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("每一笔记录，都是生活的温柔片段", fontWeight = FontWeight.Bold, color = palette.ink)
-                        Spacer(Modifier.height(6.dp))
-                        Text(if (state.session?.accessToken != null) "已开启云端同步，安心记录每一天～" else "当前为本地模式，请记得及时导出备份～", color = palette.muted, fontSize = 12.sp)
-                    }
-                    Image(painterResource(R.drawable.art_plant), contentDescription = null, modifier = Modifier.size(72.dp), contentScale = ContentScale.Crop)
-                }
-            }
-        }
+        item { PetEntryCard(onPet) }
     }
     if (showExportDialog) {
         AlertDialog(
@@ -395,6 +411,230 @@ private fun MyRoot(
                 }) { Text("确认导出") }
             }
         )
+    }
+}
+
+@Composable
+private fun PetEntryCard(onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFFFFF1F5),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF6DCE5)),
+        shadowElevation = 7.dp
+    ) {
+        Row(Modifier.padding(start = 16.dp, top = 10.dp, end = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("宠物绒绒", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    Spacer(Modifier.width(5.dp))
+                    Icon(Icons.Default.Star, contentDescription = null, tint = palette.pink, modifier = Modifier.size(15.dp))
+                }
+                Text("了解绒绒，和绒绒互动～", color = palette.muted, fontSize = 12.sp)
+                Spacer(Modifier.height(5.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TinyPill("今日陪伴", palette.pink)
+                    TinyPill("摸摸绒绒", palette.moss)
+                    TinyPill("绒绒档案", palette.lilac)
+                }
+            }
+            MascotArt(72.dp)
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PetRongRongScreen(ledger: LedgerState, onBack: () -> Unit, onRecord: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("pet_rongrong", Context.MODE_PRIVATE) }
+    var companionValue by rememberSaveable { mutableIntStateOf(prefs.getInt("companion", 280)) }
+    var mood by rememberSaveable { mutableStateOf(prefs.getString("mood", "开心") ?: "开心") }
+    val level = (companionValue / 100 + 2).coerceIn(1, 10)
+    val levelTarget = level * 100
+    val progress = (companionValue.toFloat() / levelTarget.coerceAtLeast(100)).coerceIn(0f, 1f)
+
+    fun interact(label: String, points: Int, newMood: String) {
+        companionValue = (companionValue + points).coerceAtMost(999)
+        mood = newMood
+        prefs.edit().putInt("companion", companionValue).putString("mood", mood).apply()
+        Toast.makeText(context, "$label，陪伴值 +$points", Toast.LENGTH_SHORT).show()
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 118.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
+                Text("宠物专题", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 24.sp)
+                Spacer(Modifier.width(10.dp))
+                TinyPill("绒绒小窝", palette.pink)
+                Spacer(Modifier.weight(1f))
+                Surface(shape = androidx.compose.foundation.shape.CircleShape, color = Color(0xFFFFF2F5), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                    Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.pink, modifier = Modifier.padding(10.dp).size(20.dp))
+                }
+            }
+        }
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(26.dp),
+                color = Color(0xFFFFF8EA),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.border),
+                shadowElevation = 7.dp
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("你好呀，我是绒绒", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 20.sp, maxLines = 1)
+                        Text("今天也要一起好好记账哦～", color = palette.muted, fontSize = 12.sp)
+                        Spacer(Modifier.height(18.dp))
+                        Surface(shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.86f)) {
+                            Column(Modifier.padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("陪伴值", color = palette.ink, fontWeight = FontWeight.Black)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Lv.$level", color = palette.pink, fontWeight = FontWeight.Black)
+                                    Spacer(Modifier.weight(1f))
+                                    Text("$companionValue / $levelTarget", color = palette.muted, fontSize = 11.sp)
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                LinearProgressIndicator(
+                                    progress = { progress },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp)),
+                                    color = palette.pink,
+                                    trackColor = Color(0xFFFFDEE8)
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("今日心情", color = palette.ink, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.width(10.dp))
+                                    TinyPill("♥ $mood", palette.pink)
+                                }
+                            }
+                        }
+                    }
+                    MascotArt(128.dp)
+                }
+            }
+        }
+        item {
+            PetSectionHeader("1", "快速互动", "让绒绒开心一下吧～")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PetInteraction(Icons.Default.Fastfood, "喂一喂", "小零食 +10", palette.coral, Modifier.weight(1f)) { interact("绒绒吃饱啦", 10, "满足") }
+                PetInteraction(Icons.Default.TouchApp, "摸摸头", "陪伴值 +5", palette.moss, Modifier.weight(1f)) { interact("绒绒蹭了蹭你", 5, "开心") }
+                PetInteraction(Icons.Default.Favorite, "抱一抱", "心情 +10", palette.pink, Modifier.weight(1f)) { interact("抱抱成功", 10, "幸福") }
+                PetInteraction(Icons.Default.ChatBubble, "聊聊天", "听绒绒说话", palette.lilac, Modifier.weight(1f)) { interact("绒绒说：今天也辛苦啦", 3, "安心") }
+            }
+        }
+        item {
+            PetSectionHeader("2", "每日照料", "完成任务获得陪伴值和奖励～")
+            PetTaskRow(Icons.Default.EditNote, "完成一笔记账", "+10 陪伴值", "去完成", palette.rose, onRecord)
+            PetTaskRow(Icons.Default.CheckCircle, "连续打卡", "${ledger.transactions.map { it.localDateForProfile() }.distinct().size.coerceAtMost(99)} 天", "去完成", palette.moss) {
+                Toast.makeText(context, "今天完成记账后会自动计入打卡", Toast.LENGTH_SHORT).show()
+            }
+            PetTaskRow(Icons.Default.Fastfood, "领取小零食", "每日可领取一次", "领取", palette.coral) { interact("领取了今日小零食", 8, "满足") }
+        }
+        item {
+            PetSectionHeader("3", "绒绒衣橱 & 小窝", "把小窝装扮得更温馨吧～")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                PetFeatureTile(Icons.Default.Style, "今日穿搭", "可爱出门啦", Color(0xFFFFEEF3), Modifier.weight(1f)) { Toast.makeText(context, "今日穿搭已保存", Toast.LENGTH_SHORT).show() }
+                PetFeatureTile(Icons.Default.Palette, "主题皮肤", "换个风格吧", Color(0xFFEEF9F7), Modifier.weight(1f)) { Toast.makeText(context, "更多主题正在准备中", Toast.LENGTH_SHORT).show() }
+                PetFeatureTile(Icons.Default.Home, "小窝布置", "布置温馨小窝", Color(0xFFFFF5DF), Modifier.weight(1f)) { Toast.makeText(context, "小窝布置已开启", Toast.LENGTH_SHORT).show() }
+            }
+        }
+        item {
+            PetSectionHeader("4", "绒绒日记 & 故事", "记录我们的点滴时光～")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                PetFeatureTile(Icons.Default.MenuBook, "绒绒日记", "今日心情记录", Color(0xFFFFEEF3), Modifier.weight(1f)) { Toast.makeText(context, "今日心情：$mood", Toast.LENGTH_SHORT).show() }
+                PetFeatureTile(Icons.Default.ChatBubble, "成长故事", "一起走过的日子", Color(0xFFFFF1EB), Modifier.weight(1f)) { Toast.makeText(context, "已陪伴绒绒 ${companionValue.coerceAtLeast(1)} 点时光", Toast.LENGTH_SHORT).show() }
+                PetFeatureTile(Icons.Default.EmojiEvents, "收藏图鉴", "解锁可爱瞬间", Color(0xFFFFF6E5), Modifier.weight(1f)) { Toast.makeText(context, "当前已解锁 Lv.$level 图鉴", Toast.LENGTH_SHORT).show() }
+            }
+        }
+        item {
+            PetSectionHeader("5", "陪伴奖励", "陪伴越久，奖励越多哦～")
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    "小星星贴纸" to 3,
+                    "爱心徽章" to 5,
+                    "绒绒头像框" to 7,
+                    "限定表情包" to 9,
+                    "专属称号" to 10
+                ).forEach { (name, unlockLevel) ->
+                    Surface(shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                        Column(Modifier.width(104.dp).padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(if (level >= unlockLevel) Icons.Default.EmojiEvents else Icons.Default.Lock, contentDescription = null, tint = if (level >= unlockLevel) palette.rose else palette.muted, modifier = Modifier.size(28.dp))
+                            Spacer(Modifier.height(5.dp))
+                            Text(name, color = palette.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(if (level >= unlockLevel) "已解锁" else "Lv.$unlockLevel 解锁", color = palette.muted, fontSize = 9.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PetSectionHeader(index: String, title: String, subtitle: String) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = androidx.compose.foundation.shape.CircleShape, color = palette.coral) {
+            Text(index, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color.White, fontWeight = FontWeight.Black)
+        }
+        Spacer(Modifier.width(9.dp))
+        Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp)
+        Spacer(Modifier.width(9.dp))
+        Text(subtitle, color = palette.pink, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun PetInteraction(icon: ImageVector, title: String, subtitle: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(modifier = modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+        Column(Modifier.padding(horizontal = 5.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(30.dp))
+            Spacer(Modifier.height(6.dp))
+            Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 12.sp, maxLines = 1)
+            Text(subtitle, color = color, fontSize = 9.sp, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun PetTaskRow(icon: ImageVector, title: String, subtitle: String, action: String, color: Color, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(16.dp)).background(palette.surface).clickable(onClick = onClick).padding(11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(30.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 14.sp)
+            Text(subtitle, color = palette.muted, fontSize = 11.sp)
+        }
+        TinyPill(action, color)
+    }
+}
+
+@Composable
+private fun PetFeatureTile(icon: ImageVector, title: String, subtitle: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Column(
+        modifier.clip(RoundedCornerShape(18.dp)).background(color).clickable(onClick = onClick).padding(12.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Icon(icon, contentDescription = null, tint = palette.rose, modifier = Modifier.size(28.dp))
+        Spacer(Modifier.height(9.dp))
+        Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 13.sp, maxLines = 1)
+        Text(subtitle, color = palette.muted, fontSize = 9.sp, maxLines = 1)
     }
 }
 
@@ -822,7 +1062,7 @@ private fun ProfileSectionTitle(text: String) {
 @Composable
 private fun TinyPill(text: String, color: Color) {
     Surface(shape = RoundedCornerShape(14.dp), color = color.copy(alpha = 0.14f)) {
-        Text(text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text(text, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = color, fontWeight = FontWeight.Bold, fontSize = 10.sp, maxLines = 1)
     }
 }
 
@@ -1643,39 +1883,79 @@ private fun IdentityChangeDialog(
 @Composable
 private fun ProfileCountryCodeButton(value: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
     var showPicker by rememberSaveable { mutableStateOf(false) }
-    OutlinedButton(onClick = { showPicker = true }, modifier = modifier.height(56.dp)) {
-        Text(value, fontWeight = FontWeight.Bold)
+    val palette = LocalPlushPalette.current
+    OutlinedButton(onClick = { showPicker = true }, modifier = modifier.height(56.dp), shape = RoundedCornerShape(18.dp), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+        Text(value, color = palette.rose, fontWeight = FontWeight.Black)
     }
     if (showPicker) {
-        AlertDialog(
-            onDismissRequest = { showPicker = false },
-            title = { Text("选择区号", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    profilePhoneCountryOptions.forEach { (name, code) ->
-                        OutlinedButton(
-                            onClick = {
-                                onChange(code)
-                                showPicker = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("$name  $code")
+        Dialog(onDismissRequest = { showPicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(0.86f).heightIn(max = 650.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = palette.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.border),
+                shadowElevation = 18.dp
+            ) {
+                Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = palette.moss, modifier = Modifier.size(12.dp))
+                        Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.rose, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(9.dp))
+                        Text("选择区号", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                        Spacer(Modifier.width(9.dp))
+                        Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.rose, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Default.Star, contentDescription = null, tint = palette.moss, modifier = Modifier.size(12.dp))
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        items(profilePhoneCountryOptions) { item ->
+                            val selected = value == item.code
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).clickable {
+                                    onChange(item.code)
+                                    showPicker = false
+                                },
+                                shape = RoundedCornerShape(22.dp),
+                                color = if (selected) Color(0xFFFFF6E7) else palette.surface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) palette.rose else palette.border)
+                            ) {
+                                Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(item.flag, fontSize = 24.sp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(item.name, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold)
+                                    Text(item.code, color = palette.rose, fontWeight = FontWeight.Black)
+                                    if (selected) Text("  ✓", color = palette.rose, fontWeight = FontWeight.Black)
+                                }
+                            }
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                        TextButton(onClick = { showPicker = false }) { Text("取消", color = palette.pink, fontWeight = FontWeight.Bold) }
+                        Spacer(Modifier.weight(1f))
+                        MascotArt(72.dp)
+                    }
                 }
-            },
-            confirmButton = {}
-        )
+            }
+        }
     }
 }
 
+private data class ProfilePhoneCountry(val flag: String, val name: String, val code: String)
+
 private val profilePhoneCountryOptions = listOf(
-    "中国大陆" to "+86",
-    "中国香港" to "+852",
-    "中国澳门" to "+853",
-    "中国台湾" to "+886",
-    "美国/加拿大" to "+1"
+    ProfilePhoneCountry("🇨🇳", "中国大陆", "+86"),
+    ProfilePhoneCountry("🇭🇰", "中国香港", "+852"),
+    ProfilePhoneCountry("🇲🇴", "中国澳门", "+853"),
+    ProfilePhoneCountry("🇹🇼", "中国台湾", "+886"),
+    ProfilePhoneCountry("🇺🇸🇨🇦", "美国/加拿大", "+1"),
+    ProfilePhoneCountry("🇬🇧", "英国", "+44"),
+    ProfilePhoneCountry("🇯🇵", "日本", "+81"),
+    ProfilePhoneCountry("🇰🇷", "韩国", "+82"),
+    ProfilePhoneCountry("🇸🇬", "新加坡", "+65"),
+    ProfilePhoneCountry("🇦🇺", "澳大利亚", "+61"),
+    ProfilePhoneCountry("🇳🇿", "新西兰", "+64"),
+    ProfilePhoneCountry("🇩🇪", "德国", "+49")
 )
 
 @Composable
@@ -1711,7 +1991,7 @@ private fun Avatar(url: String?, size: androidx.compose.ui.unit.Dp) {
 @Composable
 private fun ProfileMetric(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
     val palette = LocalPlushPalette.current
-    Column(modifier.clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = 0.12f)).padding(12.dp)) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = 0.12f)).padding(8.dp)) {
         Text(label, color = palette.muted, fontSize = 11.sp)
         Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

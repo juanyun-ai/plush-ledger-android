@@ -47,7 +47,10 @@ Deno.serve(async (request: Request) => {
             "字段固定为 type, amount_minor, category_name, category_parent, account_name, note, occurred_at。",
             "type 只能是 expense 或 income；amount_minor 必须是人民币分的正整数。",
             "category_name 与 category_parent 必须从用户提供的分类中选择；account_name 必须从用户账户中选择。",
-            "无法判断时选择最贴近的分类，不要创造分类。note 保留简短事实；occurred_at 为毫秒时间戳，无法判断时为 null。",
+            "用户明确点名分类、父分类或账户时必须优先采用，不得用模型猜测覆盖用户指令。",
+            "准确解析任意日期，包括完整年月日、月日、昨天、前天、几天前、上周、本周和上个月；按 Asia/Shanghai 与 now 计算。",
+            "occurred_at 必须是所识别日期时间的毫秒时间戳；只有文字完全没有日期线索时才返回 null。",
+            "无法判断时选择最贴近的现有分类，不要创造分类。note 只保留商户、用途或物品等简短事实，不重复日期、金额和账户。",
           ].join("\n"),
         },
         {

@@ -370,7 +370,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     fun analyzeAiEntry(text: String) {
         val trimmed = text.trim().take(160)
         if (trimmed.isBlank()) {
-            state.value = state.value.copy(message = "先输入或说出一笔账目")
+            state.value = state.value.copy(message = "请先输入一笔账目")
             return
         }
         if (state.value.isAiAnalyzing) return
@@ -380,7 +380,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             runCatching { ledger.analyzeAiEntry(trimmed, currentLedger) }
                 .onSuccess { suggestion ->
                     state.value = if (suggestion == null) {
-                        state.value.copy(isAiAnalyzing = false, message = "没有听清金额，请试试“午饭 28 元，用微信”")
+                        state.value.copy(isAiAnalyzing = false, message = "没有识别到金额，请试试“6月27日，瑞幸咖啡15元，微信支付”")
                     } else {
                         state.value.copy(isAiAnalyzing = false, aiSuggestion = suggestion)
                     }

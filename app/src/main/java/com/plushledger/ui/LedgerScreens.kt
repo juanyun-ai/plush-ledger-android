@@ -1,14 +1,12 @@
 package com.plushledger.ui
 
-import android.app.Activity
 import android.app.TimePickerDialog
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -67,7 +65,6 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Redeem
@@ -82,6 +79,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,6 +88,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -105,7 +105,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.plushledger.data.AccountEntity
 import com.plushledger.data.AiLedgerAnalysis
 import com.plushledger.R
@@ -139,57 +140,14 @@ fun HomeScreen(
     onDismissAi: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
-    val context = LocalContext.current
     var showCalendar by rememberSaveable { mutableStateOf(false) }
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
     var aiText by rememberSaveable { mutableStateOf("") }
-    var voiceHint by rememberSaveable { mutableStateOf<String?>(null) }
-    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val recognized = if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        } else {
-            null
+    LaunchedEffect(aiSuggestion) {
+        if (aiSuggestion != null) {
+            showAiDialog = false
+            aiText = ""
         }
-        if (recognized.isNullOrBlank()) {
-            voiceHint = "没有识别到语音，可以直接输入。"
-        } else {
-            aiText = recognized.take(160)
-            voiceHint = null
-            showAiDialog = true
-        }
-    }
-    fun voiceRecognitionIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-        .putExtra(RecognizerIntent.EXTRA_PROMPT, "例如：午饭 28 元，用微信")
-    val launchVoiceRecognition: () -> Unit = {
-        val intent = voiceRecognitionIntent()
-        if (intent.resolveActivity(context.packageManager) == null) {
-            voiceHint = "麦克风权限已开启，但此设备没有可用的中文语音识别服务。"
-        } else {
-            try {
-                voiceLauncher.launch(intent)
-            } catch (_: ActivityNotFoundException) {
-                voiceHint = "当前系统的语音识别服务不可用，请启用系统语音服务后重试。"
-            } catch (_: SecurityException) {
-                voiceHint = "语音服务未获授权，请在系统设置中允许绒绒记账使用麦克风。"
-            }
-        }
-    }
-    val requestAudioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) {
-            voiceHint = "未获得麦克风权限，仍可直接输入。"
-        } else {
-            launchVoiceRecognition()
-        }
-    }
-    val startVoiceRecognition: () -> Unit = {
-        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            launchVoiceRecognition()
-        } else {
-            requestAudioPermission.launch(android.Manifest.permission.RECORD_AUDIO)
-        }
-        Unit
     }
     val month = YearMonth.from(selectedDate)
     val todayExpense = ledger.transactions.filter { it.type == "expense" && it.localDate() == selectedDate }.sumOf { it.amountMinor }
@@ -295,7 +253,11 @@ fun HomeScreen(
                     Icons.Default.AutoAwesome,
                     Modifier.weight(1f),
                     color = palette.moss,
-                    onClick = { showAiDialog = true }
+                    onClick = {
+                        aiText = ""
+                        onDismissAi()
+                        showAiDialog = true
+                    }
                 )
             }
         }
@@ -319,75 +281,222 @@ fun HomeScreen(
     }
 
     if (showAiDialog) {
-        AlertDialog(
-            onDismissRequest = { if (!isAiAnalyzing) showAiDialog = false },
-            title = { Text("AI 智能记账", fontWeight = FontWeight.Black) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("说一句或输入一笔账，例如“午饭 28 元，用微信”。", color = palette.muted, fontSize = 13.sp)
-                    OutlinedTextField(
-                        value = aiText,
-                        onValueChange = { aiText = it.take(160); voiceHint = null },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        placeholder = { Text("输入账目内容") },
-                        trailingIcon = {
-                            IconButton(onClick = startVoiceRecognition) {
-                                Icon(Icons.Default.Mic, contentDescription = "语音输入", tint = palette.moss)
-                            }
-                        }
-                    )
-                    voiceHint?.let { Text(it, color = palette.rose, fontSize = 12.sp) }
-                    if (isAiAnalyzing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = palette.moss)
-                    Text("识别结果会先由你确认，未确认不会写入账本。", color = palette.muted, fontSize = 12.sp)
+        AiEntryDialog(
+            text = aiText,
+            analyzing = isAiAnalyzing,
+            onTextChange = { aiText = it.take(160) },
+            onDismiss = {
+                if (!isAiAnalyzing) {
+                    aiText = ""
+                    showAiDialog = false
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showAiDialog = false }, enabled = !isAiAnalyzing) { Text("取消") }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onAnalyzeAi(aiText)
-                        showAiDialog = false
-                    },
-                    enabled = aiText.isNotBlank() && !isAiAnalyzing
-                ) { Text("开始识别", color = palette.moss) }
-            },
-            containerColor = palette.surface
+            onAnalyze = { onAnalyzeAi(aiText) }
         )
     }
 
     aiSuggestion?.let { suggestion ->
-        AlertDialog(
-            onDismissRequest = onDismissAi,
-            title = { Text("确认这笔账", fontWeight = FontWeight.Black) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Text(suggestion.sourceText, color = palette.muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    AiResultRow("类型", if (suggestion.type == "income") "收入" else "支出")
-                    AiResultRow("金额", Money.formatCny(suggestion.amountMinor))
-                    AiResultRow("分类", suggestion.categoryLabel)
-                    AiResultRow("账户", suggestion.accountLabel)
-                    if (suggestion.note != suggestion.sourceText) AiResultRow("备注", suggestion.note)
-                    suggestion.notice?.let { Text(it, color = palette.muted, fontSize = 11.sp) }
-                    Text(if (suggestion.cloudAssisted) "已由已配置的 AI 服务辅助识别。" else "本次使用离线规则识别，不会上传文字。", color = palette.muted, fontSize = 11.sp)
+        AiConfirmationDialog(suggestion, onDismissAi) { onSaveAi(suggestion) }
+    }
+}
+
+@Composable
+private fun AiEntryDialog(
+    text: String,
+    analyzing: Boolean,
+    onTextChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onAnalyze: () -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.9f),
+            shape = RoundedCornerShape(28.dp),
+            color = palette.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, palette.border),
+            shadowElevation = 18.dp
+        ) {
+            Column(Modifier.padding(horizontal = 24.dp, vertical = 18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("AI 智能记账", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 24.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFFFC85A), modifier = Modifier.size(20.dp))
                 }
-            },
-            dismissButton = { TextButton(onClick = onDismissAi) { Text("取消") } },
-            confirmButton = { TextButton(onClick = { onSaveAi(suggestion) }) { Text("确认记账", color = palette.moss) } },
-            containerColor = palette.surface
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "例如“6月27日，买了一杯瑞幸咖啡，微信支付”。",
+                    color = palette.muted,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = palette.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFFDFC0)),
+                    shadowElevation = 5.dp
+                ) {
+                    BasicTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        enabled = !analyzing,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(14.dp),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = palette.ink, fontSize = 16.sp, lineHeight = 22.sp),
+                        decorationBox = { inner ->
+                            if (text.isBlank()) Text("输入账目内容", color = palette.muted.copy(alpha = 0.72f), fontSize = 16.sp)
+                            inner()
+                        }
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                if (analyzing) {
+                    AiAnalyzingIndicator()
+                } else {
+                    Text("识别结果会先由你确认，未确认不会写入账本。", color = palette.muted, fontSize = 11.sp)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    MascotArt(58.dp)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onDismiss, enabled = !analyzing) {
+                        Text("取消", color = palette.pink, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Surface(
+                        modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(enabled = text.isNotBlank() && !analyzing, onClick = onAnalyze),
+                        shape = RoundedCornerShape(24.dp),
+                        color = if (text.isNotBlank() && !analyzing) palette.moss else palette.moss.copy(alpha = 0.42f),
+                        shadowElevation = 7.dp
+                    ) {
+                        Text(
+                            if (analyzing) "正在识别" else "开始识别",
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiAnalyzingIndicator() {
+    val palette = LocalPlushPalette.current
+    val transition = rememberInfiniteTransition(label = "ai-analyzing")
+    val pulse by transition.animateFloat(
+        initialValue = 0.72f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(720), RepeatMode.Reverse),
+        label = "pulse"
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            Icons.Default.AutoAwesome,
+            contentDescription = null,
+            tint = Color(0xFFFFC85A),
+            modifier = Modifier.size(22.dp).scale(pulse).alpha(pulse)
         )
+        Spacer(Modifier.width(10.dp))
+        Text("绒绒正在理解日期、分类和账户", color = palette.moss, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(8.dp))
+        repeat(3) { index ->
+            Box(
+                Modifier.padding(horizontal = 2.dp).size(5.dp)
+                    .scale((pulse - index * 0.08f).coerceAtLeast(0.62f))
+                    .clip(CircleShape)
+                    .background(palette.moss.copy(alpha = 0.55f + index * 0.12f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiConfirmationDialog(suggestion: AiLedgerAnalysis, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    val dateText = Instant.ofEpochMilli(suggestion.occurredAt).atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm"))
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.82f),
+            shape = RoundedCornerShape(28.dp),
+            color = palette.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD58A)),
+            shadowElevation = 20.dp
+        ) {
+            Column(Modifier.padding(horizontal = 22.dp, vertical = 18.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(Modifier.weight(1f)) {
+                        Text("确认这笔账", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 24.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text(suggestion.sourceText, color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    MascotArt(70.dp)
+                }
+                Spacer(Modifier.height(8.dp))
+                AiResultRow("类型", if (suggestion.type == "income") "收入" else "支出")
+                AiResultRow("金额", Money.formatCny(suggestion.amountMinor))
+                AiResultRow("日期", dateText)
+                AiResultRow("分类", suggestion.categoryLabel)
+                AiResultRow("账户", suggestion.accountLabel)
+                AiResultRow("备注", suggestion.note.ifBlank { suggestion.sourceText })
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = palette.muted, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        if (suggestion.cloudAssisted) "已由已配置的 AI 服务辅助识别。" else "本次使用离线规则识别，不会上传文字。",
+                        color = palette.muted,
+                        fontSize = 10.sp
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onDismiss) {
+                        Text("取消", color = palette.pink, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Surface(
+                        modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(onClick = onConfirm),
+                        shape = RoundedCornerShape(24.dp),
+                        color = palette.moss,
+                        shadowElevation = 7.dp
+                    ) {
+                        Text(
+                            "确认记账",
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
 private fun AiResultRow(label: String, value: String) {
     val palette = LocalPlushPalette.current
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = palette.muted, fontSize = 12.sp, modifier = Modifier.width(42.dp))
-        Text(value, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFFFFF3DE)) {
+            Text(
+                label,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                color = Color(0xFF9A7045),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(value, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border.copy(alpha = 0.62f)))
 }
 
 @Composable

@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,12 +26,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Lock
@@ -38,9 +41,11 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,6 +55,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -70,14 +76,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -314,148 +326,159 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
     val palette = LocalPlushPalette.current
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 28.dp),
+        modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+        contentPadding = PaddingValues(horizontal = 28.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Image(
-                painter = painterResource(R.drawable.brand_logo_transparent),
-                contentDescription = "绒绒记账",
-                modifier = Modifier.fillMaxWidth(0.76f).heightIn(max = 210.dp),
-                contentScale = ContentScale.Fit
-            )
-            Spacer(Modifier.height(14.dp))
-            Text("绒绒记账", fontSize = 30.sp, fontWeight = FontWeight.Black, color = palette.ink)
-            Spacer(Modifier.height(18.dp))
-            PlushCard(Modifier.fillMaxWidth()) {
-                TabRow(selectedTabIndex = when (mode) { "phone" -> 1; "local" -> 2; else -> 0 }) {
-                    Tab(selected = mode == "email", onClick = { mode = "email"; viewModel.showAuthPage(AuthPage.LOGIN) }, text = { Text("邮箱") })
-                    Tab(selected = mode == "phone", onClick = { mode = "phone"; viewModel.showAuthPage(AuthPage.LOGIN) }, text = { Text("手机") })
-                    Tab(selected = mode == "local", onClick = { mode = "local"; viewModel.showAuthPage(AuthPage.LOGIN) }, text = { Text("本地") })
-                }
-                Spacer(Modifier.height(14.dp))
-                if (mode == "local") {
-                    OutlinedTextField(localName, { localName = it.take(32) }, label = { Text("用户名") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        localPassword,
-                        { localPassword = it.take(64) },
-                        label = { Text("密码") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password)
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    PlushButton("进入本地账本", Icons.Default.Lock, Modifier.fillMaxWidth()) {
-                        viewModel.signInLocal(localName, localPassword)
+            Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
+                Image(
+                    painter = painterResource(R.drawable.ic_launcher_transparent),
+                    contentDescription = "绒绒",
+                    modifier = Modifier.size(150.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFBD42), modifier = Modifier.align(Alignment.CenterStart).padding(start = 38.dp).size(18.dp))
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFFF9A80), modifier = Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 18.dp).size(15.dp))
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.moss.copy(alpha = 0.8f), modifier = Modifier.align(Alignment.CenterEnd).padding(end = 40.dp, top = 24.dp).size(13.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.rose, modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(7.dp))
+                Image(
+                    painter = painterResource(R.drawable.brand_wordmark),
+                    contentDescription = "绒绒记账",
+                    modifier = Modifier.width(200.dp).height(54.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(Modifier.width(7.dp))
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.rose, modifier = Modifier.size(12.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFC85A), modifier = Modifier.size(11.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("温暖每一笔，记录每一天", color = Color(0xFFC79B6A), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFC85A), modifier = Modifier.size(11.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth().shadow(14.dp, RoundedCornerShape(30.dp), spotColor = palette.rose.copy(alpha = 0.14f)),
+                shape = RoundedCornerShape(30.dp),
+                color = palette.surface,
+                border = BorderStroke(1.dp, palette.border)
+            ) {
+                Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+                    AuthModeTabs(mode) { selected ->
+                        mode = selected
+                        viewModel.showAuthPage(AuthPage.LOGIN)
                     }
-                } else if (mode == "phone") {
-                    Text("手机号验证码登录", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = palette.ink)
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CountryCodeButton(phoneCountryCode, Modifier.width(92.dp)) { phoneCountryCode = it }
-                        OutlinedTextField(
-                            phone,
-                            { phone = it.filter(Char::isDigit).take(15) },
-                            label = { Text("手机号") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone)
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    OtpEntryRow(
-                        code = phoneOtp,
-                        onCodeChange = { phoneOtp = it },
-                        cooldown = state.otpCooldown,
-                        busy = state.isBusy,
-                        onSend = { viewModel.sendLoginOtp("phone", "$phoneCountryCode$phone") }
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    PlushButton("手机号登录", Icons.Default.Phone, Modifier.fillMaxWidth(), enabled = !state.isBusy) {
-                        viewModel.verifyLoginOtp("phone", "$phoneCountryCode$phone", phoneOtp)
-                    }
-                    Text("短信验证码是否能收到，取决于后台短信服务商是否已放开对应地区和号码。", color = palette.muted, fontSize = 11.sp, lineHeight = 16.sp)
-                    SocialLoginRow(viewModel)
-                } else {
-                    when (state.authPage) {
-                        AuthPage.LOGIN -> {
-                            TabRow(selectedTabIndex = if (emailLoginMode == "password") 0 else 1) {
-                                Tab(selected = emailLoginMode == "password", onClick = { emailLoginMode = "password" }, text = { Text("密码登录") })
-                                Tab(selected = emailLoginMode == "otp", onClick = { emailLoginMode = "otp" }, text = { Text("验证码登录") })
-                            }
+                    Spacer(Modifier.height(12.dp))
+                    when (mode) {
+                        "local" -> {
+                            Text("本地账本", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                            Spacer(Modifier.height(10.dp))
+                            AuthTextField(localName, { localName = it.take(32) }, "用户名", Icons.Default.Person)
+                            Spacer(Modifier.height(10.dp))
+                            AuthTextField(localPassword, { localPassword = it.take(64) }, "密码", Icons.Default.Lock, password = true)
                             Spacer(Modifier.height(12.dp))
-                            OutlinedTextField(email, { email = it.trim() }, label = { Text("邮箱") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                            AuthPrimaryButton("进入本地账本", Icons.Default.Lock, localName.isNotBlank() && localPassword.isNotBlank()) {
+                                viewModel.signInLocal(localName, localPassword)
+                            }
                             Spacer(Modifier.height(10.dp))
-                            if (emailLoginMode == "password") {
-                                OutlinedTextField(
-                                    password,
-                                    { password = it.take(64) },
-                                    label = { Text("密码") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    visualTransformation = PasswordVisualTransformation()
-                                )
-                                Spacer(Modifier.height(14.dp))
-                                PlushButton("邮箱密码登录", Icons.Default.Lock, Modifier.fillMaxWidth(), enabled = !state.isBusy) {
-                                    viewModel.signInWithPassword(email, password)
-                                }
-                            } else {
-                                OtpEntryRow(
-                                    code = otp,
-                                    onCodeChange = { otp = it },
-                                    cooldown = state.otpCooldown,
-                                    busy = state.isBusy,
-                                    onSend = { viewModel.sendLoginOtp("email", email) }
-                                )
-                                Spacer(Modifier.height(14.dp))
-                                PlushButton("邮箱验证码登录", Icons.Default.Shield, Modifier.fillMaxWidth(), enabled = !state.isBusy) {
-                                    viewModel.verifyLoginOtp("email", email, otp)
-                                }
-                            }
-                            TextButton(onClick = { viewModel.showAuthPage(AuthPage.RESET) }, modifier = Modifier.fillMaxWidth()) { Text("忘记密码") }
-                            OutlinedButton(onClick = { viewModel.showAuthPage(AuthPage.REGISTER) }, modifier = Modifier.fillMaxWidth()) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(Modifier.size(8.dp))
-                                Text("注册新账号")
-                            }
-                            SocialLoginRow(viewModel)
+                            Text("本地模式无需注册，数据只保存在当前设备。", color = palette.muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                         }
-                        AuthPage.REGISTER, AuthPage.RESET -> {
-                            val isReset = state.authPage == AuthPage.RESET
-                            Text(if (isReset) "重置密码" else "注册账号", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = palette.ink)
+                        "phone" -> {
+                            Text("手机号验证码登录", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 20.sp)
                             Spacer(Modifier.height(10.dp))
-                            OutlinedTextField(email, { email = it.trim() }, label = { Text("邮箱") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                            Spacer(Modifier.height(10.dp))
-                            OtpEntryRow(
-                                code = otp,
-                                onCodeChange = { otp = it },
-                                cooldown = state.otpCooldown,
-                                busy = state.isBusy,
-                                onSend = { viewModel.sendRegistrationOtp(email, isReset) }
-                            )
-                            if (!isReset) {
-                                Spacer(Modifier.height(10.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Checkbox(
-                                        checked = agreementChecked,
-                                        onCheckedChange = { if (agreementRead) agreementChecked = it },
-                                        enabled = agreementRead
-                                    )
-                                    TextButton(onClick = { showAgreement = true }) { Text("用户协议与隐私政策") }
-                                }
+                            Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                CountryCodeButton(phoneCountryCode, Modifier.width(102.dp)) { phoneCountryCode = it }
+                                AuthTextField(
+                                    phone,
+                                    { phone = it.filter(Char::isDigit).take(15) },
+                                    "请输入手机号",
+                                    Icons.Default.Phone,
+                                    modifier = Modifier.weight(1f),
+                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone
+                                )
                             }
                             Spacer(Modifier.height(10.dp))
-                            PlushButton(
-                                text = if (isReset) "验证并重置密码" else "注册",
-                                icon = Icons.Default.Shield,
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !state.isBusy && (isReset || agreementChecked)
-                            ) { viewModel.verifyRegistrationOtp(email, otp, isReset) }
-                            TextButton(onClick = { viewModel.showAuthPage(AuthPage.LOGIN) }, modifier = Modifier.fillMaxWidth()) { Text("返回登录") }
+                            OtpEntryRow(phoneOtp, { phoneOtp = it }, state.otpCooldown, state.isBusy, serviceEnabled = false) { }
+                            Spacer(Modifier.height(12.dp))
+                            AuthPrimaryButton("手机号登录（暂未开放）", Icons.Default.Phone, enabled = false) { }
+                            Spacer(Modifier.height(12.dp))
+                            Surface(shape = RoundedCornerShape(16.dp), color = palette.surfaceAlt, border = BorderStroke(1.dp, palette.border)) {
+                                Text(
+                                    "手机号注册、绑定和短信验证码服务暂未开放。当前请使用邮箱或本地模式，填写的手机号不会提交。",
+                                    modifier = Modifier.padding(12.dp),
+                                    color = palette.muted,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                            SocialLoginRow(viewModel, withDivider = true)
+                        }
+                        else -> when (state.authPage) {
+                            AuthPage.LOGIN -> {
+                                AuthSegment(emailLoginMode) { emailLoginMode = it }
+                                Spacer(Modifier.height(12.dp))
+                                AuthTextField(email, { email = it.trim() }, "邮箱", Icons.Default.AlternateEmail, keyboardType = androidx.compose.ui.text.input.KeyboardType.Email)
+                                Spacer(Modifier.height(10.dp))
+                                if (emailLoginMode == "password") {
+                                    AuthTextField(password, { password = it.take(64) }, "密码", Icons.Default.Lock, password = true)
+                                    Spacer(Modifier.height(12.dp))
+                                    AuthPrimaryButton("邮箱密码登录", Icons.Default.Lock, !state.isBusy && email.isNotBlank() && password.isNotBlank()) {
+                                        viewModel.signInWithPassword(email, password)
+                                    }
+                                } else {
+                                    OtpEntryRow(otp, { otp = it }, state.otpCooldown, state.isBusy) { viewModel.sendLoginOtp("email", email) }
+                                    Spacer(Modifier.height(12.dp))
+                                    AuthPrimaryButton("邮箱验证码登录", Icons.Default.Shield, !state.isBusy && email.isNotBlank() && otp.isNotBlank()) {
+                                        viewModel.verifyLoginOtp("email", email, otp)
+                                    }
+                                }
+                                TextButton(onClick = { viewModel.showAuthPage(AuthPage.RESET) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("忘记密码", color = Color(0xFFAA8060))
+                                }
+                                OutlinedButton(
+                                    onClick = { viewModel.showAuthPage(AuthPage.REGISTER) },
+                                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                                    shape = RoundedCornerShape(22.dp),
+                                    border = BorderStroke(1.dp, palette.rose)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, tint = palette.rose)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("注册新账号", color = palette.rose, fontWeight = FontWeight.Bold)
+                                }
+                                SocialLoginRow(viewModel)
+                            }
+                            AuthPage.REGISTER, AuthPage.RESET -> {
+                                val isReset = state.authPage == AuthPage.RESET
+                                Text(if (isReset) "重置密码" else "注册新账号", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                                Spacer(Modifier.height(10.dp))
+                                AuthTextField(email, { email = it.trim() }, "邮箱", Icons.Default.AlternateEmail, keyboardType = androidx.compose.ui.text.input.KeyboardType.Email)
+                                Spacer(Modifier.height(10.dp))
+                                OtpEntryRow(otp, { otp = it }, state.otpCooldown, state.isBusy) { viewModel.sendRegistrationOtp(email, isReset) }
+                                if (!isReset) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = agreementChecked, onCheckedChange = { if (agreementRead) agreementChecked = it }, enabled = agreementRead)
+                                        TextButton(onClick = { showAgreement = true }) { Text("用户协议与隐私政策", color = palette.rose) }
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                AuthPrimaryButton(
+                                    if (isReset) "验证并重置密码" else "验证并注册",
+                                    Icons.Default.Shield,
+                                    !state.isBusy && (isReset || agreementChecked)
+                                ) { viewModel.verifyRegistrationOtp(email, otp, isReset) }
+                                TextButton(onClick = { viewModel.showAuthPage(AuthPage.LOGIN) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("返回登录", color = palette.muted)
+                                }
+                            }
                         }
                     }
                 }
@@ -476,31 +499,127 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
 }
 
 @Composable
+private fun AuthModeTabs(selected: String, onSelected: (String) -> Unit) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth()) {
+        listOf("email" to "邮箱", "phone" to "手机", "local" to "本地").forEach { (key, label) ->
+            Column(
+                Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { onSelected(key) }.padding(vertical = 3.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(label, color = if (selected == key) palette.rose else palette.ink, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.width(42.dp).height(3.dp).clip(RoundedCornerShape(4.dp)).background(if (selected == key) palette.rose else Color.Transparent))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthSegment(selected: String, onSelected: (String) -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(shape = RoundedCornerShape(22.dp), color = palette.surfaceAlt, border = BorderStroke(1.dp, palette.border)) {
+        Row(Modifier.fillMaxWidth().padding(2.dp)) {
+            listOf("password" to "密码登录", "otp" to "验证码登录").forEach { (key, label) ->
+                Surface(
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(19.dp)).clickable { onSelected(key) },
+                    shape = RoundedCornerShape(19.dp),
+                    color = if (selected == key) Color(0xFFFFF2DF) else Color.Transparent
+                ) {
+                    Text(label, modifier = Modifier.padding(vertical = 6.dp), color = if (selected == key) palette.rose else palette.ink, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    password: Boolean = false,
+    keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text
+) {
+    val palette = LocalPlushPalette.current
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.height(46.dp),
+        singleLine = true,
+        placeholder = { Text(placeholder, color = palette.muted.copy(alpha = 0.72f)) },
+        leadingIcon = { Icon(icon, contentDescription = null, tint = palette.muted) },
+        shape = RoundedCornerShape(18.dp),
+        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = palette.rose,
+            unfocusedBorderColor = palette.border,
+            focusedContainerColor = palette.surface,
+            unfocusedContainerColor = palette.surface
+        )
+    )
+}
+
+@Composable
+private fun AuthPrimaryButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onClick: () -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    val shape = RoundedCornerShape(26.dp)
+    Box(
+        modifier = modifier.height(50.dp)
+            .shadow(if (enabled) 10.dp else 0.dp, shape, spotColor = palette.rose.copy(alpha = 0.3f))
+            .clip(shape)
+            .background(
+                if (enabled) Brush.horizontalGradient(listOf(Color(0xFFFFBC2F), Color(0xFFFF7A21)))
+                else Brush.horizontalGradient(listOf(palette.border, palette.border))
+            )
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(text, color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp, maxLines = 1)
+        }
+    }
+}
+
+@Composable
 private fun OtpEntryRow(
     code: String,
     onCodeChange: (String) -> Unit,
     cooldown: Int,
     busy: Boolean,
+    serviceEnabled: Boolean = true,
     onSend: () -> Unit
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
+        AuthTextField(
             code,
             { onCodeChange(it.filter(Char::isDigit).take(8)) },
-            label = { Text("验证码") },
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+            "请输入验证码",
+            Icons.Default.Shield,
+            modifier = Modifier.weight(1.15f),
+            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
         )
-        PlushButton(
+        AuthPrimaryButton(
             text = when {
+                !serviceEnabled -> "暂未开放"
                 cooldown > 0 -> "${cooldown}s"
                 busy -> "发送中"
                 else -> "获取验证码"
             },
             icon = Icons.Default.Refresh,
-            modifier = Modifier.weight(0.8f),
-            enabled = cooldown == 0 && !busy,
+            enabled = serviceEnabled && cooldown == 0 && !busy,
+            modifier = Modifier.weight(0.9f),
             onClick = onSend
         )
     }
@@ -509,56 +628,110 @@ private fun OtpEntryRow(
 @Composable
 private fun CountryCodeButton(value: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
     var showPicker by rememberSaveable { mutableStateOf(false) }
-    OutlinedButton(onClick = { showPicker = true }, modifier = modifier.height(56.dp)) {
-        Text(value, fontWeight = FontWeight.Bold)
+    val palette = LocalPlushPalette.current
+    OutlinedButton(
+        onClick = { showPicker = true },
+        modifier = modifier.height(46.dp),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, palette.border)
+    ) {
+        Text(value, color = palette.rose, fontWeight = FontWeight.Black, fontSize = 17.sp)
     }
     if (showPicker) {
-        AlertDialog(
-            onDismissRequest = { showPicker = false },
-            title = { Text("选择区号", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    phoneCountryOptions.forEach { item ->
-                        OutlinedButton(
-                            onClick = {
-                                onChange(item.code)
-                                showPicker = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("${item.name}  ${item.code}")
-                        }
-                    }
-                }
-            },
-            confirmButton = {}
-        )
+        CountryCodePicker(value, { showPicker = false }) {
+            onChange(it)
+            showPicker = false
+        }
     }
 }
 
-private data class PhoneCountry(val name: String, val code: String)
+@Composable
+private fun CountryCodePicker(selectedCode: String, onDismiss: () -> Unit, onSelect: (String) -> Unit) {
+    val palette = LocalPlushPalette.current
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.72f).height(380.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = palette.surface,
+            border = BorderStroke(1.dp, palette.border),
+            shadowElevation = 20.dp
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = palette.moss, modifier = Modifier.size(12.dp))
+                        Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.rose, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(9.dp))
+                        Text("选择区号", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                        Spacer(Modifier.width(9.dp))
+                        Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.rose, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Default.Star, contentDescription = null, tint = palette.moss, modifier = Modifier.size(12.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        items(phoneCountryOptions) { item ->
+                            val selected = selectedCode == item.code
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable { onSelect(item.code) },
+                                shape = RoundedCornerShape(18.dp),
+                                color = if (selected) Color(0xFFFFF6E7) else palette.surface.copy(alpha = 0.9f),
+                                border = BorderStroke(1.dp, if (selected) palette.rose else palette.border)
+                            ) {
+                                Row(Modifier.padding(horizontal = 10.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(item.flag, fontSize = 15.sp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(item.name, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                                    Text(item.code, color = palette.rose, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                                    if (selected) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Icon(Icons.Default.CheckCircle, contentDescription = "已选择", tint = palette.rose, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Box(Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 3.dp)) { MascotArt(52.dp) }
+            }
+        }
+    }
+}
+
+private data class PhoneCountry(val flag: String, val name: String, val code: String)
 
 private val phoneCountryOptions = listOf(
-    PhoneCountry("中国大陆", "+86"),
-    PhoneCountry("中国香港", "+852"),
-    PhoneCountry("中国澳门", "+853"),
-    PhoneCountry("中国台湾", "+886"),
-    PhoneCountry("美国/加拿大", "+1")
+    PhoneCountry("🇨🇳", "中国大陆", "+86"),
+    PhoneCountry("🇭🇰", "中国香港", "+852"),
+    PhoneCountry("🇲🇴", "中国澳门", "+853"),
+    PhoneCountry("🇹🇼", "中国台湾", "+886"),
+    PhoneCountry("🇺🇸🇨🇦", "美国/加拿大", "+1"),
+    PhoneCountry("🇬🇧", "英国", "+44"),
+    PhoneCountry("🇯🇵", "日本", "+81"),
+    PhoneCountry("🇰🇷", "韩国", "+82"),
+    PhoneCountry("🇸🇬", "新加坡", "+65"),
+    PhoneCountry("🇦🇺", "澳大利亚", "+61"),
+    PhoneCountry("🇳🇿", "新西兰", "+64"),
+    PhoneCountry("🇩🇪", "德国", "+49")
 )
 
 @Composable
-private fun SocialLoginRow(viewModel: LedgerViewModel) {
-    Spacer(Modifier.height(14.dp))
+private fun SocialLoginRow(viewModel: LedgerViewModel, withDivider: Boolean = false) {
+    Spacer(Modifier.height(8.dp))
+    val palette = LocalPlushPalette.current
+    if (withDivider) {
+        Text("—  其他登录方式  —", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = palette.muted, fontSize = 12.sp)
+        Spacer(Modifier.height(8.dp))
+    }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = { viewModel.socialLogin("微信") }, modifier = Modifier.weight(1f)) {
-            Image(painterResource(R.drawable.logo_wechat), contentDescription = null, modifier = Modifier.size(20.dp))
+        OutlinedButton(onClick = { viewModel.socialLogin("微信") }, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, palette.border)) {
+            Image(painterResource(R.drawable.logo_wechat), contentDescription = null, modifier = Modifier.size(26.dp))
             Spacer(Modifier.size(6.dp))
-            Text("微信")
+            Text("微信", color = palette.ink, fontWeight = FontWeight.Bold)
         }
-        OutlinedButton(onClick = { viewModel.socialLogin("QQ") }, modifier = Modifier.weight(1f)) {
-            Image(painterResource(R.drawable.logo_qq), contentDescription = null, modifier = Modifier.size(20.dp))
+        OutlinedButton(onClick = { viewModel.socialLogin("QQ") }, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, palette.border)) {
+            Image(painterResource(R.drawable.logo_qq), contentDescription = null, modifier = Modifier.size(28.dp))
             Spacer(Modifier.size(6.dp))
-            Text("QQ")
+            Text("QQ", color = palette.ink, fontWeight = FontWeight.Bold)
         }
     }
 }

@@ -607,7 +607,7 @@ class LedgerRepository(
             accountId = account?.id,
             accountLabel = account?.name ?: "默认账户",
             note = remote.note ?: text.trim().take(80),
-            occurredAt = remote.occurredAt ?: System.currentTimeMillis(),
+            occurredAt = remote.occurredAt ?: local.occurredAt,
             cloudAssisted = true
         )
     }

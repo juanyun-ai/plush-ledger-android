@@ -5,6 +5,8 @@ import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.YearMonth
+import java.time.temporal.TemporalAdjusters
 
 data class AiLedgerAnalysis(
     val sourceText: String,
@@ -21,14 +23,16 @@ data class AiLedgerAnalysis(
 )
 
 object LocalAiLedgerParser {
-    private val amountPattern = Regex("(?:¥|￥)?\\s*(\\d+(?:\\.\\d{1,2})?)\\s*(?:元|块|rmb|RMB)?", RegexOption.IGNORE_CASE)
+    private val currencyAmountPattern = Regex(
+        "(?:[¥￥]\\s*(\\d+(?:\\.\\d{1,2})?)|(\\d+(?:\\.\\d{1,2})?)\\s*(?:元|块(?:钱)?|rmb))",
+        RegexOption.IGNORE_CASE
+    )
+    private val bareNumberPattern = Regex("\\d+(?:\\.\\d{1,2})?")
 
     fun parse(text: String, categories: List<CategoryEntity>, accounts: List<AccountEntity>): AiLedgerAnalysis? {
         val source = text.trim().take(160)
         if (source.isBlank()) return null
-        val amount = amountPattern.findAll(source)
-            .mapNotNull { match -> parseMinor(match.groupValues[1]) }
-            .lastOrNull()
+        val amount = parseAmount(source)
             ?: return null
         val type = if (listOf("收入", "工资", "兼职", "收款", "到账", "报销", "理财", "收益", "利息", "稿费").any(source::contains)) "income" else "expense"
         val category = chooseCategory(source, type, categories)
@@ -56,6 +60,8 @@ object LocalAiLedgerParser {
         sourceText: String
     ): CategoryEntity? {
         val candidates = categories.filter { it.kind == type }
+        val explicit = explicitlyNamedCategory(sourceText, candidates)
+        if (explicit != null) return explicit
         val direct = categoryName?.trim()?.takeIf(String::isNotBlank)?.let { name ->
             candidates.firstOrNull { it.name == name }
         }
@@ -70,6 +76,8 @@ object LocalAiLedgerParser {
     }
 
     fun resolveAccount(accountName: String?, accounts: List<AccountEntity>, sourceText: String): AccountEntity? {
+        val explicit = explicitlyNamedAccount(sourceText, accounts)
+        if (explicit != null) return explicit
         val direct = accountName?.trim()?.takeIf(String::isNotBlank)?.let { name ->
             accounts.firstOrNull { it.name == name || it.name.contains(name) || name.contains(it.name) }
         }
@@ -78,7 +86,7 @@ object LocalAiLedgerParser {
 
     private fun chooseCategory(text: String, type: String, categories: List<CategoryEntity>): CategoryEntity? {
         val candidates = categories.filter { it.kind == type }
-        val explicit = candidates.sortedByDescending { it.name.length }.firstOrNull { it.name != "其他" && text.contains(it.name) }
+        val explicit = explicitlyNamedCategory(text, candidates)
         if (explicit != null) return explicit
         val keywords = if (type == "income") incomeKeywords else expenseKeywords
         val matchedName = keywords.firstOrNull { (_, words) -> words.any(text::contains) }?.first
@@ -97,6 +105,23 @@ object LocalAiLedgerParser {
         }
     }
 
+    private fun explicitlyNamedCategory(text: String, candidates: List<CategoryEntity>): CategoryEntity? =
+        candidates.sortedByDescending { it.name.length }
+            .firstOrNull { it.name !in genericCategoryNames && text.contains(it.name, ignoreCase = true) }
+
+    private fun explicitlyNamedAccount(text: String, accounts: List<AccountEntity>): AccountEntity? {
+        accounts.sortedByDescending { it.name.length }
+            .firstOrNull { text.contains(it.name, ignoreCase = true) }
+            ?.let { return it }
+        return when {
+            text.contains("微信") -> accounts.firstOrNull { it.name.contains("微信") }
+            text.contains("支付宝") -> accounts.firstOrNull { it.name.contains("支付宝") }
+            text.contains("现金") -> accounts.firstOrNull { it.name.contains("现金") }
+            text.contains("银行卡") || text.contains("银行") -> accounts.firstOrNull { it.name.contains("银行") }
+            else -> null
+        }
+    }
+
     private fun chooseAccount(text: String, accounts: List<AccountEntity>): AccountEntity? =
         when {
             text.contains("微信") -> accounts.firstOrNull { it.name.contains("微信") }
@@ -110,14 +135,36 @@ object LocalAiLedgerParser {
         BigDecimal(raw).setScale(2, RoundingMode.HALF_UP).movePointRight(2).longValueExact()
     }.getOrNull()?.takeIf { it > 0 }
 
+    private fun parseAmount(text: String): Long? {
+        currencyAmountPattern.findAll(text).mapNotNull { match ->
+            match.groupValues.drop(1).firstOrNull(String::isNotBlank)?.let(::parseMinor)
+        }.lastOrNull()?.let { return it }
+
+        return bareNumberPattern.findAll(text)
+            .filterNot { match ->
+                val before = text.getOrNull(match.range.first - 1)
+                val after = text.getOrNull(match.range.last + 1)
+                before in dateNumberDelimiters || after in dateNumberDelimiters
+            }
+            .mapNotNull { parseMinor(it.value) }
+            .lastOrNull()
+    }
+
     private fun parseOccurredAt(text: String): Long {
         val today = LocalDate.now()
         val date = when {
+            text.contains("大前天") -> today.minusDays(3)
             text.contains("昨天") -> today.minusDays(1)
             text.contains("前天") -> today.minusDays(2)
-            else -> Regex("(\\d{1,2})月(\\d{1,2})日").find(text)?.let { match ->
-                runCatching { LocalDate.of(today.year, match.groupValues[1].toInt(), match.groupValues[2].toInt()) }.getOrNull()
-            } ?: today
+            Regex("(\\d{1,3})天前").find(text) != null -> {
+                val days = Regex("(\\d{1,3})天前").find(text)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+                today.minusDays(days)
+            }
+            text.contains("上个月") -> parseDayInMonth(text, YearMonth.from(today).minusMonths(1)) ?: today
+            text.contains("本月") -> parseDayInMonth(text, YearMonth.from(today)) ?: today
+            Regex("上周[一二三四五六日天]").find(text) != null -> parseWeekday(text, today, previousWeek = true)
+            Regex("本周[一二三四五六日天]").find(text) != null -> parseWeekday(text, today, previousWeek = false)
+            else -> parseExplicitDate(text, today) ?: today
         }
         val explicitTime = Regex("(?:上午|早上|中午|下午|晚上)?\\s*(\\d{1,2})(?:点|:)(\\d{1,2})?").find(text)
         val time = explicitTime?.let { match ->
@@ -132,6 +179,35 @@ object LocalAiLedgerParser {
             else -> LocalTime.now().withSecond(0).withNano(0)
         }
         return date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }
+
+    private fun parseExplicitDate(text: String, today: LocalDate): LocalDate? {
+        Regex("(?<!\\d)(\\d{4})\\s*(?:年|[-/.])\\s*(\\d{1,2})\\s*(?:月|[-/.])\\s*(\\d{1,2})\\s*日?")
+            .find(text)?.let { match ->
+                return runCatching {
+                    LocalDate.of(match.groupValues[1].toInt(), match.groupValues[2].toInt(), match.groupValues[3].toInt())
+                }.getOrNull()
+            }
+        Regex("(?<!\\d)(\\d{1,2})\\s*(?:月|[-/.])\\s*(\\d{1,2})\\s*日?")
+            .find(text)?.let { match ->
+                return runCatching {
+                    LocalDate.of(today.year, match.groupValues[1].toInt(), match.groupValues[2].toInt())
+                }.getOrNull()
+            }
+        return null
+    }
+
+    private fun parseDayInMonth(text: String, month: YearMonth): LocalDate? {
+        val day = Regex("(?:上个月|本月)\\s*(\\d{1,2})\\s*(?:号|日)").find(text)
+            ?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        return runCatching { month.atDay(day) }.getOrNull()
+    }
+
+    private fun parseWeekday(text: String, today: LocalDate, previousWeek: Boolean): LocalDate {
+        val dayText = Regex("(?:上周|本周)([一二三四五六日天])").find(text)?.groupValues?.get(1) ?: "一"
+        val dayOffset = weekdayNames.indexOf(dayText).coerceAtLeast(0).toLong()
+        val currentMonday = today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        return currentMonday.minusWeeks(if (previousWeek) 1 else 0).plusDays(dayOffset)
     }
 
     private val expenseKeywords = listOf(
@@ -177,4 +253,8 @@ object LocalAiLedgerParser {
         "理财" to listOf("理财", "利息", "收益"),
         "礼金" to listOf("礼金", "红包", "礼物")
     )
+
+    private val genericCategoryNames = setOf("其他", "其他收入", "未分类", "无法归类", "临时支出")
+    private val dateNumberDelimiters = setOf('年', '月', '日', '号', '点', ':', '：', '/', '-', '.', '~', '～')
+    private val weekdayNames = listOf("一", "二", "三", "四", "五", "六", "日", "天")
 }

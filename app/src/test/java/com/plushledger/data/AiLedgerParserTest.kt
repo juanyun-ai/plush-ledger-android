@@ -3,6 +3,9 @@ package com.plushledger.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 class AiLedgerParserTest {
     private val categories = CategoryCatalog.defaultCategories("test-user", "test-book", 0L)
@@ -30,6 +33,41 @@ class AiLedgerParserTest {
         assertEquals("兼职", parse("兼职稿费收到 300 元").categoryLabel)
         assertEquals("理财", parse("理财收益 15.6 元").categoryLabel)
     }
+
+    @Test
+    fun keepsExplicitCategoryAheadOfModelGuess() {
+        val category = LocalAiLedgerParser.resolveCategory(
+            type = "expense",
+            categoryName = "早餐",
+            parentName = "餐饮",
+            categories = categories,
+            sourceText = "请归类到奶茶咖啡，瑞幸 15 元"
+        )
+
+        assertEquals("奶茶咖啡", category?.name)
+    }
+
+    @Test
+    fun parsesArbitraryDateWithoutTreatingDateAsAmount() {
+        val analysis = parse("15元买瑞幸咖啡，记到2025年12月31日，微信支付")
+        val date = Instant.ofEpochMilli(analysis.occurredAt).atZone(ZoneId.systemDefault()).toLocalDate()
+
+        assertEquals(1_500L, analysis.amountMinor)
+        assertEquals(LocalDate.of(2025, 12, 31), date)
+        assertEquals("奶茶咖啡", analysis.categoryLabel)
+    }
+
+    @Test
+    fun parsesRelativeAndNumericDates() {
+        val daysAgo = parse("3天前打车 26 元")
+        val numeric = parse("2024/2/29 买书 45 元")
+
+        assertEquals(LocalDate.now().minusDays(3), daysAgo.localDate())
+        assertEquals(LocalDate.of(2024, 2, 29), numeric.localDate())
+    }
+
+    private fun AiLedgerAnalysis.localDate(): LocalDate =
+        Instant.ofEpochMilli(occurredAt).atZone(ZoneId.systemDefault()).toLocalDate()
 
     private fun parse(text: String): AiLedgerAnalysis =
         requireNotNull(LocalAiLedgerParser.parse(text, categories, emptyList()))
