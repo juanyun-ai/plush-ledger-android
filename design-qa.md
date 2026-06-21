@@ -46,3 +46,26 @@ Result: passed
 - Back returns to the record screen instead of exiting the app.
 
 final result: passed
+
+## 0.9.2 分类图标与导航稳定性
+
+- Source: `/var/folders/d4/ykzz2mt97fd3zn1spkxltvqw0000gn/T/codex-clipboard-5f7218c8-e683-4a1a-90a5-8ecf895bb360.png`
+- Bills screenshot: `app/design-qa-0.9.2-bills.png`
+- Subcategory screenshot: `app/design-qa-0.9.2-category.png`
+- Income screenshot: `app/design-qa-0.9.2-income.png`
+- Side-by-side comparison: `app/design-qa-0.9.2-comparison.png`
+- Tested viewport: Android emulator `1080 x 1920`, warm theme, local preview account.
+
+## Visual checks
+
+- 奶茶咖啡、日常、人情社交、学习工作和医疗健康使用了参考图中的对应 3D 毛绒素材。
+- 收入分类工资、兼职、理财和礼金的造型、暖色背景与参考图一致。
+- 图标使用同一圆角暖白容器，在记录行、分类卡和统计排名中均不裁切、不变形。
+- 未知自定义分类回退为毛绒“未分类”素材，不再显示旧式线性图标。
+
+## Interaction checks
+
+- 二级分类卡、一级分类切换、收支切换与确认按钮仍可正常使用。
+- 模拟器中快速交替点击“账单”和“我的”九次，最后选择“账单”并等待信箱网络请求返回，页面仍保持在“账单”。
+
+final result: passed

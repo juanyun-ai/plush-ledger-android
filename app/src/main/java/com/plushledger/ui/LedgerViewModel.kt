@@ -70,6 +70,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     private val sessions = container.sessionStore
     private var ledgerJob: Job? = null
     private var cooldownJob: Job? = null
+    private var mailboxRefreshJob: Job? = null
     private var lastAvatarKey: String? = null
     private val tabHistory = ArrayDeque<AppTab>()
 
@@ -610,7 +611,8 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshAvatar() {
         val avatarKey = state.value.ledger.profile?.avatarKey
         viewModelScope.launch {
-            state.value = state.value.copy(avatarUrl = ledger.resolveAvatarUrl(avatarKey))
+            val avatarUrl = ledger.resolveAvatarUrl(avatarKey)
+            state.value = state.value.copy(avatarUrl = avatarUrl)
         }
     }
 
@@ -662,8 +664,10 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun refreshMailbox() {
-        viewModelScope.launch {
-            state.value = state.value.copy(officialMessages = ledger.loadOfficialMessages())
+        mailboxRefreshJob?.cancel()
+        mailboxRefreshJob = viewModelScope.launch {
+            val messages = ledger.loadOfficialMessages()
+            state.value = state.value.copy(officialMessages = messages)
         }
     }
 
@@ -813,7 +817,8 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                 val avatarKey = it.profile?.avatarKey
                 if (avatarKey != lastAvatarKey || state.value.avatarUrl.isNullOrBlank()) {
                     lastAvatarKey = avatarKey
-                    state.value = state.value.copy(avatarUrl = ledger.resolveAvatarUrl(avatarKey))
+                    val avatarUrl = ledger.resolveAvatarUrl(avatarKey)
+                    state.value = state.value.copy(avatarUrl = avatarUrl)
                 }
             }
         }

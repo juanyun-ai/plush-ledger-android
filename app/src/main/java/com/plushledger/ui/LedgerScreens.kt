@@ -1246,12 +1246,12 @@ private fun rootCategoryArtRes(name: String?): Int? = when (name) {
     "餐饮" -> R.drawable.root_food
     "交通" -> R.drawable.root_transport
     "购物" -> R.drawable.root_shopping
-    "日常" -> R.drawable.root_daily
+    "日常" -> R.drawable.category_daily_consume
     "娱乐" -> R.drawable.root_entertainment
-    "人情社交" -> R.drawable.root_social
+    "人情社交" -> R.drawable.category_social
     "宠物" -> R.drawable.root_pet
-    "学习工作" -> R.drawable.root_study
-    "医疗健康" -> R.drawable.root_health
+    "学习工作" -> R.drawable.category_study
+    "医疗健康" -> R.drawable.category_medical
     "其他" -> R.drawable.root_other
     else -> null
 }
@@ -1260,7 +1260,7 @@ private fun subcategoryArtRes(name: String?): Int? = when (name) {
     "早餐" -> R.drawable.sub_breakfast
     "正餐" -> R.drawable.sub_meal
     "外卖" -> R.drawable.sub_delivery
-    "奶茶咖啡" -> R.drawable.sub_tea
+    "奶茶咖啡", "奶茶" -> R.drawable.category_milktea
     "零食" -> R.drawable.sub_snacks
     "聚餐" -> R.drawable.sub_gathering
     "通勤" -> R.drawable.sub_commute
@@ -1296,6 +1296,10 @@ private fun subcategoryArtRes(name: String?): Int? = when (name) {
     "运动健身" -> R.drawable.sub_fitness
     "临时支出" -> R.drawable.sub_temporary
     "杂项备用" -> R.drawable.sub_miscellaneous
+    "日常消费" -> R.drawable.category_daily_consume
+    "人情" -> R.drawable.category_social
+    "学习" -> R.drawable.category_study
+    "医疗" -> R.drawable.category_medical
     "未分类" -> R.drawable.sub_unknown
     else -> null
 }
