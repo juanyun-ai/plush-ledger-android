@@ -30,7 +30,7 @@ object LocalAiLedgerParser {
             .mapNotNull { match -> parseMinor(match.groupValues[1]) }
             .lastOrNull()
             ?: return null
-        val type = if (listOf("收入", "工资", "兼职", "收款", "到账", "报销").any(source::contains)) "income" else "expense"
+        val type = if (listOf("收入", "工资", "兼职", "收款", "到账", "报销", "理财", "收益", "利息", "稿费").any(source::contains)) "income" else "expense"
         val category = chooseCategory(source, type, categories)
         val account = chooseAccount(source, accounts)
         return AiLedgerAnalysis(
@@ -86,9 +86,12 @@ object LocalAiLedgerParser {
             candidates.firstOrNull { it.name == matchedName }?.let { return it }
         }
         return if (type == "income") {
-            candidates.firstOrNull { it.name == "工资" } ?: candidates.firstOrNull()
+            candidates.firstOrNull { it.name == "其他收入" }
+                ?: candidates.firstOrNull { it.name == "工资" }
+                ?: candidates.firstOrNull()
         } else {
-            candidates.firstOrNull { it.name == "无法归类" }
+            candidates.firstOrNull { it.name == "未分类" }
+                ?: candidates.firstOrNull { it.name == "无法归类" }
                 ?: candidates.firstOrNull { it.name == "临时支出" }
                 ?: candidates.firstOrNull { it.name == "其他" }
         }
@@ -135,25 +138,25 @@ object LocalAiLedgerParser {
         "奶茶咖啡" to listOf("奶茶", "咖啡", "茶饮", "瑞幸", "星巴克", "喜茶", "蜜雪"),
         "早餐" to listOf("早餐", "早饭", "豆浆", "包子"),
         "外卖" to listOf("外卖", "美团", "饿了么"),
-        "正餐" to listOf("午饭", "晚饭", "吃饭", "餐厅", "火锅", "面馆"),
+        "正餐" to listOf("午饭", "晚饭", "吃饭", "餐厅", "火锅", "面馆", "食堂", "盖饭", "米线", "烧烤"),
         "零食" to listOf("零食", "薯片", "饮料"),
         "聚餐" to listOf("聚餐", "团建"),
         "公交地铁" to listOf("公交", "地铁"),
         "打车" to listOf("打车", "滴滴", "出租车"),
         "火车高铁" to listOf("高铁", "火车", "机票"),
-        "日用百货" to listOf("超市", "百货"),
-        "服饰鞋包" to listOf("衣服", "鞋", "包"),
+        "日用百货" to listOf("超市", "百货", "日用", "买菜"),
+        "服饰鞋包" to listOf("衣服", "鞋", "服饰", "包包", "手提包", "双肩包", "钱包"),
         "数码配件" to listOf("数码", "耳机", "手机壳"),
         "美妆个护" to listOf("美妆", "护肤", "化妆"),
         "生活用品" to listOf("纸巾", "洗衣", "生活用品"),
         "快递物流" to listOf("快递", "物流"),
         "话费网络" to listOf("话费", "流量", "宽带"),
         "水电房租" to listOf("房租", "水费", "电费", "燃气"),
-        "游戏" to listOf("游戏", "充值"),
+        "游戏" to listOf("游戏", "游戏充值"),
         "影视会员" to listOf("电影", "视频会员", "影视"),
         "旅游出行" to listOf("旅游", "酒店", "景点"),
         "兴趣爱好" to listOf("摄影", "画画", "乐器"),
-        "人情红包" to listOf("红包", "随礼"),
+        "人情红包" to listOf("红包", "随礼", "份子钱"),
         "请客送礼" to listOf("送礼", "请客"),
         "恋爱约会" to listOf("约会", "恋爱", "对象"),
         "宠物食品" to listOf("猫粮", "狗粮", "宠物食品"),
@@ -163,7 +166,7 @@ object LocalAiLedgerParser {
         "课程考试" to listOf("课程", "考试", "报名"),
         "文具打印" to listOf("文具", "打印"),
         "软件工具" to listOf("软件", "工具", "订阅"),
-        "药品" to listOf("药", "药店"),
+        "药品" to listOf("药", "药店", "感冒药", "处方"),
         "就诊体检" to listOf("医院", "体检", "挂号"),
         "运动健身" to listOf("健身", "运动", "跑步")
     )

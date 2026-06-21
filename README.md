@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.9.2-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.9.3-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -83,6 +83,15 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载器会优先使用 Supabase Storage，失败后自动重试并切换 GitHub Release 备用源；下载后必须通过 SHA-256 校验，校验失败不会进入安装流程。
+
+### v0.9.3
+
+1. 修复未选择分类时误清空金额和备注的问题；表单只会在校验通过后清空。
+2. 修复 AI 识别确认后偶发未入账的问题，保存前会确认账本、分类和账户有效，并在失败时保留建议。
+3. AI 规则更贴合现有二级分类，补全正餐、房租、人情红包、理财收益等常用表达。
+4. 信箱更新为逐条容错并缓存完整历史，短暂网络或单条版本信息失败不再退回一条欢迎消息。
+5. 历史分类名称兼容新版毛绒素材；旧账目打开后自动展示新图标。
+6. 语音入口会准确识别“系统缺少语音服务”和“麦克风权限未开启”两种情况。
 
 ### v0.9.2
 

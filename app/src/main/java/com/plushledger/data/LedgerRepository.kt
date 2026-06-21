@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 class LedgerRepository(
@@ -561,23 +562,23 @@ class LedgerRepository(
     }
 
     suspend fun loadOfficialMessages(): List<OfficialMessage> {
-        val token = sessionStore.currentSession()?.accessToken
-        return runCatching {
-            supabaseClient.fetchOfficialMessages(token).map { json ->
-                val sourceKey = json.nullableString("source_key")
-                val versionCode = sourceKey
-                    ?.takeIf { it.startsWith("release:android:") }
-                    ?.substringAfterLast(':')
-                    ?.toIntOrNull()
-                OfficialMessage(
-                    id = json.getString("id"),
-                    title = json.getString("title"),
-                    body = json.getString("body"),
-                    createdAt = json.optLong("created_at", now()),
-                    updateInfo = versionCode?.let { supabaseClient.fetchAppVersion(it) }
-                )
-            }.ifEmpty { builtInMessages() }
-        }.getOrElse { builtInMessages() }
+        val cached = cachedOfficialMessages()
+        val session = sessionStore.currentSession()
+        val remoteRows = runCatching {
+            val token = session?.accessToken?.let {
+                withFreshAccessToken { refreshed -> refreshed }
+            }
+            supabaseClient.fetchOfficialMessages(token)
+        }.getOrElse { emptyList() }
+        val remote = mutableListOf<OfficialMessage>()
+        for (row in remoteRows) {
+            officialMessageFromJson(row)?.let(remote::add)
+        }
+        if (remote.isNotEmpty()) cacheOfficialMessages(remote)
+        return (remote + cached)
+            .distinctBy { it.id }
+            .sortedByDescending { it.createdAt }
+            .ifEmpty { builtInMessages() }
     }
 
     suspend fun analyzeAiEntry(text: String, ledgerState: LedgerState): AiLedgerAnalysis? {
@@ -762,6 +763,55 @@ class LedgerRepository(
         UUID.nameUUIDFromBytes("rongrong-ledger:import:$userId:$provider:$sourceId".toByteArray()).toString()
     private fun cachedAvatarFile(userId: String) = File(File(context.filesDir, "avatars"), "$userId.jpg")
 
+    private suspend fun officialMessageFromJson(json: JSONObject): OfficialMessage? = runCatching {
+        val sourceKey = json.nullableString("source_key")
+        val versionCode = sourceKey
+            ?.takeIf { it.startsWith("release:android:") }
+            ?.substringAfterLast(':')
+            ?.toIntOrNull()
+        OfficialMessage(
+            id = json.getString("id"),
+            title = json.getString("title"),
+            body = json.getString("body"),
+            createdAt = json.optLong("created_at", now()),
+            // A missing historical version must not erase the complete inbox.
+            updateInfo = versionCode?.let { runCatching { supabaseClient.fetchAppVersion(it) }.getOrNull() }
+        )
+    }.getOrNull()
+
+    private fun cachedOfficialMessages(): List<OfficialMessage> = runCatching {
+        val raw = context.getSharedPreferences(OFFICIAL_MESSAGES_PREFS, Context.MODE_PRIVATE)
+            .getString(OFFICIAL_MESSAGES_KEY, null)
+            ?: return emptyList()
+        val values = JSONArray(raw)
+        List(values.length()) { index ->
+            val message = values.getJSONObject(index)
+            OfficialMessage(
+                id = message.getString("id"),
+                title = message.getString("title"),
+                body = message.getString("body"),
+                createdAt = message.getLong("created_at")
+            )
+        }
+    }.getOrElse { emptyList() }
+
+    private fun cacheOfficialMessages(messages: List<OfficialMessage>) {
+        val values = JSONArray()
+        messages.sortedByDescending { it.createdAt }.take(60).forEach { message ->
+            values.put(
+                JSONObject()
+                    .put("id", message.id)
+                    .put("title", message.title)
+                    .put("body", message.body)
+                    .put("created_at", message.createdAt)
+            )
+        }
+        context.getSharedPreferences(OFFICIAL_MESSAGES_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(OFFICIAL_MESSAGES_KEY, values.toString())
+            .apply()
+    }
+
     private fun builtInMessages() = listOf(
         OfficialMessage(
             id = "welcome",
@@ -792,6 +842,8 @@ data class OfficialMessage(
 )
 
 private const val CURRENT_AGREEMENT_VERSION = "2026-06-12"
+private const val OFFICIAL_MESSAGES_PREFS = "official_messages"
+private const val OFFICIAL_MESSAGES_KEY = "cached_messages"
 
 private val expenseColors = listOf("#C86F7E", "#D99676", "#B86A77", "#E0A0A8", "#A86E89")
 private val incomeColors = listOf("#5E9B83", "#6E8DBF", "#8AA46D", "#76A9A8")

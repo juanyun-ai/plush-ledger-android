@@ -196,8 +196,8 @@ fun CategoryArt(name: String?, size: Dp = 48.dp) {
     }
 }
 
-private fun categoryArtRes(name: String?): Int = when (name) {
-    "餐饮" -> R.drawable.root_food
+private fun categoryArtRes(name: String?): Int = when (name?.trim()) {
+    "餐饮", "美食", "饮食", "吃喝", "餐费" -> R.drawable.root_food
     "早餐" -> R.drawable.sub_breakfast
     "正餐" -> R.drawable.sub_meal
     "外卖" -> R.drawable.sub_delivery
@@ -215,8 +215,7 @@ private fun categoryArtRes(name: String?): Int = when (name) {
     "服饰鞋包" -> R.drawable.sub_clothes
     "数码配件" -> R.drawable.sub_digital
     "美妆个护" -> R.drawable.sub_beauty
-    "日常" -> R.drawable.category_daily_consume
-    "日常消费" -> R.drawable.category_daily_consume
+    "日常", "日常消费", "日用消费", "生活费" -> R.drawable.category_daily_consume
     "生活用品" -> R.drawable.sub_household
     "快递物流" -> R.drawable.sub_parcel
     "话费网络" -> R.drawable.sub_phone
@@ -226,8 +225,7 @@ private fun categoryArtRes(name: String?): Int = when (name) {
     "影视会员" -> R.drawable.sub_media
     "旅游出行" -> R.drawable.sub_travel
     "兴趣爱好" -> R.drawable.sub_hobby
-    "人情社交" -> R.drawable.category_social
-    "人情" -> R.drawable.category_social
+    "人情社交", "人情", "人情往来", "社交" -> R.drawable.category_social
     "人情红包" -> R.drawable.sub_redpacket
     "请客送礼" -> R.drawable.sub_gift
     "恋爱约会" -> R.drawable.sub_date
@@ -236,24 +234,23 @@ private fun categoryArtRes(name: String?): Int = when (name) {
     "宠物食品" -> R.drawable.sub_pet_food
     "宠物用品" -> R.drawable.sub_pet_supplies
     "宠物医疗" -> R.drawable.sub_pet_health
-    "学习工作" -> R.drawable.category_study
-    "学习" -> R.drawable.category_study
+    "学习工作", "学习", "学习成长", "教育" -> R.drawable.category_study
     "书籍资料" -> R.drawable.sub_books
     "课程考试" -> R.drawable.sub_course
     "文具打印" -> R.drawable.sub_stationery
     "软件工具" -> R.drawable.sub_software
-    "医疗健康" -> R.drawable.category_medical
-    "医疗" -> R.drawable.category_medical
+    "医疗健康", "医疗", "健康", "健康医疗" -> R.drawable.category_medical
     "药品" -> R.drawable.sub_medicine
     "就诊体检" -> R.drawable.sub_checkup
     "运动健身" -> R.drawable.sub_fitness
-    "工资" -> R.drawable.category_salary
-    "兼职" -> R.drawable.category_parttime
-    "理财" -> R.drawable.category_investment
-    "礼金" -> R.drawable.category_gift_income
+    "工资", "薪资", "薪水", "工资收入" -> R.drawable.category_salary
+    "兼职", "副业", "稿费" -> R.drawable.category_parttime
+    "理财", "投资", "投资收益", "利息收益" -> R.drawable.category_investment
+    "礼金", "礼金收入", "红包礼金", "礼物" -> R.drawable.category_gift_income
     "其他" -> R.drawable.root_other
     "临时支出" -> R.drawable.sub_temporary
     "杂项备用" -> R.drawable.sub_miscellaneous
+    "未分类", "无法归类" -> R.drawable.sub_unknown
     else -> R.drawable.sub_unknown
 }
 

@@ -2,6 +2,7 @@ package com.plushledger.ui
 
 import android.app.Activity
 import android.app.TimePickerDialog
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.speech.RecognizerIntent
@@ -157,30 +158,34 @@ fun HomeScreen(
             showAiDialog = true
         }
     }
+    fun voiceRecognitionIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+        .putExtra(RecognizerIntent.EXTRA_PROMPT, "例如：午饭 28 元，用微信")
+    val launchVoiceRecognition: () -> Unit = {
+        val intent = voiceRecognitionIntent()
+        if (intent.resolveActivity(context.packageManager) == null) {
+            voiceHint = "麦克风权限已开启，但此设备没有可用的中文语音识别服务。"
+        } else {
+            try {
+                voiceLauncher.launch(intent)
+            } catch (_: ActivityNotFoundException) {
+                voiceHint = "当前系统的语音识别服务不可用，请启用系统语音服务后重试。"
+            } catch (_: SecurityException) {
+                voiceHint = "语音服务未获授权，请在系统设置中允许绒绒记账使用麦克风。"
+            }
+        }
+    }
     val requestAudioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) {
             voiceHint = "未获得麦克风权限，仍可直接输入。"
         } else {
-            runCatching {
-                voiceLauncher.launch(
-                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-                        .putExtra(RecognizerIntent.EXTRA_PROMPT, "例如：午饭 28 元，用微信")
-                )
-            }.onFailure { voiceHint = "当前设备没有可用的语音识别服务。" }
+            launchVoiceRecognition()
         }
     }
     val startVoiceRecognition: () -> Unit = {
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            runCatching {
-                voiceLauncher.launch(
-                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-                        .putExtra(RecognizerIntent.EXTRA_PROMPT, "例如：午饭 28 元，用微信")
-                )
-            }.onFailure { voiceHint = "当前设备没有可用的语音识别服务。" }
+            launchVoiceRecognition()
         } else {
             requestAudioPermission.launch(android.Manifest.permission.RECORD_AUDIO)
         }
@@ -682,7 +687,7 @@ private fun BudgetNumber(label: String, value: Long, color: Color, modifier: Mod
 fun RecordScreen(
     state: UiState,
     onBack: () -> Unit,
-    onAdd: (String, String, String?, String?, String?, String, LocalDateTime) -> Unit,
+    onAdd: (String, String, String?, String?, String?, String, LocalDateTime) -> Boolean,
     onDefaultAccount: (String) -> Unit,
     onBudget: (String, String?) -> Unit,
     onAddAccount: (String, String) -> Unit,
@@ -954,8 +959,8 @@ fun RecordScreen(
             val time = runCatching {
                 LocalTime.parse(timeText, DateTimeFormatter.ofPattern("HH:mm"))
             }.getOrDefault(LocalTime.now())
-            onAdd(type, amount, categoryId, accountId, toAccountId, note, LocalDateTime.of(date, time))
-            if (amount.isNotBlank()) {
+            val accepted = onAdd(type, amount, categoryId, accountId, toAccountId, note, LocalDateTime.of(date, time))
+            if (accepted) {
                 amount = ""
                 note = ""
             }

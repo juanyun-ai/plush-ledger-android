@@ -15,6 +15,7 @@ import com.plushledger.data.AiLedgerAnalysis
 import com.plushledger.data.ExternalBillCsvParser
 import com.plushledger.data.ExternalBillPreview
 import com.plushledger.data.LedgerState
+import com.plushledger.data.LocalAiLedgerParser
 import com.plushledger.data.Money
 import com.plushledger.data.OfficialMessage
 import com.plushledger.sync.AppVersionInfo
@@ -316,16 +317,24 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         toAccountId: String?,
         note: String,
         occurredDateTime: java.time.LocalDateTime
-    ) {
-        val session = state.value.session ?: return
+    ): Boolean {
+        val session = state.value.session
+        if (session == null) {
+            state.value = state.value.copy(message = "请先登录或进入本地模式")
+            return false
+        }
         val amount = Money.parseToMinor(amountText)
         if (amount == null) {
             state.value = state.value.copy(message = "金额需要大于 0")
-            return
+            return false
         }
         if (type != "transfer" && categoryId == null) {
             state.value = state.value.copy(message = "请选择具体分类")
-            return
+            return false
+        }
+        if (type != "transfer" && state.value.ledger.categories.none { it.id == categoryId && it.kind == type }) {
+            state.value = state.value.copy(message = "分类已变化，请重新选择")
+            return false
         }
         val account = accountId
             ?: state.value.defaultAccountId?.takeIf { id -> state.value.ledger.accounts.any { it.id == id } }
@@ -333,22 +342,29 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             ?: state.value.ledger.accounts.firstOrNull()?.id
         if (account == null) {
             state.value = state.value.copy(message = "请先添加账户")
-            return
+            return false
         }
         viewModelScope.launch {
-            ledger.addTransaction(
-                userId = session.userId,
-                type = type,
-                amountMinor = amount,
-                categoryId = categoryId,
-                accountId = account,
-                toAccountId = toAccountId,
-                note = note,
-                occurredAt = occurredDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            )
-            app.enqueueImmediateSync()
-            state.value = state.value.copy(message = "记账成功")
+            runCatching {
+                ledger.ensureUserWorkspace(session.userId, session.displayName, session.phone, session.email)
+                ledger.addTransaction(
+                    userId = session.userId,
+                    type = type,
+                    amountMinor = amount,
+                    categoryId = categoryId,
+                    accountId = account,
+                    toAccountId = toAccountId,
+                    note = note,
+                    occurredAt = occurredDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                )
+            }.onSuccess {
+                app.enqueueImmediateSync()
+                state.value = state.value.copy(message = "记账成功")
+            }.onFailure { error ->
+                state.value = state.value.copy(message = "保存失败：${error.message.orEmpty().take(60)}")
+            }
         }
+        return true
     }
 
     fun analyzeAiEntry(text: String) {
@@ -379,33 +395,61 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun saveAiSuggestion(suggestion: AiLedgerAnalysis) {
-        val session = state.value.session ?: return
+        val session = state.value.session
+        if (session == null) {
+            state.value = state.value.copy(message = "请先登录或进入本地模式")
+            return
+        }
+        if (suggestion.amountMinor <= 0) {
+            state.value = state.value.copy(message = "智能识别到的金额无效，请重新识别")
+            return
+        }
+        val liveLedger = state.value.ledger
         val categoryId = suggestion.categoryId
+            ?.takeIf { id -> liveLedger.categories.any { it.id == id && it.kind == suggestion.type } }
+            ?: LocalAiLedgerParser.resolveCategory(
+                type = suggestion.type,
+                categoryName = suggestion.categoryLabel,
+                parentName = null,
+                categories = liveLedger.categories,
+                sourceText = suggestion.sourceText
+            )?.id
         if (categoryId == null) {
-            state.value = state.value.copy(message = "请在记一笔中补充具体分类")
+            state.value = state.value.copy(message = "当前账本还没有可用分类，请稍后重试")
             return
         }
         val accountId = suggestion.accountId
-            ?: state.value.defaultAccountId?.takeIf { id -> state.value.ledger.accounts.any { it.id == id } }
-            ?: state.value.ledger.accounts.firstOrNull { it.name == "现金" }?.id
-            ?: state.value.ledger.accounts.firstOrNull()?.id
+            ?.takeIf { id -> liveLedger.accounts.any { it.id == id } }
+            ?: state.value.defaultAccountId?.takeIf { id -> liveLedger.accounts.any { it.id == id } }
+            ?: liveLedger.accounts.firstOrNull { it.name == "现金" }?.id
+            ?: liveLedger.accounts.firstOrNull()?.id
         if (accountId == null) {
             state.value = state.value.copy(message = "请先添加账户")
             return
         }
         viewModelScope.launch {
-            ledger.addTransaction(
-                userId = session.userId,
-                type = suggestion.type,
-                amountMinor = suggestion.amountMinor,
-                categoryId = categoryId,
-                accountId = accountId,
-                toAccountId = null,
-                note = suggestion.note,
-                occurredAt = suggestion.occurredAt
-            )
-            app.enqueueImmediateSync()
-            state.value = state.value.copy(aiSuggestion = null, message = "智能记账已保存")
+            state.value = state.value.copy(isBusy = true, message = null)
+            runCatching {
+                ledger.ensureUserWorkspace(session.userId, session.displayName, session.phone, session.email)
+                ledger.addTransaction(
+                    userId = session.userId,
+                    type = suggestion.type,
+                    amountMinor = suggestion.amountMinor,
+                    categoryId = categoryId,
+                    accountId = accountId,
+                    toAccountId = null,
+                    note = suggestion.note,
+                    occurredAt = suggestion.occurredAt
+                )
+            }.onSuccess {
+                app.enqueueImmediateSync()
+                state.value = state.value.copy(isBusy = false, aiSuggestion = null, message = "智能记账已保存")
+            }.onFailure { error ->
+                state.value = state.value.copy(
+                    isBusy = false,
+                    message = "智能记账保存失败：${error.message.orEmpty().take(60)}"
+                )
+            }
         }
     }
 
