@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.9.3-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.9.4-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -28,7 +28,7 @@
 - 稳定的本地头像缓存、昵称、年龄、生日、性别和邮箱/手机号换绑。
 - 应用信箱、用户反馈和管理员身份；公测期间现有功能全部免费。
 - PIN、生物识别、隐私防截图、数据导出和账号注销。
-- 自动检查版本、信箱快捷下载、主备下载线路自动重试、校验 APK SHA-256 并交由 Android 系统安装器更新。
+- 自动检查版本、信箱快捷下载、断点续传、主备下载线路自动切换、校验 APK SHA-256 并交由 Android 系统安装器更新。
 
 ## 数据安全
 
@@ -82,7 +82,13 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ## 版本更新
 
-每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载器会优先使用 Supabase Storage，失败后自动重试并切换 GitHub Release 备用源；下载后必须通过 SHA-256 校验，校验失败不会进入安装流程。
+每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载器可从主源或备用源断点续传，自动切换线路并在安装前核验 SHA-256；校验失败不会进入安装流程。GitHub Release 与 Supabase Storage 互为主备，发布时按实测网络表现设置主线路。
+
+### v0.9.4
+
+1. 升级下载不再依赖部分机型容易断流的系统下载器，改为应用内流式下载。
+2. 下载中断后会从已完成的字节继续；主源和备用源均会自动重试，成功后仍必须通过 SHA-256 校验。
+3. 将 0.9.3 已发布版本的主下载线路切至 GitHub Release，Supabase Storage 继续作为备用，旧安装包也无需等待新版本即可受益。
 
 ### v0.9.3
 
