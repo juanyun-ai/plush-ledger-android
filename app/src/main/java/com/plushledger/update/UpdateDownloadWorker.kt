@@ -53,6 +53,14 @@ class UpdateDownloadWorker(
         val outputFile = File(outputPath)
         outputFile.parentFile?.mkdirs()
         if (outputFile.isFile && verifyFile(outputFile, expectedSha)) {
+            setProgress(
+                workDataOf(
+                    KEY_PROGRESS to 100,
+                    KEY_DOWNLOADED_BYTES to outputFile.length(),
+                    KEY_TOTAL_BYTES to outputFile.length(),
+                    KEY_STATUS to "正在校验已有安装包"
+                )
+            )
             markReady(outputFile)
             showCompletedNotification(versionName)
             return@withContext Result.success(workDataOf(KEY_OUTPUT_PATH to outputFile.absolutePath))
@@ -71,6 +79,14 @@ class UpdateDownloadWorker(
                             attempt > 0 -> "下载中断，正在续传"
                             else -> "正在下载 v$versionName"
                         }
+                    )
+                    setProgress(
+                        workDataOf(
+                            KEY_PROGRESS to 100,
+                            KEY_DOWNLOADED_BYTES to partialFile.length(),
+                            KEY_TOTAL_BYTES to partialFile.length(),
+                            KEY_STATUS to "正在校验安装包"
+                        )
                     )
                     if (!verifyFile(partialFile, expectedSha)) {
                         partialFile.delete()
@@ -141,7 +157,14 @@ class UpdateDownloadWorker(
                         }
                         if (progress < 0 || progress >= lastProgress + PROGRESS_STEP) {
                             lastProgress = progress
-                            setProgress(workDataOf(KEY_PROGRESS to progress, KEY_DOWNLOADED_BYTES to downloadedBytes))
+                            setProgress(
+                                workDataOf(
+                                    KEY_PROGRESS to progress,
+                                    KEY_DOWNLOADED_BYTES to downloadedBytes,
+                                    KEY_TOTAL_BYTES to totalBytes,
+                                    KEY_STATUS to status
+                                )
+                            )
                             setForeground(downloadForegroundInfo(progress.takeIf { it >= 0 }, status))
                         }
                     }
@@ -269,6 +292,8 @@ class UpdateDownloadWorker(
         const val KEY_ERROR = "error"
         const val KEY_PROGRESS = "progress"
         const val KEY_DOWNLOADED_BYTES = "downloaded_bytes"
+        const val KEY_TOTAL_BYTES = "total_bytes"
+        const val KEY_STATUS = "status"
 
         private const val CHANNEL_ID = "app_updates"
         private const val NOTIFICATION_ID = 9506

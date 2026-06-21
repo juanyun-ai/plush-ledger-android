@@ -50,6 +50,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -109,6 +110,8 @@ import com.plushledger.ui.BillsScreen
 import com.plushledger.ui.StatsScreen
 import com.plushledger.ui.HomeScreen
 import com.plushledger.update.AppUpdateManager
+import com.plushledger.update.UpdateDownloadPhase
+import com.plushledger.update.UpdateDownloadUiState
 import kotlinx.coroutines.delay
 
 class MainActivity : FragmentActivity() {
@@ -128,7 +131,11 @@ class MainActivity : FragmentActivity() {
                         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     }
                 },
-                downloadUpdate = updateManager::download
+                downloadUpdate = updateManager::download,
+                downloadState = updateManager.uiState,
+                cancelDownload = updateManager::cancelDownload,
+                retryDownload = updateManager::retryDownload,
+                dismissDownloadStatus = updateManager::dismissDownloadStatus
             )
         }
     }
@@ -172,6 +179,10 @@ private fun PlushLedgerApp(
     requestBiometric: (() -> Unit) -> Unit,
     setSecure: (Boolean) -> Unit,
     downloadUpdate: (com.plushledger.sync.AppVersionInfo) -> Unit,
+    downloadState: UpdateDownloadUiState,
+    cancelDownload: () -> Unit,
+    retryDownload: () -> Unit,
+    dismissDownloadStatus: () -> Unit,
     viewModel: LedgerViewModel = viewModel()
 ) {
     val state by viewModel.state
@@ -216,7 +227,7 @@ private fun PlushLedgerApp(
                     else -> LedgerShell(viewModel, biometricAvailable, downloadUpdate)
                 }
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp))
-                state.availableUpdate?.let { update ->
+                state.availableUpdate?.takeUnless { downloadState.isActive }?.let { update ->
                     AlertDialog(
                         onDismissRequest = { viewModel.dismissUpdate() },
                         title = { Text("发现新版本 ${update.versionName}", fontWeight = FontWeight.Bold) },
@@ -238,9 +249,97 @@ private fun PlushLedgerApp(
                         }
                     )
                 }
+                if (downloadState.isVisible) {
+                    UpdateDownloadStatusDialog(
+                        state = downloadState,
+                        onCancel = cancelDownload,
+                        onRetry = retryDownload,
+                        onDismiss = dismissDownloadStatus
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun UpdateDownloadStatusDialog(
+    state: UpdateDownloadUiState,
+    onCancel: () -> Unit,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    val active = state.isActive
+    val knownProgress = state.progress.coerceIn(0, 100).takeIf { state.progress >= 0 }
+    AlertDialog(
+        onDismissRequest = { if (!active) onDismiss() },
+        title = {
+            Text(
+                when (state.phase) {
+                    UpdateDownloadPhase.FAILED -> "更新下载失败"
+                    UpdateDownloadPhase.CANCELLED -> "更新下载已取消"
+                    UpdateDownloadPhase.VERIFYING -> "正在校验更新包"
+                    else -> "正在下载 v${state.versionName}"
+                },
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(state.message, color = palette.muted)
+                if (active) {
+                    if (knownProgress != null) {
+                        LinearProgressIndicator(
+                            progress = { knownProgress / 100f },
+                            modifier = Modifier.fillMaxWidth().height(10.dp),
+                            color = palette.moss,
+                            trackColor = palette.border
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(10.dp),
+                            color = palette.moss,
+                            trackColor = palette.border
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            if (state.downloadedBytes > 0L) formatDownloadBytes(state.downloadedBytes) else "尚未收到数据",
+                            color = palette.muted,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            knownProgress?.let { "$it%" } ?: "等待开始",
+                            color = palette.ink,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    if (state.totalBytes > 0L) {
+                        Text("安装包大小 ${formatDownloadBytes(state.totalBytes)}", color = palette.muted, fontSize = 12.sp)
+                    }
+                    Text("只有收到真实文件字节后才会显示百分比。", color = palette.muted, fontSize = 12.sp)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = if (active) onCancel else onDismiss) {
+                Text(if (active) "取消下载" else "关闭")
+            }
+        },
+        confirmButton = {
+            if (state.phase == UpdateDownloadPhase.FAILED || state.phase == UpdateDownloadPhase.CANCELLED) {
+                TextButton(onClick = onRetry) { Text("重新下载") }
+            }
+        }
+    )
+}
+
+private fun formatDownloadBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> String.format("%.1f MB", bytes / (1024f * 1024f))
+    bytes >= 1024L -> String.format("%.0f KB", bytes / 1024f)
+    else -> "$bytes B"
 }
 
 @Composable
