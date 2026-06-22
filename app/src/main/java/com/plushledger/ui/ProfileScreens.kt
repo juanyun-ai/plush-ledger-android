@@ -275,8 +275,7 @@ fun MyScreen(
         MyPage.ABOUT -> AboutScreen(onBack = { page = MyPage.ROOT })
         MyPage.PET -> PetRongRongScreen(
             ledger = state.ledger,
-            onBack = { page = MyPage.ROOT },
-            onRecord = { viewModel.selectTab(AppTab.RECORD) }
+            onBack = { page = MyPage.ROOT }
         )
     }
 }
@@ -906,7 +905,7 @@ private fun ProfileScreen(
                 ProfileSectionTitle("账号绑定")
                 ProfileProviderRow(R.drawable.logo_wechat, "微信", if (profile?.wechatBound == true) "已绑定" else "未绑定", palette.moss, onClick = { onBind("微信绑定") })
                 ProfileDivider()
-                ProfileProviderRow(R.drawable.logo_qq, "QQ", if (profile?.qqBound == true) "已绑定" else "未绑定", palette.blue, onClick = { onBind("QQ绑定") })
+                ProfileProviderRow(R.drawable.logo_qq_official, "QQ", if (profile?.qqBound == true) "已绑定" else "未绑定", palette.blue, onClick = { onBind("QQ绑定") })
                 ProfileDivider()
                 ProfileListRow(Icons.Default.Email, "邮箱", (profile?.email ?: state.session?.email ?: "本地账号").maskIf(privacyOn), palette.coral, enabled = remoteMode, onClick = {
                     identityChannel = "email"

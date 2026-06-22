@@ -87,6 +87,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -306,73 +307,82 @@ private fun UpdateDownloadStatusDialog(
     val palette = LocalPlushPalette.current
     val active = state.isActive
     val knownProgress = state.progress.coerceIn(0, 100).takeIf { state.progress >= 0 }
-    AlertDialog(
-        onDismissRequest = { if (!active) onDismiss() },
-        title = {
-            Text(
-                when (state.phase) {
-                    UpdateDownloadPhase.FAILED -> "更新下载失败"
-                    UpdateDownloadPhase.CANCELLED -> "更新下载已取消"
-                    UpdateDownloadPhase.VERIFYING -> "正在校验更新包"
-                    else -> "正在下载 v${state.versionName}"
-                },
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(state.message, color = palette.muted)
+    Dialog(onDismissRequest = { if (!active) onDismiss() }) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(34.dp),
+            color = Color(0xFFFFFCF7),
+            border = BorderStroke(2.dp, Color(0xFFFFD8A0)),
+            shadowElevation = 20.dp
+        ) {
+            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 4.dp) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_launcher_transparent),
+                            contentDescription = null,
+                            modifier = Modifier.padding(4.dp).size(72.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            when (state.phase) {
+                                UpdateDownloadPhase.FAILED -> "下载遇到问题"
+                                UpdateDownloadPhase.CANCELLED -> "下载已取消"
+                                UpdateDownloadPhase.VERIFYING -> "正在校验 v${state.versionName}"
+                                else -> "正在下载 v${state.versionName}"
+                            },
+                            color = palette.ink,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 26.sp,
+                            maxLines = 1
+                        )
+                        Text(state.message, color = palette.muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFC55D), modifier = Modifier.size(24.dp))
+                }
                 if (active) {
-                    if (knownProgress != null) {
-                        LinearProgressIndicator(
-                            progress = { knownProgress / 100f },
-                            modifier = Modifier.fillMaxWidth().height(10.dp),
-                            color = palette.moss,
-                            trackColor = palette.border
-                        )
-                    } else {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth().height(10.dp),
-                            color = palette.moss,
-                            trackColor = palette.border
-                        )
+                    Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFFFFF3E2), border = BorderStroke(1.dp, Color(0xFFFFD9A6))) {
+                        if (knownProgress == null) {
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 4.dp, vertical = 2.dp),
+                                color = palette.moss,
+                                trackColor = Color.Transparent
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                progress = { knownProgress / 100f },
+                                modifier = Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 4.dp, vertical = 2.dp),
+                                color = palette.moss,
+                                trackColor = Color.Transparent
+                            )
+                        }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(
-                            if (state.downloadedBytes > 0L) formatDownloadBytes(state.downloadedBytes) else "尚未收到数据",
-                            color = palette.muted,
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            knownProgress?.let { "$it%" } ?: "等待开始",
-                            color = palette.ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(if (state.downloadedBytes > 0L) formatDownloadBytes(state.downloadedBytes) else "正在连接下载源", color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Text(knownProgress?.let { "$it%" } ?: "等待开始", color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.Black)
                     }
-                    if (state.totalBytes > 0L) {
-                        Text("安装包大小 ${formatDownloadBytes(state.totalBytes)}", color = palette.muted, fontSize = 12.sp)
-                    }
-                    Text("只有收到真实文件字节后才会显示百分比。", color = palette.muted, fontSize = 12.sp)
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFFFE4BD)))
+                    Text("♥ 安装包大小 ${if (state.totalBytes > 0L) formatDownloadBytes(state.totalBytes) else "获取中"}", color = palette.muted, fontSize = 13.sp)
+                    Text("★ 只有收到真实文件字节后才会显示百分比。", color = palette.muted, fontSize = 13.sp)
                 }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = if (active) onCancel else onDismiss) {
-                Text(if (active) "取消下载" else "关闭")
-            }
-        },
-        confirmButton = {
-            if (state.phase == UpdateDownloadPhase.FAILED || state.phase == UpdateDownloadPhase.CANCELLED) {
-                Row {
-                    if (state.phase == UpdateDownloadPhase.FAILED) {
-                        TextButton(onClick = onExternalDownload) { Text("浏览器下载") }
+                when (state.phase) {
+                    UpdateDownloadPhase.FAILED, UpdateDownloadPhase.CANCELLED -> {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (state.phase == UpdateDownloadPhase.FAILED) {
+                                OutlinedButton(onClick = onExternalDownload, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp)) { Text("浏览器下载") }
+                            }
+                            PlushButton("重新下载", Icons.Default.Refresh, Modifier.weight(1f), color = palette.rose, onClick = onRetry)
+                        }
+                        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("关闭", color = palette.muted) }
                     }
-                    TextButton(onClick = onRetry) { Text("重新下载") }
+                    else -> TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("取消下载", color = palette.rose, fontWeight = FontWeight.Bold) }
                 }
             }
         }
-    )
+    }
 }
 
 private fun formatDownloadBytes(bytes: Long): String = when {
@@ -386,21 +396,37 @@ private fun WelcomeScreen(onStart: () -> Unit, onPreview: () -> Unit) {
     val palette = LocalPlushPalette.current
     LazyColumn(
         modifier = Modifier.fillMaxSize().navigationBarsPadding(),
-        contentPadding = PaddingValues(horizontal = 28.dp, vertical = 24.dp),
+        contentPadding = PaddingValues(horizontal = 26.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item { Spacer(Modifier.height(18.dp)) }
-        item { MascotArt(190.dp) }
+        item { Spacer(Modifier.height(12.dp)) }
+        item {
+            Box(Modifier.fillMaxWidth().height(284.dp), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Star, null, tint = Color(0xFFFFBE3D), modifier = Modifier.align(Alignment.TopStart).padding(start = 36.dp, top = 28.dp).size(32.dp))
+                Icon(Icons.Default.Favorite, null, tint = Color(0xFFFF9D82), modifier = Modifier.align(Alignment.CenterStart).padding(start = 14.dp, top = 20.dp).size(22.dp))
+                Icon(Icons.Default.Favorite, null, tint = palette.moss, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 26.dp, top = 62.dp).size(20.dp))
+                Image(
+                    painter = painterResource(R.drawable.ic_launcher_transparent),
+                    contentDescription = "绒绒记账",
+                    modifier = Modifier.size(276.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
         item {
             Image(
                 painter = painterResource(R.drawable.brand_wordmark),
                 contentDescription = "绒绒记账",
-                modifier = Modifier.fillMaxWidth(0.68f).height(58.dp),
+                modifier = Modifier.fillMaxWidth(0.76f).height(66.dp),
                 contentScale = ContentScale.Fit
             )
         }
-        item { Text("让每一次记录，都变得柔软而清晰", color = palette.muted, fontSize = 14.sp) }
+        item {
+            Text("♥ 温暖每一笔，记录每一天 ♥", color = Color(0xFFC18957), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(2.dp))
+            Text("让每一次记录，都变得柔软而清晰", color = palette.muted, fontSize = 12.sp)
+        }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WelcomeFeature(R.drawable.art_feature_record, "轻松记账", Modifier.weight(1f))
@@ -416,7 +442,7 @@ private fun WelcomeScreen(onStart: () -> Unit, onPreview: () -> Unit) {
             }
         }
         item {
-            PlushButton("开始使用", Icons.Default.EditNote, Modifier.fillMaxWidth(), onClick = onStart)
+            PlushButton("开始使用", Icons.Default.EditNote, Modifier.fillMaxWidth(), color = Color(0xFFFFA126), onClick = onStart)
             TextButton(onClick = onPreview, modifier = Modifier.fillMaxWidth()) { Text("先看看", color = palette.muted) }
         }
     }
@@ -429,7 +455,7 @@ private fun WelcomeFeature(res: Int, label: String, modifier: Modifier = Modifie
         Image(
             painter = painterResource(res),
             contentDescription = label,
-            modifier = Modifier.fillMaxWidth().height(84.dp).clip(RoundedCornerShape(18.dp)),
+            modifier = Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(20.dp)),
             contentScale = ContentScale.Crop
         )
         Spacer(Modifier.height(6.dp))
@@ -867,7 +893,7 @@ private fun SocialLoginRow(viewModel: LedgerViewModel, withDivider: Boolean = fa
             Text("微信", color = palette.ink, fontWeight = FontWeight.Bold)
         }
         OutlinedButton(onClick = { viewModel.socialLogin("QQ") }, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, palette.border)) {
-            Image(painterResource(R.drawable.logo_qq), contentDescription = null, modifier = Modifier.size(28.dp))
+            Image(painterResource(R.drawable.logo_qq_official), contentDescription = null, modifier = Modifier.size(30.dp), contentScale = ContentScale.Fit)
             Spacer(Modifier.size(6.dp))
             Text("QQ", color = palette.ink, fontWeight = FontWeight.Bold)
         }

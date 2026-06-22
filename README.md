@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.9.8-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.0.0-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -29,6 +29,7 @@
 - 应用信箱、用户反馈和管理员身份；公测期间现有功能全部免费。
 - PIN、生物识别、隐私防截图、数据导出和账号注销。
 - 自动检查版本、信箱快捷下载、后台进度通知、断点续传、主备下载线路自动切换、校验 APK SHA-256 并交由 Android 系统安装器更新。
+- 宠物绒绒的陪伴值、成长里程碑均由实际账本数据计算；日记、穿搭、小窝、头像框和称号会按当前账号在本机保存，白噪音可离线播放。
 
 ## 数据安全
 
@@ -83,6 +84,14 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载由 Android 系统下载服务负责，应用读取真实字节和进度；主线路失败后会自动重试并切换备用线路，所有线路不可用时可交给系统浏览器下载。安装前必须通过 SHA-256 校验，校验失败不会进入安装流程。GitHub Release 与 Supabase Storage 互为主备，发布时按实测网络表现设置主线路。
+
+### v1.0.0
+
+1. 宠物专题不再使用整页截图作为点击层：九个入口均替换为独立页面和真实可操作控件。
+2. 陪伴值、等级、成长解锁按实际账目笔数、记账日期和累计记录金额自动计算，不再写入虚假数值或增加记账任务。
+3. 中央“互动”按钮可展开四种动作，每日一次并分别更新绒绒心情和反馈；修复旧版英雄区拉伸、裁切和双层假数据。
+4. 今日穿搭、小窝、皮肤、头像框、称号、日记、成长故事、白噪音和表情分享均已接入实际保存、播放、解锁或系统分享操作。
+5. 首次进入、登录 QQ 按钮和更新下载卡片按最新设计稿重绘；下载卡片继续仅展示 Android 系统下载器返回的真实字节与进度。
 
 ### v0.9.9
 
