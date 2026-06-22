@@ -135,6 +135,7 @@ class MainActivity : FragmentActivity() {
                 downloadState = updateManager.uiState,
                 cancelDownload = updateManager::cancelDownload,
                 retryDownload = updateManager::retryDownload,
+                openExternalDownload = updateManager::openExternalDownload,
                 dismissDownloadStatus = updateManager::dismissDownloadStatus
             )
         }
@@ -182,6 +183,7 @@ private fun PlushLedgerApp(
     downloadState: UpdateDownloadUiState,
     cancelDownload: () -> Unit,
     retryDownload: () -> Unit,
+    openExternalDownload: () -> Unit,
     dismissDownloadStatus: () -> Unit,
     viewModel: LedgerViewModel = viewModel()
 ) {
@@ -258,6 +260,7 @@ private fun PlushLedgerApp(
                         state = downloadState,
                         onCancel = cancelDownload,
                         onRetry = retryDownload,
+                        onExternalDownload = openExternalDownload,
                         onDismiss = dismissDownloadStatus
                     )
                 }
@@ -297,6 +300,7 @@ private fun UpdateDownloadStatusDialog(
     state: UpdateDownloadUiState,
     onCancel: () -> Unit,
     onRetry: () -> Unit,
+    onExternalDownload: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
@@ -360,7 +364,12 @@ private fun UpdateDownloadStatusDialog(
         },
         confirmButton = {
             if (state.phase == UpdateDownloadPhase.FAILED || state.phase == UpdateDownloadPhase.CANCELLED) {
-                TextButton(onClick = onRetry) { Text("重新下载") }
+                Row {
+                    if (state.phase == UpdateDownloadPhase.FAILED) {
+                        TextButton(onClick = onExternalDownload) { Text("浏览器下载") }
+                    }
+                    TextButton(onClick = onRetry) { Text("重新下载") }
+                }
             }
         }
     )
