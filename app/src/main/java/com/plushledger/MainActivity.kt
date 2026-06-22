@@ -226,7 +226,11 @@ private fun PlushLedgerApp(
                     )
                     else -> LedgerShell(viewModel, biometricAvailable, downloadUpdate)
                 }
-                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp))
+                SnackbarHost(
+                    hostState = snackbar,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 82.dp),
+                    snackbar = { data -> PlushSnackbar(data.visuals.message) }
+                )
                 state.availableUpdate?.takeUnless { downloadState.isActive }?.let { update ->
                     AlertDialog(
                         onDismissRequest = { viewModel.dismissUpdate() },
@@ -258,6 +262,32 @@ private fun PlushLedgerApp(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PlushSnackbar(message: String) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = palette.surfaceAlt,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, palette.rose.copy(alpha = 0.42f)),
+        shadowElevation = 14.dp
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(14.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
+                Image(
+                    painter = painterResource(R.drawable.ic_launcher_transparent),
+                    contentDescription = null,
+                    modifier = Modifier.padding(3.dp).size(42.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(message, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 2)
+            Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.pink, modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -933,10 +963,11 @@ private fun LedgerShell(
                     ) {
                         navItems.forEach { item ->
                             val selected = state.selectedTab == item.tab
+                            val selectedColor = if (item.tab == AppTab.MY) palette.pink else palette.rose
                             Column(
                                 modifier = Modifier.weight(1f)
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(if (selected) palette.rose else androidx.compose.ui.graphics.Color.Transparent)
+                                    .background(if (selected) selectedColor else androidx.compose.ui.graphics.Color.Transparent)
                                     .clickable { viewModel.selectTab(item.tab) }
                                     .padding(vertical = 5.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally

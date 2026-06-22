@@ -34,7 +34,7 @@ object LocalAiLedgerParser {
         if (source.isBlank()) return null
         val amount = parseAmount(source)
             ?: return null
-        val type = if (listOf("收入", "工资", "兼职", "收款", "到账", "报销", "理财", "收益", "利息", "稿费").any(source::contains)) "income" else "expense"
+        val type = if (listOf("收入", "工资", "兼职", "收款", "到账", "报销", "理财", "收益", "利息", "稿费", "转租", "租金").any(source::contains)) "income" else "expense"
         val category = chooseCategory(source, type, categories)
         val account = chooseAccount(source, accounts)
         return AiLedgerAnalysis(
@@ -249,6 +249,7 @@ object LocalAiLedgerParser {
 
     private val incomeKeywords = listOf(
         "工资" to listOf("工资", "薪水"),
+        "房屋" to listOf("房屋转租", "转租", "房租收入", "租金收入", "收租", "出租房"),
         "兼职" to listOf("兼职", "稿费", "副业"),
         "理财" to listOf("理财", "利息", "收益"),
         "礼金" to listOf("礼金", "红包", "礼物")

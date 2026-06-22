@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
@@ -113,9 +114,11 @@ import com.plushledger.data.Money
 import com.plushledger.data.OfficialMessage
 import com.plushledger.sync.AppVersionInfo
 import java.time.Instant
+import java.time.Duration
 import java.time.LocalDate
 import java.time.Period
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 
@@ -297,6 +300,7 @@ private fun MyRoot(
     val monthCount = state.ledger.transactions.count { java.time.YearMonth.from(it.localDateForProfile()) == java.time.YearMonth.now() }
     val streakDays = state.ledger.transactions.map { it.localDateForProfile() }.distinct().size.coerceAtMost(99)
     val context = LocalContext.current
+    val dailyQuote = rememberDailyQuote()
     var showExportDialog by rememberSaveable { mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) {
@@ -319,44 +323,57 @@ private fun MyRoot(
                     modifier = Modifier.width(96.dp).height(30.dp),
                     contentScale = ContentScale.Fit
                 )
-                Spacer(Modifier.weight(1f))
+                Text(
+                    dailyQuote,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    color = palette.muted,
+                    fontSize = 10.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "设置", tint = palette.ink) }
             }
         }
         item {
-            ProfileWarmPanel(Modifier.fillMaxWidth().clickable(onClick = onProfile), padding = 12.dp) {
+            ProfileWarmPanel(Modifier.fillMaxWidth().clickable(onClick = onProfile), padding = 10.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(state.avatarUrl, 64.dp)
-                    Spacer(Modifier.width(14.dp))
+                    Surface(shape = CircleShape, color = Color.White, shadowElevation = 5.dp) {
+                        Box(Modifier.padding(4.dp)) { Avatar(state.avatarUrl, 70.dp) }
+                    }
+                    Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
                             profile?.displayName ?: state.session?.displayName ?: "绒绒用户",
                             fontWeight = FontWeight.Black,
-                        fontSize = 21.sp,
+                        fontSize = 25.sp,
                             color = palette.ink,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text("享受每一次记录的好习惯～", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(6.dp))
-                        Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFFFFEDC8)) {
-                            Text(
-                                badge,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                                color = badgeColor(profile?.role, profile?.membershipTier),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
+                        Spacer(Modifier.height(8.dp))
+                        Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFFFFEDC8), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFDFA2))) {
+                            Row(Modifier.padding(start = 4.dp, end = 12.dp, top = 3.dp, bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                                MascotArt(24.dp)
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    badge,
+                                    color = badgeColor(profile?.role, profile?.membershipTier),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
-                    MascotArt(78.dp)
+                    MascotArt(88.dp)
                 }
-                Spacer(Modifier.height(6.dp))
-                Surface(shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.78f), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
-                    Row(Modifier.fillMaxWidth().padding(6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ProfileMetric("连续记账", "$streakDays 天", palette.rose, Modifier.weight(1f))
-                        Box(Modifier.width(1.dp).height(44.dp).background(palette.border))
-                        ProfileMetric("本月已记录", "$monthCount 笔", palette.moss, Modifier.weight(1f))
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = RoundedCornerShape(22.dp), color = Color.White.copy(alpha = 0.9f), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ProfileMetric(Icons.Default.CalendarMonth, "连续记账", "$streakDays 天", palette.rose, Modifier.weight(1f))
+                        Box(Modifier.width(1.dp).height(58.dp).background(palette.border))
+                        ProfileMetric(Icons.Default.EditNote, "本月已记录", "$monthCount 笔", palette.moss, Modifier.weight(1f))
                     }
                 }
             }
@@ -447,7 +464,7 @@ private fun PetEntryCard(onClick: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PetRongRongScreen(ledger: LedgerState, onBack: () -> Unit, onRecord: () -> Unit) {
+private fun LegacyPetRongRongScreen(ledger: LedgerState, onBack: () -> Unit, onRecord: () -> Unit) {
     val palette = LocalPlushPalette.current
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("pet_rongrong", Context.MODE_PRIVATE) }
@@ -1989,12 +2006,42 @@ private fun Avatar(url: String?, size: androidx.compose.ui.unit.Dp) {
 }
 
 @Composable
-private fun ProfileMetric(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+private fun ProfileMetric(icon: ImageVector, label: String, value: String, color: Color, modifier: Modifier = Modifier) {
     val palette = LocalPlushPalette.current
-    Column(modifier.clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = 0.12f)).padding(8.dp)) {
-        Text(label, color = palette.muted, fontSize = 11.sp)
-        Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Row(modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = CircleShape, color = color.copy(alpha = 0.14f)) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.padding(8.dp).size(22.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(label, color = palette.ink, fontSize = 12.sp)
+            Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
+}
+
+@Composable
+private fun rememberDailyQuote(): String {
+    val context = LocalContext.current
+    var day by remember { mutableStateOf(LocalDate.now()) }
+    val quotes = remember(context) {
+        runCatching {
+            context.assets.open("daily_quotes.txt").bufferedReader().useLines { lines ->
+                lines.mapNotNull { line ->
+                    Regex("^\\s*\\d+\\.\\s*(.+)$").find(line)?.groupValues?.get(1)?.trim()
+                }.filter(String::isNotBlank).toList()
+            }
+        }.getOrDefault(listOf("今天也要温柔地掌控生活。"))
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = ZonedDateTime.now()
+            val nextDay = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+            delay(Duration.between(now, nextDay).toMillis().coerceAtLeast(1_000L) + 500L)
+            day = LocalDate.now()
+        }
+    }
+    return quotes[Math.floorMod(day.toEpochDay().toInt(), quotes.size)]
 }
 
 @Composable

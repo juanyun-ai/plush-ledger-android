@@ -66,6 +66,18 @@ class AiLedgerParserTest {
         assertEquals(LocalDate.of(2024, 2, 29), numeric.localDate())
     }
 
+    @Test
+    fun keepsRelativeDateAndRecognizesRentalIncome() {
+        val yesterday = parse("昨天吃了一坨屎，花了10块钱")
+        val rental = parse("6月7日，房屋转租收入1200块，微信支付")
+
+        assertEquals(LocalDate.now().minusDays(1), yesterday.localDate())
+        assertEquals(LocalDate.of(LocalDate.now().year, 6, 7), rental.localDate())
+        assertEquals("income", rental.type)
+        assertEquals("房屋", rental.categoryLabel)
+        assertEquals(120_000L, rental.amountMinor)
+    }
+
     private fun AiLedgerAnalysis.localDate(): LocalDate =
         Instant.ofEpochMilli(occurredAt).atZone(ZoneId.systemDefault()).toLocalDate()
 

@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-0.9.7-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-0.9.8-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -83,6 +83,14 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载器可从主源或备用源断点续传，自动切换线路并在安装前核验 SHA-256；校验失败不会进入安装流程。GitHub Release 与 Supabase Storage 互为主备，发布时按实测网络表现设置主线路。
+
+### v0.9.8
+
+1. AI 日期识别不再受云端错误年份干扰，支持“昨天”和未写年份的具体月日。
+2. AI 确认页可编辑全部关键字段，并新增房屋转租收入分类。
+3. “我的”顶部加入每日自动更新的暖心语录，并按新设计稿重构用户卡片。
+4. 宠物绒绒改为纯娱乐专题：每天最多互动一次，不再设置记账任务和无限领取。
+5. 全局提示条替换为随主题变化的暖色毛绒样式。
 
 ### v0.9.7
 

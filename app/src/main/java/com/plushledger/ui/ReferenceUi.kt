@@ -244,6 +244,7 @@ private fun categoryArtRes(name: String?): Int = when (name?.trim()) {
     "就诊体检" -> R.drawable.sub_checkup
     "运动健身" -> R.drawable.sub_fitness
     "工资", "薪资", "薪水", "工资收入" -> R.drawable.category_salary
+    "房屋", "转租", "租金收入", "房租收入" -> R.drawable.art_home
     "兼职", "副业", "稿费" -> R.drawable.category_parttime
     "理财", "投资", "投资收益", "利息收益" -> R.drawable.category_investment
     "礼金", "礼金收入", "红包礼金", "礼物" -> R.drawable.category_gift_income

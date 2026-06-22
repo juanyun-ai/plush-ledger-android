@@ -607,7 +607,9 @@ class LedgerRepository(
             accountId = account?.id,
             accountLabel = account?.name ?: "默认账户",
             note = remote.note ?: text.trim().take(80),
-            occurredAt = remote.occurredAt ?: local.occurredAt,
+            // Dates are deterministic locally. Model timestamps are not allowed to
+            // replace explicit or relative dates with hallucinated years/months.
+            occurredAt = local.occurredAt,
             cloudAssisted = true
         )
     }

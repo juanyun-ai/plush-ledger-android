@@ -83,6 +83,7 @@ object CategoryCatalog {
         CategorySpec("expense.other.unknown", "未分类", EXPENSE, "unknown", "#A69F96", "expense.other"),
 
         CategorySpec("income.salary", "工资", INCOME, "salary", "#5E9B83"),
+        CategorySpec("income.rent", "房屋", INCOME, "home", "#E0A86E"),
         CategorySpec("income.parttime", "兼职", INCOME, "parttime", "#6E8DBF"),
         CategorySpec("income.investment", "理财", INCOME, "investment", "#8AA46D"),
         CategorySpec("income.gift", "礼金", INCOME, "gift_income", "#76A9A8")

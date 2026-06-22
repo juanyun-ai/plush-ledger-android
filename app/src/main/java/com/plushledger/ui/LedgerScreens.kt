@@ -71,6 +71,8 @@ import androidx.compose.material.icons.filled.Redeem
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -115,6 +117,7 @@ import com.plushledger.data.CategorySpend
 import com.plushledger.data.LedgerState
 import com.plushledger.data.Money
 import com.plushledger.data.TransactionEntity
+import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -296,7 +299,13 @@ fun HomeScreen(
     }
 
     aiSuggestion?.let { suggestion ->
-        AiConfirmationDialog(suggestion, onDismissAi) { onSaveAi(suggestion) }
+        AiConfirmationDialog(
+            suggestion = suggestion,
+            categories = ledger.categories,
+            accounts = ledger.accounts,
+            onDismiss = onDismissAi,
+            onConfirm = onSaveAi
+        )
     }
 }
 
@@ -416,10 +425,42 @@ private fun AiAnalyzingIndicator() {
 }
 
 @Composable
-private fun AiConfirmationDialog(suggestion: AiLedgerAnalysis, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun AiConfirmationDialog(
+    suggestion: AiLedgerAnalysis,
+    categories: List<CategoryEntity>,
+    accounts: List<AccountEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (AiLedgerAnalysis) -> Unit
+) {
     val palette = LocalPlushPalette.current
-    val dateText = Instant.ofEpochMilli(suggestion.occurredAt).atZone(ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm"))
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm") }
+    var type by rememberSaveable(suggestion.sourceText) { mutableStateOf(suggestion.type) }
+    var amountText by rememberSaveable(suggestion.sourceText) {
+        mutableStateOf(BigDecimal(suggestion.amountMinor).movePointLeft(2).stripTrailingZeros().toPlainString())
+    }
+    var dateText by rememberSaveable(suggestion.sourceText) {
+        mutableStateOf(
+            Instant.ofEpochMilli(suggestion.occurredAt).atZone(ZoneId.systemDefault())
+                .format(dateFormatter)
+        )
+    }
+    var categoryId by rememberSaveable(suggestion.sourceText) { mutableStateOf(suggestion.categoryId) }
+    var accountId by rememberSaveable(suggestion.sourceText) { mutableStateOf(suggestion.accountId) }
+    var note by rememberSaveable(suggestion.sourceText) { mutableStateOf(suggestion.note.ifBlank { suggestion.sourceText }) }
+    val typeCategories = categories.filter { it.kind == type }
+    val selectedCategory = typeCategories.firstOrNull { it.id == categoryId }
+    val selectedAccount = accounts.firstOrNull { it.id == accountId }
+    val parsedAmount = Money.parseToMinor(amountText)
+    val parsedDate = runCatching {
+        LocalDateTime.parse(dateText.trim(), dateFormatter).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }.getOrNull()
+    val canConfirm = parsedAmount != null && parsedAmount > 0 && parsedDate != null && selectedCategory != null && selectedAccount != null
+
+    LaunchedEffect(type) {
+        if (typeCategories.none { it.id == categoryId }) {
+            categoryId = typeCategories.firstOrNull { it.parentId != null }?.id ?: typeCategories.firstOrNull()?.id
+        }
+    }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.82f),
@@ -438,12 +479,19 @@ private fun AiConfirmationDialog(suggestion: AiLedgerAnalysis, onDismiss: () -> 
                     MascotArt(70.dp)
                 }
                 Spacer(Modifier.height(8.dp))
-                AiResultRow("类型", if (suggestion.type == "income") "收入" else "支出")
-                AiResultRow("金额", Money.formatCny(suggestion.amountMinor))
-                AiResultRow("日期", dateText)
-                AiResultRow("分类", suggestion.categoryLabel)
-                AiResultRow("账户", suggestion.accountLabel)
-                AiResultRow("备注", suggestion.note.ifBlank { suggestion.sourceText })
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AiTypeChoice("支出", type == "expense", Modifier.weight(1f)) { type = "expense" }
+                    AiTypeChoice("收入", type == "income", Modifier.weight(1f)) { type = "income" }
+                }
+                Spacer(Modifier.height(8.dp))
+                AiEditableTextRow("金额", amountText, { amountText = it.filter { char -> char.isDigit() || char == '.' }.take(12) }, "例如 15.50", KeyboardType.Decimal)
+                AiEditableTextRow("日期", dateText, { dateText = it.take(16) }, "yyyy-MM-dd HH:mm")
+                AiEditableChoiceRow("分类", selectedCategory?.name ?: "请选择", typeCategories, { it.name }) { categoryId = it.id }
+                AiEditableChoiceRow("账户", selectedAccount?.name ?: "请选择", accounts, { it.name }) { accountId = it.id }
+                AiEditableTextRow("备注", note, { note = it.take(80) }, "备注")
+                if (!canConfirm) {
+                    Text("请检查金额、日期、分类和账户。", color = palette.coral, fontSize = 11.sp)
+                }
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = palette.muted, modifier = Modifier.size(17.dp))
@@ -461,9 +509,24 @@ private fun AiConfirmationDialog(suggestion: AiLedgerAnalysis, onDismiss: () -> 
                     }
                     Spacer(Modifier.width(14.dp))
                     Surface(
-                        modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(onClick = onConfirm),
+                        modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(enabled = canConfirm) {
+                            val category = selectedCategory ?: return@clickable
+                            val account = selectedAccount ?: return@clickable
+                            onConfirm(
+                                suggestion.copy(
+                                    type = type,
+                                    amountMinor = parsedAmount ?: return@clickable,
+                                    categoryId = category.id,
+                                    categoryLabel = category.name,
+                                    accountId = account.id,
+                                    accountLabel = account.name,
+                                    note = note.trim(),
+                                    occurredAt = parsedDate ?: return@clickable
+                                )
+                            )
+                        },
                         shape = RoundedCornerShape(24.dp),
-                        color = palette.moss,
+                        color = if (canConfirm) palette.moss else palette.moss.copy(alpha = 0.42f),
                         shadowElevation = 7.dp
                     ) {
                         Text(
@@ -481,9 +544,28 @@ private fun AiConfirmationDialog(suggestion: AiLedgerAnalysis, onDismiss: () -> 
 }
 
 @Composable
-private fun AiResultRow(label: String, value: String) {
+private fun AiTypeChoice(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
-    Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+    Surface(
+        modifier = modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) palette.rose else palette.surfaceAlt,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) palette.rose else palette.border)
+    ) {
+        Text(label, modifier = Modifier.padding(vertical = 8.dp), color = if (selected) Color.White else palette.ink, textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.Black)
+    }
+}
+
+@Composable
+private fun AiEditableTextRow(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    keyboardType: KeyboardType = KeyboardType.Text
+) {
+    val palette = LocalPlushPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFFFFF3DE)) {
             Text(
                 label,
@@ -493,10 +575,57 @@ private fun AiResultRow(label: String, value: String) {
                 fontWeight = FontWeight.Bold
             )
         }
-        Spacer(Modifier.width(14.dp))
-        Text(value, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.width(10.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            placeholder = { Text(placeholder, fontSize = 12.sp) },
+            textStyle = androidx.compose.ui.text.TextStyle(color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp)
+        )
     }
-    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border.copy(alpha = 0.62f)))
+}
+
+@Composable
+private fun <T> AiEditableChoiceRow(
+    label: String,
+    value: String,
+    options: List<T>,
+    optionLabel: (T) -> String,
+    onSelect: (T) -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    var expanded by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFFFFF3DE)) {
+            Text(label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Color(0xFF9A7045), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.weight(1f)) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { expanded = true },
+                shape = RoundedCornerShape(14.dp),
+                color = palette.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
+            ) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(value, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                    Icon(Icons.Default.ExpandMore, contentDescription = "选择$label", tint = palette.muted, modifier = Modifier.size(18.dp))
+                }
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(optionLabel(option), color = palette.ink) },
+                        onClick = { onSelect(option); expanded = false }
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
