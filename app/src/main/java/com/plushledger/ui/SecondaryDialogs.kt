@@ -259,20 +259,20 @@ fun ContactSupportDialog(email: String, onDismiss: () -> Unit, onOpenEmail: () -
     }
 }
 
-private data class ThemeOption(val key: String, val label: String, val image: Int, val color: Color)
+private data class ThemeOption(val key: String, val label: String, val color: Color, val surface: Color)
 
 @Composable
 fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String) -> Unit) {
     val palette = LocalPlushPalette.current
     val options = listOf(
-        ThemeOption("warm", "奶油黄（经典款）", R.drawable.theme_warm, Color(0xFFFFA126)),
-        ThemeOption("pink", "樱花粉", R.drawable.theme_pink, Color(0xFFFF8DAE)),
-        ThemeOption("green", "薄荷绿", R.drawable.theme_green, Color(0xFF79C98D)),
-        ThemeOption("blue", "天空蓝", R.drawable.theme_blue, Color(0xFF7BB6F3)),
-        ThemeOption("purple", "薰衣草紫", R.drawable.theme_purple, Color(0xFFA58AE8)),
-        ThemeOption("orange", "蜜桃橙", R.drawable.theme_orange, Color(0xFFFF9560)),
-        ThemeOption("brown", "可可棕", R.drawable.theme_brown, Color(0xFF9B6B4B)),
-        ThemeOption("mono", "牛奶白", R.drawable.theme_white, Color(0xFFE7D7C7))
+        ThemeOption("warm", "奶油黄（经典款）", Color(0xFFFFA126), Color(0xFFFFF1D6)),
+        ThemeOption("pink", "樱花粉", Color(0xFFFF7EAA), Color(0xFFFFE7EF)),
+        ThemeOption("green", "薄荷绿", Color(0xFF69C79A), Color(0xFFE1F7EC)),
+        ThemeOption("blue", "天空蓝", Color(0xFF73B4F3), Color(0xFFE4F2FF)),
+        ThemeOption("purple", "薰衣草紫", Color(0xFFA184E7), Color(0xFFF0EAFF)),
+        ThemeOption("orange", "蜜桃橙", Color(0xFFFF9560), Color(0xFFFFEBDD)),
+        ThemeOption("brown", "可可棕", Color(0xFF9B6B4B), Color(0xFFF3E6D9)),
+        ThemeOption("mono", "牛奶白", Color(0xFFB7A18F), Color(0xFFFFFCF5))
     )
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(0.91f).heightIn(max = 760.dp), shape = RoundedCornerShape(34.dp), color = Color(0xFFFFFCF7), border = BorderStroke(2.dp, Color(0xFFFFD8A0)), shadowElevation = 22.dp) {
@@ -290,22 +290,36 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                     items(options.chunked(2)) { row ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             row.forEach { option ->
-                                Surface(
-                                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).clickable { onChoose(option.key) },
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = if (current == option.key) option.color.copy(alpha = 0.13f) else Color.White,
-                                    border = BorderStroke(1.5.dp, if (current == option.key) option.color else palette.border)
-                                ) {
-                                    Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Image(painterResource(option.image), option.label, Modifier.fillMaxWidth().height(104.dp), contentScale = ContentScale.Crop)
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(option.label, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
-                                    }
-                                }
+                                ThemeChoiceCard(option, current == option.key, Modifier.weight(1f)) { onChoose(option.key) }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeChoiceCard(option: ThemeOption, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = modifier.height(146.dp).clip(RoundedCornerShape(23.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(23.dp),
+        color = option.surface,
+        border = BorderStroke(if (selected) 2.5.dp else 1.dp, if (selected) option.color else palette.border),
+        shadowElevation = if (selected) 8.dp else 2.dp
+    ) {
+        Box(Modifier.fillMaxWidth().height(146.dp)) {
+            Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) { MascotArt(76.dp) }
+            Row(
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 10.dp, bottom = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(shape = CircleShape, color = option.color) { Spacer(Modifier.size(14.dp)) }
+                Spacer(Modifier.width(7.dp))
+                Text(option.label, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (selected) Icon(Icons.Default.CheckCircle, "已选中", tint = option.color, modifier = Modifier.size(20.dp))
             }
         }
     }

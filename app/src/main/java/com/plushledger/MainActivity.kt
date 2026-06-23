@@ -1115,7 +1115,14 @@ private fun LedgerShell(
                     onSaveAi = viewModel::saveAiSuggestion,
                     onDismissAi = viewModel::clearAiSuggestion
                 )
-                AppTab.BILLS -> BillsScreen(state.ledger, state.selectedDate, viewModel::changeMonth, viewModel::selectStatsDate, viewModel::deleteTransaction)
+                AppTab.BILLS -> BillsScreen(
+                    ledger = state.ledger,
+                    selectedDate = state.selectedDate,
+                    onMonth = viewModel::changeMonth,
+                    onDate = viewModel::selectStatsDate,
+                    onDelete = viewModel::deleteTransaction,
+                    onUpdate = viewModel::updateTransaction
+                )
                 AppTab.RECORD -> RecordScreen(
                     state = state,
                     onBack = { viewModel.navigateBack() },

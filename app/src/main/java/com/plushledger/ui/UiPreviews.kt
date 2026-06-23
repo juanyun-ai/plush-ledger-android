@@ -40,7 +40,7 @@ private fun HomePreview() = PreviewFrame {
 @Preview(name = "账单", showBackground = true, widthDp = 393, heightDp = 852)
 @Composable
 private fun BillsPreview() = PreviewFrame {
-    BillsScreen(previewLedger, previewDate, {}, {}, {})
+    BillsScreen(previewLedger, previewDate, {}, {}, {}, { _, _, _, _, _, _ -> })
 }
 
 @Preview(name = "统计", showBackground = true, widthDp = 393, heightDp = 852)

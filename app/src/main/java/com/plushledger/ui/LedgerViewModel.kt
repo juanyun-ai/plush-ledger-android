@@ -510,6 +510,41 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun updateTransaction(
+        id: String,
+        amountText: String,
+        categoryId: String?,
+        accountId: String?,
+        note: String,
+        occurredDateTime: java.time.LocalDateTime
+    ) {
+        val session = state.value.session ?: return
+        val amount = Money.parseToMinor(amountText)
+        val account = accountId ?: state.value.ledger.accounts.firstOrNull()?.id
+        if (amount == null || account == null) {
+            state.value = state.value.copy(message = if (amount == null) "金额需要大于 0" else "请选择账户")
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                ledger.updateTransaction(
+                    userId = session.userId,
+                    id = id,
+                    amountMinor = amount,
+                    categoryId = categoryId,
+                    accountId = account,
+                    note = note,
+                    occurredAt = occurredDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                )
+            }.onSuccess {
+                app.enqueueImmediateSync()
+                state.value = state.value.copy(message = "账目已更新")
+            }.onFailure { error ->
+                state.value = state.value.copy(message = "更新失败：${error.message.orEmpty().take(60)}")
+            }
+        }
+    }
+
     fun addAccount(name: String, kind: String) {
         val session = state.value.session ?: return
         viewModelScope.launch {

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
@@ -125,11 +126,22 @@ import kotlinx.coroutines.delay
 
 private const val SUPPORT_EMAIL = "support@xiaoxing.online"
 
+private fun openSupportEmail(context: android.content.Context) {
+    val intent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:$SUPPORT_EMAIL")
+        putExtra(Intent.EXTRA_SUBJECT, "绒绒记账用户建议")
+    }
+    runCatching { context.startActivity(intent) }
+        .onFailure { Toast.makeText(context, "没有找到可用的邮箱 App", Toast.LENGTH_SHORT).show() }
+}
+
 @Composable
 fun InboxScreen(
     messages: List<OfficialMessage>,
     busy: Boolean,
+    isLocalMode: Boolean,
     onFeedback: (String) -> Unit,
+    onOpenSupport: () -> Unit,
     onDownloadUpdate: (AppVersionInfo) -> Unit
 ) {
     val palette = LocalPlushPalette.current
@@ -191,6 +203,10 @@ fun InboxScreen(
         item { SectionTitle("写给开发者", Icons.Default.Email) }
         item {
             PlushCard {
+                if (isLocalMode) {
+                    Text("本地模式的账目不上传云端；你仍可以通过系统邮箱把建议直接发给开发者。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                    Spacer(Modifier.height(10.dp))
+                }
                 OutlinedTextField(
                     value = feedback,
                     onValueChange = { feedback = it.take(500) },
@@ -200,7 +216,7 @@ fun InboxScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 PlushButton("发送建议", Icons.Default.Send, Modifier.fillMaxWidth(), enabled = !busy && feedback.length >= 5) {
-                    onFeedback(feedback)
+                    if (isLocalMode) onOpenSupport() else onFeedback(feedback)
                     feedback = ""
                 }
             }
@@ -233,6 +249,7 @@ fun MyScreen(
     viewModel: LedgerViewModel,
     onDownloadUpdate: (AppVersionInfo) -> Unit
 ) {
+    val context = LocalContext.current
     var page by rememberSaveable { mutableStateOf(MyPage.ROOT) }
     BackHandler(enabled = page != MyPage.ROOT) { page = MyPage.ROOT }
     when (page) {
@@ -261,7 +278,14 @@ fun MyScreen(
         )
         MyPage.INBOX -> Column(Modifier.fillMaxSize()) {
             BackHeader("消息与建议", onBack = { page = MyPage.ROOT })
-            InboxScreen(state.officialMessages, state.isBusy, viewModel::submitFeedback, onDownloadUpdate)
+            InboxScreen(
+                messages = state.officialMessages,
+                busy = state.isBusy,
+                isLocalMode = state.session?.accessToken == null,
+                onFeedback = viewModel::submitFeedback,
+                onOpenSupport = { openSupportEmail(context) },
+                onDownloadUpdate = onDownloadUpdate
+            )
         }
         MyPage.SETTINGS -> SettingsScreen(state, biometricAvailable, viewModel, onBack = { page = MyPage.ROOT })
         MyPage.MEMBERSHIP -> MembershipScreen(state, onBack = { page = MyPage.ROOT })
@@ -611,6 +635,7 @@ private fun ProfileScreen(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("plush_profile_actions", Context.MODE_PRIVATE) }
     val userKey = state.session?.userId ?: "guest"
+    val plannerStore = remember(userKey) { LifePlannerStore(context.applicationContext, userKey) }
     val initialName = profile?.displayName ?: state.session?.displayName.orEmpty()
     val initialAge = profile?.age?.toString().orEmpty()
     val initialBirthDate = profile?.birthDate.orEmpty()
@@ -634,6 +659,7 @@ private fun ProfileScreen(
     var privacyOn by rememberSaveable(userKey) { mutableStateOf(prefs.getBoolean("privacy_$userKey", false)) }
     var verified by rememberSaveable(userKey) { mutableStateOf(prefs.getBoolean("verified_$userKey", false)) }
     var verifiedName by rememberSaveable(userKey) { mutableStateOf(prefs.getString("verified_name_$userKey", "") ?: "") }
+    var birthdaySettings by remember(userKey) { mutableStateOf(plannerStore.birthdaySettings()) }
     var deleteSeconds by remember { mutableIntStateOf(15) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(onAvatar) }
     val dirty = nickname != initialName || age != initialAge || birthDate != initialBirthDate ||
@@ -716,21 +742,38 @@ private fun ProfileScreen(
                     showGenderEditor = true
                 })
                 ProfileDivider()
-                ProfileListRow(Icons.Default.Badge, "生日", if (privacyOn) "**月**日" else birthdayLabel, palette.coral, onClick = {
-                    editMode = true
-                    val initial = runCatching { LocalDate.parse(birthDate) }.getOrDefault(LocalDate.now().minusYears(20))
-                    DatePickerDialog(
-                        context,
-                        { _, year, month, day ->
-                            val selected = LocalDate.of(year, month + 1, day)
-                            birthDate = selected.toString()
-                            age = Period.between(selected, LocalDate.now()).years.coerceAtLeast(0).toString()
-                        },
-                        initial.year,
-                        initial.monthValue - 1,
-                        initial.dayOfMonth
-                    ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
-                })
+                BirthdayProfileCard(
+                    birthDate = birthDate,
+                    privacyOn = privacyOn,
+                    settings = birthdaySettings,
+                    onModeChange = { mode ->
+                        birthdaySettings = birthdaySettings.copy(calendarMode = mode)
+                        plannerStore.saveBirthdaySettings(birthdaySettings)
+                    },
+                    onPickDate = {
+                        editMode = true
+                        val initial = runCatching { LocalDate.parse(birthDate) }.getOrDefault(LocalDate.now().minusYears(20))
+                        DatePickerDialog(
+                            context,
+                            { _, year, month, day ->
+                                val selected = LocalDate.of(year, month + 1, day)
+                                birthDate = selected.toString()
+                                age = Period.between(selected, LocalDate.now()).years.coerceAtLeast(0).toString()
+                            },
+                            initial.year,
+                            initial.monthValue - 1,
+                            initial.dayOfMonth
+                        ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                    },
+                    onReminderChange = { enabled ->
+                        birthdaySettings = birthdaySettings.copy(reminderEnabled = enabled)
+                        plannerStore.saveBirthdaySettings(birthdaySettings)
+                    },
+                    onSyncChange = { enabled ->
+                        birthdaySettings = birthdaySettings.copy(showInLifeCalendar = enabled)
+                        plannerStore.saveBirthdaySettings(birthdaySettings)
+                    }
+                )
                 ProfileDivider()
                 ProfileListRow(Icons.Default.ChatBubble, "个性签名", signature, palette.coral, onClick = {
                     editMode = true
@@ -911,6 +954,82 @@ private fun ProfileSectionTitle(text: String) {
         Text(text, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp)
     }
     Spacer(Modifier.height(10.dp))
+}
+
+@Composable
+private fun BirthdayProfileCard(
+    birthDate: String,
+    privacyOn: Boolean,
+    settings: BirthdaySettings,
+    onModeChange: (String) -> Unit,
+    onPickDate: () -> Unit,
+    onReminderChange: (Boolean) -> Unit,
+    onSyncChange: (Boolean) -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    val date = runCatching { LocalDate.parse(birthDate) }.getOrNull()
+    val solarLabel = date?.toString()?.toBirthdayLabel() ?: "未设置"
+    val lunarLabel = date?.lunarLabel() ?: "未设置"
+    Surface(shape = RoundedCornerShape(22.dp), color = Color(0xFFFFF8EC), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = CircleShape, color = palette.rose.copy(alpha = 0.13f)) {
+                    Icon(Icons.Default.Cake, null, tint = palette.rose, modifier = Modifier.padding(9.dp).size(22.dp))
+                }
+                Spacer(Modifier.width(11.dp))
+                Text("生日", modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                Surface(shape = RoundedCornerShape(22.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                    Row(Modifier.padding(3.dp)) {
+                        BirthdayModeButton("阳历", settings.calendarMode == "solar") { onModeChange("solar") }
+                        BirthdayModeButton("农历", settings.calendarMode == "lunar") { onModeChange("lunar") }
+                    }
+                }
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(onClick = onPickDate),
+                shape = RoundedCornerShape(18.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CalendarMonth, null, tint = palette.coral, modifier = Modifier.size(30.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (privacyOn) "**月**日" else if (settings.calendarMode == "lunar") "农历 $lunarLabel" else solarLabel,
+                            color = palette.ink,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 17.sp
+                        )
+                        if (!privacyOn && date != null && settings.calendarMode == "lunar") {
+                            Text("对应公历 $solarLabel", color = palette.muted, fontSize = 12.sp)
+                        } else Text("点这里选择生日", color = palette.muted, fontSize = 12.sp)
+                    }
+                    Icon(Icons.Default.ChevronRight, null, tint = palette.muted)
+                }
+            }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    ProfileListRow(Icons.Default.Notifications, "生日提醒", if (settings.reminderEnabled) "提前 ${settings.reminderDays} 天应用内提示" else "已关闭", palette.coral, onClick = { onReminderChange(!settings.reminderEnabled) })
+    ProfileDivider()
+    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = CircleShape, color = palette.moss.copy(alpha = 0.13f)) {
+            Icon(Icons.Default.CalendarMonth, null, tint = palette.moss, modifier = Modifier.padding(9.dp).size(22.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("重要日子同步到生活日历", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("生日将在首页日历和倒计时中显示", color = palette.muted, fontSize = 11.sp)
+        }
+        Switch(checked = settings.showInLifeCalendar, onCheckedChange = onSyncChange)
+    }
+}
+
+@Composable
+private fun BirthdayModeButton(label: String, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(modifier = Modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), color = if (selected) palette.rose else Color.Transparent) {
+        Text(label, Modifier.padding(horizontal = 13.dp, vertical = 7.dp), color = if (selected) Color.White else palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
 }
 
 @Composable

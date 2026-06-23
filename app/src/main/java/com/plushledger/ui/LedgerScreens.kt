@@ -1,6 +1,7 @@
 package com.plushledger.ui
 
 import android.app.TimePickerDialog
+import android.app.DatePickerDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -146,6 +147,18 @@ fun HomeScreen(
     var showCalendar by rememberSaveable { mutableStateOf(false) }
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
     var aiText by rememberSaveable { mutableStateOf("") }
+    var plannerPage by rememberSaveable { mutableStateOf<String?>(null) }
+    val plannerUserId = ledger.profile?.id ?: "local"
+    when (plannerPage) {
+        "calendar" -> {
+            LifeCalendarScreen(plannerUserId, ledger.profile, onBack = { plannerPage = null })
+            return
+        }
+        "wishes" -> {
+            GiftWishScreen(plannerUserId, onBack = { plannerPage = null })
+            return
+        }
+    }
     LaunchedEffect(aiSuggestion) {
         if (aiSuggestion != null) {
             showAiDialog = false
@@ -263,6 +276,14 @@ fun HomeScreen(
                     }
                 )
             }
+        }
+        item {
+            LifePlannerPreview(
+                userId = plannerUserId,
+                profile = ledger.profile,
+                onOpenCalendar = { plannerPage = "calendar" },
+                onOpenWishes = { plannerPage = "wishes" }
+            )
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -634,7 +655,8 @@ fun BillsScreen(
     selectedDate: LocalDate,
     onMonth: (Long) -> Unit,
     onDate: (LocalDate) -> Unit,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    onUpdate: (String, String, String?, String?, String, LocalDateTime) -> Unit
 ) {
     var filter by rememberSaveable { mutableStateOf("all") }
     var showCalendar by rememberSaveable { mutableStateOf(false) }
@@ -664,9 +686,15 @@ fun BillsScreen(
             record = selectedRecord,
             category = categoryMap[selectedRecord.categoryId],
             account = ledger.accounts.firstOrNull { it.id == selectedRecord.accountId },
+            categories = ledger.categories,
+            accounts = ledger.accounts,
             onBack = { selectedRecordId = null },
             onDelete = {
                 onDelete(selectedRecord.id)
+                selectedRecordId = null
+            },
+            onUpdate = { amount, categoryId, accountId, note, occurredAt ->
+                onUpdate(selectedRecord.id, amount, categoryId, accountId, note, occurredAt)
                 selectedRecordId = null
             }
         )
@@ -750,11 +778,15 @@ private fun BillDetailScreen(
     record: TransactionEntity,
     category: CategoryEntity?,
     account: AccountEntity?,
+    categories: List<CategoryEntity>,
+    accounts: List<AccountEntity>,
     onBack: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onUpdate: (String, String?, String?, String, LocalDateTime) -> Unit
 ) {
     val palette = LocalPlushPalette.current
     var confirmDelete by remember { mutableStateOf(false) }
+    var showEditor by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
@@ -764,8 +796,14 @@ private fun BillDetailScreen(
             Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
                 Text("账单详情", modifier = Modifier.weight(1f), color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.MoreHoriz, contentDescription = "更多", tint = palette.ink) }
+                Row {
+                    IconButton(onClick = { showEditor = true }) { Icon(Icons.Default.EditNote, contentDescription = "编辑账目", tint = palette.rose) }
+                    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.MoreHoriz, contentDescription = "更多", tint = palette.ink) }
+                }
             }
+        }
+        item {
+            PlushButton("编辑这笔账", Icons.Default.EditNote, Modifier.fillMaxWidth(), color = palette.rose) { showEditor = true }
         }
         item {
             PlushCard(padding = 22.dp) {
@@ -820,6 +858,68 @@ private fun BillDetailScreen(
             confirmDelete = false
         }
     }
+    if (showEditor) {
+        BillEditDialog(
+            record = record,
+            categories = categories,
+            accounts = accounts,
+            onDismiss = { showEditor = false },
+            onSave = { amount, categoryId, accountId, note, occurredAt ->
+                onUpdate(amount, categoryId, accountId, note, occurredAt)
+                showEditor = false
+            }
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun BillEditDialog(
+    record: TransactionEntity,
+    categories: List<CategoryEntity>,
+    accounts: List<AccountEntity>,
+    onDismiss: () -> Unit,
+    onSave: (String, String?, String?, String, LocalDateTime) -> Unit
+) {
+    val context = LocalContext.current
+    val palette = LocalPlushPalette.current
+    var amount by remember(record.id) { mutableStateOf("%.2f".format(Locale.US, record.amountMinor / 100.0)) }
+    var categoryId by remember(record.id) { mutableStateOf(record.categoryId) }
+    var accountId by remember(record.id) { mutableStateOf(record.accountId) }
+    var note by remember(record.id) { mutableStateOf(record.note) }
+    var date by remember(record.id) { mutableStateOf(record.localDate()) }
+    var time by remember(record.id) { mutableStateOf(Instant.ofEpochMilli(record.occurredAt).atZone(ZoneId.systemDefault()).toLocalTime()) }
+    val allowedCategories = categories.filter { it.kind == record.type && it.parentId != null }.ifEmpty { categories.filter { it.kind == record.type } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑这笔账", color = palette.ink, fontWeight = FontWeight.Black) },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                item { OutlinedTextField(amount, { amount = it.filter { char -> char.isDigit() || char == '.' }.take(12) }, label = { Text("金额") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true) }
+                if (record.type != "transfer") item {
+                    Text("分类", color = palette.muted, fontSize = 12.sp)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        allowedCategories.forEach { item -> SoftChip(item.name, categoryId == item.id, palette.rose) { categoryId = item.id } }
+                    }
+                }
+                item {
+                    Text("账户", color = palette.muted, fontSize = 12.sp)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        accounts.forEach { item -> SoftChip(item.name, accountId == item.id, palette.blue) { accountId = item.id } }
+                    }
+                }
+                item {
+                    Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { DatePickerDialog(context, { _, year, month, day -> date = LocalDate.of(year, month + 1, day) }, date.year, date.monthValue - 1, date.dayOfMonth).show() }, shape = RoundedCornerShape(16.dp), color = palette.surfaceAlt) { Text("日期  ${date.format(DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.CHINA))}", Modifier.padding(13.dp), color = palette.ink, fontWeight = FontWeight.Bold) }
+                }
+                item {
+                    Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { TimePickerDialog(context, { _, hour, minute -> time = LocalTime.of(hour, minute) }, time.hour, time.minute, true).show() }, shape = RoundedCornerShape(16.dp), color = palette.surfaceAlt) { Text("时间  ${time.format(DateTimeFormatter.ofPattern("HH:mm"))}", Modifier.padding(13.dp), color = palette.ink, fontWeight = FontWeight.Bold) }
+                }
+                item { OutlinedTextField(note, { note = it.take(80) }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = { TextButton(onClick = { onSave(amount, categoryId, accountId, note, LocalDateTime.of(date, time)) }) { Text("保存修改", color = palette.rose, fontWeight = FontWeight.Black) } }
+    )
 }
 
 @Composable

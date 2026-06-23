@@ -176,6 +176,31 @@ class LedgerRepository(
         dao.softDeleteTransaction(id, userId, now())
     }
 
+    suspend fun updateTransaction(
+        userId: String,
+        id: String,
+        amountMinor: Long,
+        categoryId: String?,
+        accountId: String,
+        note: String,
+        occurredAt: Long
+    ) {
+        val existing = dao.transactionsSnapshot(userId).firstOrNull { it.id == id } ?: error("账目不存在或已删除")
+        require(amountMinor > 0) { "金额需要大于 0" }
+        if (existing.type != "transfer") require(categoryId != null) { "请选择分类" }
+        dao.upsertTransaction(
+            existing.copy(
+                amountMinor = amountMinor,
+                categoryId = categoryId,
+                accountId = accountId,
+                note = note.trim().take(80),
+                occurredAt = occurredAt,
+                updatedAt = now(),
+                syncState = SYNC_DIRTY
+            )
+        )
+    }
+
     suspend fun deleteAccount(userId: String, id: String) {
         dao.softDeleteAccount(id, userId, now())
     }
