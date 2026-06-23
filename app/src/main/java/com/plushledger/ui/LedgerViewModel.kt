@@ -55,6 +55,7 @@ data class UiState(
     val biometricUnlock: Boolean = false,
     val darkMode: Boolean = false,
     val themeTone: String = "warm",
+    val automaticUpdatePrompts: Boolean = true,
     val defaultAccountId: String? = null,
     val exportPath: String? = null,
     val aiSuggestion: AiLedgerAnalysis? = null,
@@ -90,6 +91,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             biometricUnlock = sessions.isBiometricUnlockEnabled(),
             darkMode = sessions.isDarkModeEnabled(),
             themeTone = sessions.themeTone(),
+            automaticUpdatePrompts = sessions.areAutomaticUpdatePromptsEnabled(),
             defaultAccountId = session?.let { sessions.defaultAccountId(it.userId) }
         )
         session?.let {
@@ -667,9 +669,10 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             runCatching { ledger.latestAppVersion() }
                 .onSuccess { latest ->
                     val newer = latest?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+                    val canPresent = !silent || state.value.automaticUpdatePrompts || newer?.isMandatory == true
                     state.value = state.value.copy(
                         isCheckingUpdate = false,
-                        availableUpdate = newer,
+                        availableUpdate = if (canPresent) newer else null,
                         message = when {
                             newer != null -> if (silent) null else "发现新版本 ${newer.versionName}"
                             !silent -> "当前已是最新版本 ${BuildConfig.VERSION_NAME}"
@@ -689,6 +692,15 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     fun dismissUpdate() {
         if (state.value.availableUpdate?.isMandatory == true) return
         state.value = state.value.copy(availableUpdate = null)
+    }
+
+    fun disableAutomaticUpdatePrompts() {
+        sessions.setAutomaticUpdatePromptsEnabled(false)
+        state.value = state.value.copy(
+            automaticUpdatePrompts = false,
+            availableUpdate = null,
+            message = "已关闭自动更新提醒，可在“我的 → 设置 → 检查更新”手动更新"
+        )
     }
 
     fun syncNow() {

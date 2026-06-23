@@ -193,6 +193,7 @@ private fun PlushLedgerApp(
     val context = LocalContext.current
     val onboardingStore = remember { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE) }
     var onboardingDone by rememberSaveable { mutableStateOf(onboardingStore.getBoolean("v075_seen", false)) }
+    var confirmDisableUpdatePrompt by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(state.secureScreen) {
         setSecure(state.secureScreen)
@@ -235,24 +236,22 @@ private fun PlushLedgerApp(
                     snackbar = { data -> PlushSnackbar(data.visuals.message) }
                 )
                 state.availableUpdate?.takeUnless { downloadState.isActive }?.let { update ->
-                    AlertDialog(
-                        onDismissRequest = { viewModel.dismissUpdate() },
-                        title = { Text("发现新版本 ${update.versionName}", fontWeight = FontWeight.Bold) },
-                        text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(update.releaseNotes.ifBlank { "修复问题并改进使用体验。" })
-                                Text("安装包约 ${update.fileSizeBytes / 1024 / 1024}MB", color = LocalPlushPalette.current.muted)
-                                Text("下载完成后将由 Android 系统安装器确认更新。", color = LocalPlushPalette.current.muted)
-                            }
-                        },
-                        dismissButton = if (update.isMandatory) null else {
-                            { TextButton(onClick = viewModel::dismissUpdate) { Text("稍后") } }
-                        },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                downloadUpdate(update)
-                                viewModel.dismissUpdate()
-                            }) { Text("下载更新") }
+                    AvailableUpdateDialog(
+                        update = update,
+                        onLater = viewModel::dismissUpdate,
+                        onDisablePrompts = { confirmDisableUpdatePrompt = true },
+                        onDownload = {
+                            downloadUpdate(update)
+                            viewModel.dismissUpdate()
+                        }
+                    )
+                }
+                if (confirmDisableUpdatePrompt) {
+                    DisableUpdatePromptDialog(
+                        onDismiss = { confirmDisableUpdatePrompt = false },
+                        onConfirm = {
+                            confirmDisableUpdatePrompt = false
+                            viewModel.disableAutomaticUpdatePrompts()
                         }
                     )
                 }
@@ -263,6 +262,78 @@ private fun PlushLedgerApp(
                         onRetry = retryDownload,
                         onExternalDownload = openExternalDownload,
                         onDismiss = dismissDownloadStatus
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AvailableUpdateDialog(
+    update: com.plushledger.sync.AppVersionInfo,
+    onLater: () -> Unit,
+    onDisablePrompts: () -> Unit,
+    onDownload: () -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    Dialog(onDismissRequest = { if (!update.isMandatory) onLater() }) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(32.dp),
+            color = Color(0xFFFFFCF7),
+            border = BorderStroke(2.dp, Color(0xFFFFD8A0)),
+            shadowElevation = 20.dp
+        ) {
+            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                MascotArt(92.dp)
+                Text("发现新版本 ${update.versionName}", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 25.sp)
+                Text(update.releaseNotes.ifBlank { "修复问题并改进使用体验。" }, color = palette.ink, fontSize = 14.sp, lineHeight = 21.sp)
+                Text("安装包约 ${update.fileSizeBytes / 1024 / 1024}MB，下载完成后由 Android 系统安装器确认更新。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                Text("稍后也可前往“我的 → 设置 → 检查更新”手动更新。", color = palette.moss, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                PlushButton("下载更新", Icons.Default.Refresh, Modifier.fillMaxWidth(), color = palette.rose, onClick = onDownload)
+                if (!update.isMandatory) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(onClick = onLater) { Text("稍后", color = palette.muted) }
+                        TextButton(onClick = onDisablePrompts) { Text("以后不再提醒", color = palette.rose) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DisableUpdatePromptDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    var seconds by remember { mutableIntStateOf(2) }
+    LaunchedEffect(Unit) {
+        while (seconds > 0) {
+            delay(1_000)
+            seconds--
+        }
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(30.dp),
+            color = Color(0xFFFFFCF7),
+            border = BorderStroke(1.5.dp, Color(0xFFFFD8A0)),
+            shadowElevation = 18.dp
+        ) {
+            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                MascotArt(76.dp)
+                Text("关闭自动更新提醒？", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 23.sp)
+                Text("确认后，新版本不再自动弹窗。你仍可在“我的 → 设置 → 检查更新”主动查看和下载。", color = palette.muted, fontSize = 13.sp, lineHeight = 20.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp)) { Text("取消") }
+                    PlushButton(
+                        if (seconds > 0) "请等待 ${seconds}s" else "确认关闭",
+                        Icons.Default.CheckCircle,
+                        Modifier.weight(1f),
+                        enabled = seconds == 0,
+                        color = palette.rose,
+                        onClick = onConfirm
                     )
                 }
             }

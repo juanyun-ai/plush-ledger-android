@@ -551,14 +551,18 @@ class LedgerRepository(
     }
 
     private suspend fun syncWithToken(userId: String, token: String): String {
-        syncTable("profiles", dao.dirtyProfiles(userId), token) { it.id }.also { if (it.isNotEmpty()) dao.markProfilesSynced(it) }
-        syncTable("books", dao.dirtyBooks(userId), token) { it.id }.also { if (it.isNotEmpty()) dao.markBooksSynced(it) }
-        syncTable("accounts", dao.dirtyAccounts(userId), token) { it.id }.also { if (it.isNotEmpty()) dao.markAccountsSynced(it) }
-        syncTable("categories", dao.dirtyCategories(userId), token) { it.id }.also { if (it.isNotEmpty()) dao.markCategoriesSynced(it) }
-        syncTable("transactions", dao.dirtyTransactions(userId), token) { it.id }.also { if (it.isNotEmpty()) dao.markTransactionsSynced(it) }
-        syncTable("budgets", dao.dirtyBudgets(userId), token) { it.id }.also { if (it.isNotEmpty()) dao.markBudgetsSynced(it) }
+        val results = mutableListOf<SyncTableResult>()
+        val profiles = dao.dirtyProfiles(userId).map { it.sanitizedForCloud() }
+        results += syncTable("profiles", profiles, token, { it.id }).also { if (it.syncedIds.isNotEmpty()) dao.markProfilesSynced(it.syncedIds) }
+        results += syncTable("books", dao.dirtyBooks(userId), token, { it.id }).also { if (it.syncedIds.isNotEmpty()) dao.markBooksSynced(it.syncedIds) }
+        results += syncTable("accounts", dao.dirtyAccounts(userId), token, { it.id }).also { if (it.syncedIds.isNotEmpty()) dao.markAccountsSynced(it.syncedIds) }
+        val categories = dao.dirtyCategories(userId).sortedBy { it.parentId != null }
+        results += syncTable("categories", categories, token, { it.id }, { it.kind in setOf("expense", "income") }).also { if (it.syncedIds.isNotEmpty()) dao.markCategoriesSynced(it.syncedIds) }
+        results += syncTable("transactions", dao.dirtyTransactions(userId), token, { it.id }, { it.amountMinor > 0 && it.type in setOf("expense", "income", "transfer") }).also { if (it.syncedIds.isNotEmpty()) dao.markTransactionsSynced(it.syncedIds) }
+        results += syncTable("budgets", dao.dirtyBudgets(userId), token, { it.id }, { it.limitMinor > 0 && it.month.matches(Regex("^\\d{4}-\\d{2}$")) }).also { if (it.syncedIds.isNotEmpty()) dao.markBudgetsSynced(it.syncedIds) }
         restoreFromCloud(token)
-        return "同步完成"
+        val skipped = results.sumOf { it.skippedCount }
+        return if (skipped == 0) "同步完成" else "同步完成，$skipped 条旧版异常记录仅保留在本机"
     }
 
     suspend fun loadOfficialMessages(): List<OfficialMessage> {
@@ -682,10 +686,61 @@ class LedgerRepository(
         budgets.map { it.id }.takeIf { it.isNotEmpty() }?.let { dao.markBudgetsSynced(it) }
     }
 
-    private suspend fun <T> syncTable(table: String, rows: List<T>, token: String, id: (T) -> String): List<String> {
-        if (rows.isEmpty()) return emptyList()
-        supabaseClient.upsertRows(table, rows, token)
-        return rows.map(id)
+    private suspend fun <T> syncTable(
+        table: String,
+        rows: List<T>,
+        token: String,
+        id: (T) -> String,
+        isValid: (T) -> Boolean = { true }
+    ): SyncTableResult {
+        if (rows.isEmpty()) return SyncTableResult()
+        val validRows = rows.filter(isValid)
+        var skipped = rows.size - validRows.size
+        if (validRows.isEmpty()) return SyncTableResult(skippedCount = skipped)
+        return runCatching {
+            supabaseClient.upsertRows(table, validRows, token)
+            SyncTableResult(validRows.map(id), skipped)
+        }.getOrElse { batchError ->
+            if (!batchError.message.orEmpty().contains("400")) throw batchError
+            val synced = mutableListOf<String>()
+            var firstFailure: Throwable? = null
+            validRows.forEach { row ->
+                runCatching { supabaseClient.upsertRows(table, listOf(row), token) }
+                    .onSuccess { synced += id(row) }
+                    .onFailure { error ->
+                        skipped++
+                        if (firstFailure == null) firstFailure = error
+                    }
+            }
+            if (synced.isEmpty() && firstFailure != null) {
+                val detail = firstFailure?.message.orEmpty().substringAfter("Supabase 请求失败 400:").trim().take(180)
+                error("${cloudTableLabel(table)}无法写入云端：${detail.ifBlank { "请检查云端字段和约束" }}")
+            }
+            SyncTableResult(synced, skipped)
+        }
+    }
+
+    private data class SyncTableResult(
+        val syncedIds: List<String> = emptyList(),
+        val skippedCount: Int = 0
+    )
+
+    private fun ProfileEntity.sanitizedForCloud(): ProfileEntity = copy(
+        displayName = displayName.trim().ifBlank { "绒绒用户" }.take(40),
+        age = age?.takeIf { it in 0..150 },
+        birthDate = birthDate?.takeIf { it.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$")) },
+        gender = gender?.takeIf { it in setOf("female", "male", "other", "prefer_not") },
+        currency = currency.takeIf { it.length == 3 } ?: "CNY"
+    )
+
+    private fun cloudTableLabel(table: String): String = when (table) {
+        "profiles" -> "用户资料"
+        "books" -> "账本"
+        "accounts" -> "账户"
+        "categories" -> "分类"
+        "transactions" -> "账目"
+        "budgets" -> "预算"
+        else -> table
     }
 
     private fun defaultAccounts(userId: String, bookId: String, now: Long) = listOf(

@@ -118,6 +118,12 @@ class SessionStore(private val secureStore: SecureStore) {
         secureStore.putString("theme_tone", tone)
     }
 
+    fun areAutomaticUpdatePromptsEnabled(): Boolean = secureStore.getBoolean("automatic_update_prompts", true)
+
+    fun setAutomaticUpdatePromptsEnabled(enabled: Boolean) {
+        secureStore.putBoolean("automatic_update_prompts", enabled)
+    }
+
     fun defaultAccountId(userId: String): String? = secureStore.getString("default_account_$userId")
 
     fun setDefaultAccountId(userId: String, accountId: String) {

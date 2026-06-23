@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Lock
@@ -223,7 +224,7 @@ fun InboxScreen(
     }
 }
 
-private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP, BUDGET, CATEGORY, ABOUT, PET }
+private enum class MyPage { ROOT, PROFILE, INBOX, SETTINGS, MEMBERSHIP, BUDGET, CATEGORY, ABOUT, DIARY }
 
 @Composable
 fun MyScreen(
@@ -244,7 +245,7 @@ fun MyScreen(
             onBudget = { page = MyPage.BUDGET },
             onCategory = { page = MyPage.CATEGORY },
             onAbout = { page = MyPage.ABOUT },
-            onPet = { page = MyPage.PET },
+            onDiary = { page = MyPage.DIARY },
             onDarkMode = viewModel::setDarkMode
         )
         MyPage.PROFILE -> ProfileScreen(
@@ -273,8 +274,9 @@ fun MyScreen(
             onReorder = viewModel::moveCategory
         )
         MyPage.ABOUT -> AboutScreen(onBack = { page = MyPage.ROOT })
-        MyPage.PET -> PetRongRongScreen(
-            ledger = state.ledger,
+        MyPage.DIARY -> DiaryScreen(
+            userId = state.session?.userId ?: state.ledger.profile?.id ?: "local-diary",
+            quotes = rememberQuoteCollection(),
             onBack = { page = MyPage.ROOT }
         )
     }
@@ -290,7 +292,7 @@ private fun MyRoot(
     onBudget: () -> Unit,
     onCategory: () -> Unit,
     onAbout: () -> Unit,
-    onPet: () -> Unit,
+    onDiary: () -> Unit,
     onDarkMode: (Boolean) -> Unit
 ) {
     val palette = LocalPlushPalette.current
@@ -300,6 +302,8 @@ private fun MyRoot(
     val streakDays = state.ledger.transactions.map { it.localDateForProfile() }.distinct().size.coerceAtMost(99)
     val context = LocalContext.current
     val dailyQuote = rememberDailyQuote()
+    val quotes = rememberQuoteCollection()
+    var quoteIndex by remember { mutableIntStateOf(Math.floorMod(System.nanoTime().toInt(), quotes.size)) }
     var showExportDialog by rememberSaveable { mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) {
@@ -326,7 +330,7 @@ private fun MyRoot(
                     dailyQuote,
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                     color = palette.muted,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -404,256 +408,94 @@ private fun MyRoot(
                 }
             }
         }
-        item { PetEntryCard(onPet) }
+        item {
+            DiarySummaryCard(
+                userId = state.session?.userId ?: profile?.id ?: "local-diary",
+                quote = quotes[quoteIndex],
+                onChangeQuote = { quoteIndex = (quoteIndex + 1) % quotes.size },
+                onClick = onDiary
+            )
+        }
     }
     if (showExportDialog) {
-        AlertDialog(
-            onDismissRequest = { showExportDialog = false },
-            title = { Text("导出数据", fontWeight = FontWeight.Bold, color = palette.ink) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("请选择保存位置。导出的 CSV 会包含账目时间、分类、账户、金额、备注等完整字段。", color = palette.muted, fontSize = 13.sp)
-                    ProfileWarmPanel(padding = 12.dp) {
-                        Text("文件名", color = palette.muted, fontSize = 12.sp)
-                        Text("rongrong-ledger-${LocalDate.now()}.csv", color = palette.ink, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-            dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text("取消") } },
-            confirmButton = {
-                TextButton(onClick = {
-                    showExportDialog = false
-                    exportLauncher.launch("rongrong-ledger-${LocalDate.now()}.csv")
-                }) { Text("确认导出") }
+        ExportDataDialog(
+            fileName = "rongrong-ledger-${LocalDate.now()}.csv",
+            onDismiss = { showExportDialog = false },
+            onConfirm = {
+                showExportDialog = false
+                exportLauncher.launch("rongrong-ledger-${LocalDate.now()}.csv")
             }
         )
     }
 }
 
 @Composable
-private fun PetEntryCard(onClick: () -> Unit) {
+private fun DiarySummaryCard(userId: String, quote: String, onChangeQuote: () -> Unit, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
+    val context = LocalContext.current
+    val today = remember { LocalDate.now() }
+    val entry = remember(userId) { DiaryStore(context.applicationContext, userId).load().firstOrNull { it.date == today.toString() } }
     Surface(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = Color(0xFFFFF1F5),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF6DCE5)),
         shadowElevation = 7.dp
     ) {
-        Row(Modifier.padding(start = 16.dp, top = 10.dp, end = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("宠物绒绒", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                    Spacer(Modifier.width(5.dp))
-                    Icon(Icons.Default.Star, contentDescription = null, tint = palette.pink, modifier = Modifier.size(15.dp))
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.MenuBook, contentDescription = null, tint = palette.pink, modifier = Modifier.size(23.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text("绒绒日记", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 19.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("记录今天的心情", color = palette.muted, fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Surface(shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.92f), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(today.format(DateTimeFormatter.ofPattern("M月d日")), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                                Spacer(Modifier.width(12.dp))
+                                TinyPill(entry?.mood ?: "开心", palette.pink)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(entry?.text ?: "写下今天想留住的一句话…", color = if (entry == null) palette.muted else palette.ink, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                 }
-                Text("了解绒绒，和绒绒互动～", color = palette.muted, fontSize = 12.sp)
-                Spacer(Modifier.height(5.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TinyPill("今日陪伴", palette.pink)
-                    TinyPill("摸摸绒绒", palette.moss)
-                    TinyPill("绒绒档案", palette.lilac)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(
+                        painter = painterResource(R.drawable.diary_card_mascot),
+                        contentDescription = "绒绒写日记",
+                        modifier = Modifier.width(124.dp).height(94.dp).clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Surface(
+                        modifier = Modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
+                        shape = RoundedCornerShape(18.dp),
+                        color = palette.pink
+                    ) { Text("去写日记", Modifier.padding(horizontal = 18.dp, vertical = 7.dp), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
                 }
             }
-            MascotArt(72.dp)
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted)
+            Spacer(Modifier.height(12.dp))
+            Surface(shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.56f), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF8DCE5))) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.FormatQuote, contentDescription = null, tint = palette.pink, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("今日语录", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                        Text(quote, color = palette.ink, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    TextButton(onClick = onChangeQuote) { Text("换一句", color = palette.pink, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                }
+            }
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun LegacyPetRongRongScreen(ledger: LedgerState, onBack: () -> Unit, onRecord: () -> Unit) {
-    val palette = LocalPlushPalette.current
-    val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("pet_rongrong", Context.MODE_PRIVATE) }
-    var companionValue by rememberSaveable { mutableIntStateOf(prefs.getInt("companion", 280)) }
-    var mood by rememberSaveable { mutableStateOf(prefs.getString("mood", "开心") ?: "开心") }
-    val level = (companionValue / 100 + 2).coerceIn(1, 10)
-    val levelTarget = level * 100
-    val progress = (companionValue.toFloat() / levelTarget.coerceAtLeast(100)).coerceIn(0f, 1f)
-
-    fun interact(label: String, points: Int, newMood: String) {
-        companionValue = (companionValue + points).coerceAtMost(999)
-        mood = newMood
-        prefs.edit().putInt("companion", companionValue).putString("mood", mood).apply()
-        Toast.makeText(context, "$label，陪伴值 +$points", Toast.LENGTH_SHORT).show()
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 118.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
-                Text("宠物专题", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 24.sp)
-                Spacer(Modifier.width(10.dp))
-                TinyPill("绒绒小窝", palette.pink)
-                Spacer(Modifier.weight(1f))
-                Surface(shape = androidx.compose.foundation.shape.CircleShape, color = Color(0xFFFFF2F5), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
-                    Icon(Icons.Default.Favorite, contentDescription = null, tint = palette.pink, modifier = Modifier.padding(10.dp).size(20.dp))
-                }
-            }
-        }
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(26.dp),
-                color = Color(0xFFFFF8EA),
-                border = androidx.compose.foundation.BorderStroke(1.dp, palette.border),
-                shadowElevation = 7.dp
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("你好呀，我是绒绒", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 20.sp, maxLines = 1)
-                        Text("今天也要一起好好记账哦～", color = palette.muted, fontSize = 12.sp)
-                        Spacer(Modifier.height(18.dp))
-                        Surface(shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.86f)) {
-                            Column(Modifier.padding(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("陪伴值", color = palette.ink, fontWeight = FontWeight.Black)
-                                    Spacer(Modifier.width(10.dp))
-                                    Text("Lv.$level", color = palette.pink, fontWeight = FontWeight.Black)
-                                    Spacer(Modifier.weight(1f))
-                                    Text("$companionValue / $levelTarget", color = palette.muted, fontSize = 11.sp)
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp)),
-                                    color = palette.pink,
-                                    trackColor = Color(0xFFFFDEE8)
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("今日心情", color = palette.ink, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.width(10.dp))
-                                    TinyPill("♥ $mood", palette.pink)
-                                }
-                            }
-                        }
-                    }
-                    MascotArt(128.dp)
-                }
-            }
-        }
-        item {
-            PetSectionHeader("1", "快速互动", "让绒绒开心一下吧～")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PetInteraction(Icons.Default.Fastfood, "喂一喂", "小零食 +10", palette.coral, Modifier.weight(1f)) { interact("绒绒吃饱啦", 10, "满足") }
-                PetInteraction(Icons.Default.TouchApp, "摸摸头", "陪伴值 +5", palette.moss, Modifier.weight(1f)) { interact("绒绒蹭了蹭你", 5, "开心") }
-                PetInteraction(Icons.Default.Favorite, "抱一抱", "心情 +10", palette.pink, Modifier.weight(1f)) { interact("抱抱成功", 10, "幸福") }
-                PetInteraction(Icons.Default.ChatBubble, "聊聊天", "听绒绒说话", palette.lilac, Modifier.weight(1f)) { interact("绒绒说：今天也辛苦啦", 3, "安心") }
-            }
-        }
-        item {
-            PetSectionHeader("2", "每日照料", "完成任务获得陪伴值和奖励～")
-            PetTaskRow(Icons.Default.EditNote, "完成一笔记账", "+10 陪伴值", "去完成", palette.rose, onRecord)
-            PetTaskRow(Icons.Default.CheckCircle, "连续打卡", "${ledger.transactions.map { it.localDateForProfile() }.distinct().size.coerceAtMost(99)} 天", "去完成", palette.moss) {
-                Toast.makeText(context, "今天完成记账后会自动计入打卡", Toast.LENGTH_SHORT).show()
-            }
-            PetTaskRow(Icons.Default.Fastfood, "领取小零食", "每日可领取一次", "领取", palette.coral) { interact("领取了今日小零食", 8, "满足") }
-        }
-        item {
-            PetSectionHeader("3", "绒绒衣橱 & 小窝", "把小窝装扮得更温馨吧～")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                PetFeatureTile(Icons.Default.Style, "今日穿搭", "可爱出门啦", Color(0xFFFFEEF3), Modifier.weight(1f)) { Toast.makeText(context, "今日穿搭已保存", Toast.LENGTH_SHORT).show() }
-                PetFeatureTile(Icons.Default.Palette, "主题皮肤", "换个风格吧", Color(0xFFEEF9F7), Modifier.weight(1f)) { Toast.makeText(context, "更多主题正在准备中", Toast.LENGTH_SHORT).show() }
-                PetFeatureTile(Icons.Default.Home, "小窝布置", "布置温馨小窝", Color(0xFFFFF5DF), Modifier.weight(1f)) { Toast.makeText(context, "小窝布置已开启", Toast.LENGTH_SHORT).show() }
-            }
-        }
-        item {
-            PetSectionHeader("4", "绒绒日记 & 故事", "记录我们的点滴时光～")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                PetFeatureTile(Icons.Default.MenuBook, "绒绒日记", "今日心情记录", Color(0xFFFFEEF3), Modifier.weight(1f)) { Toast.makeText(context, "今日心情：$mood", Toast.LENGTH_SHORT).show() }
-                PetFeatureTile(Icons.Default.ChatBubble, "成长故事", "一起走过的日子", Color(0xFFFFF1EB), Modifier.weight(1f)) { Toast.makeText(context, "已陪伴绒绒 ${companionValue.coerceAtLeast(1)} 点时光", Toast.LENGTH_SHORT).show() }
-                PetFeatureTile(Icons.Default.EmojiEvents, "收藏图鉴", "解锁可爱瞬间", Color(0xFFFFF6E5), Modifier.weight(1f)) { Toast.makeText(context, "当前已解锁 Lv.$level 图鉴", Toast.LENGTH_SHORT).show() }
-            }
-        }
-        item {
-            PetSectionHeader("5", "陪伴奖励", "陪伴越久，奖励越多哦～")
-            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    "小星星贴纸" to 3,
-                    "爱心徽章" to 5,
-                    "绒绒头像框" to 7,
-                    "限定表情包" to 9,
-                    "专属称号" to 10
-                ).forEach { (name, unlockLevel) ->
-                    Surface(shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
-                        Column(Modifier.width(104.dp).padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(if (level >= unlockLevel) Icons.Default.EmojiEvents else Icons.Default.Lock, contentDescription = null, tint = if (level >= unlockLevel) palette.rose else palette.muted, modifier = Modifier.size(28.dp))
-                            Spacer(Modifier.height(5.dp))
-                            Text(name, color = palette.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                            Text(if (level >= unlockLevel) "已解锁" else "Lv.$unlockLevel 解锁", color = palette.muted, fontSize = 9.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PetSectionHeader(index: String, title: String, subtitle: String) {
-    val palette = LocalPlushPalette.current
-    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Surface(shape = androidx.compose.foundation.shape.CircleShape, color = palette.coral) {
-            Text(index, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color.White, fontWeight = FontWeight.Black)
-        }
-        Spacer(Modifier.width(9.dp))
-        Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 18.sp)
-        Spacer(Modifier.width(9.dp))
-        Text(subtitle, color = palette.pink, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-@Composable
-private fun PetInteraction(icon: ImageVector, title: String, subtitle: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
-    val palette = LocalPlushPalette.current
-    Surface(modifier = modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
-        Column(Modifier.padding(horizontal = 5.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(30.dp))
-            Spacer(Modifier.height(6.dp))
-            Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 12.sp, maxLines = 1)
-            Text(subtitle, color = color, fontSize = 9.sp, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun PetTaskRow(icon: ImageVector, title: String, subtitle: String, action: String, color: Color, onClick: () -> Unit) {
-    val palette = LocalPlushPalette.current
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(16.dp)).background(palette.surface).clickable(onClick = onClick).padding(11.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(30.dp))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 14.sp)
-            Text(subtitle, color = palette.muted, fontSize = 11.sp)
-        }
-        TinyPill(action, color)
-    }
-}
-
-@Composable
-private fun PetFeatureTile(icon: ImageVector, title: String, subtitle: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
-    val palette = LocalPlushPalette.current
-    Column(
-        modifier.clip(RoundedCornerShape(18.dp)).background(color).clickable(onClick = onClick).padding(12.dp),
-        horizontalAlignment = Alignment.Start
-    ) {
-        Icon(icon, contentDescription = null, tint = palette.rose, modifier = Modifier.size(28.dp))
-        Spacer(Modifier.height(9.dp))
-        Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 13.sp, maxLines = 1)
-        Text(subtitle, color = palette.muted, fontSize = 9.sp, maxLines = 1)
-    }
-}
-
 @Composable
 private fun AboutScreen(onBack: () -> Unit) {
     val palette = LocalPlushPalette.current
@@ -726,21 +568,17 @@ private fun AboutScreen(onBack: () -> Unit) {
         }
     }
     if (showMailPrompt) {
-        AlertDialog(
-            onDismissRequest = { showMailPrompt = false },
-            title = { Text("联系绒绒记账", fontWeight = FontWeight.Bold, color = palette.ink) },
-            text = { Text("将打开本机默认邮箱，收件人会自动填入 $SUPPORT_EMAIL。") },
-            dismissButton = { TextButton(onClick = { showMailPrompt = false }) { Text("取消") } },
-            confirmButton = {
-                TextButton(onClick = {
-                    val intent = Intent(Intent.ACTION_SENDTO).apply {
-                        data = Uri.parse("mailto:$SUPPORT_EMAIL")
-                        putExtra(Intent.EXTRA_SUBJECT, "绒绒记账用户反馈")
-                    }
-                    runCatching { context.startActivity(intent) }
-                        .onFailure { Toast.makeText(context, "没有找到可用的邮箱 App", Toast.LENGTH_SHORT).show() }
-                    showMailPrompt = false
-                }) { Text("打开邮箱") }
+        ContactSupportDialog(
+            email = SUPPORT_EMAIL,
+            onDismiss = { showMailPrompt = false },
+            onOpenEmail = {
+                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                    data = Uri.parse("mailto:$SUPPORT_EMAIL")
+                    putExtra(Intent.EXTRA_SUBJECT, "绒绒记账用户反馈")
+                }
+                runCatching { context.startActivity(intent) }
+                    .onFailure { Toast.makeText(context, "没有找到可用的邮箱 App", Toast.LENGTH_SHORT).show() }
+                showMailPrompt = false
             }
         )
     }
@@ -1464,13 +1302,13 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
     }
 
     if (showSignOut) {
-        ConfirmDialog("退出登录", "确定要退出当前账号吗？本机账目不会删除。", confirmText = "退出", onDismiss = { showSignOut = false }) {
+        SettingsConfirmDialog("退出登录", "确定要退出当前账号吗？本机账目不会删除。", confirmText = "退出", onDismiss = { showSignOut = false }) {
             viewModel.signOut()
             showSignOut = false
         }
     }
     if (showDelete) {
-        ConfirmDialog(
+        SettingsConfirmDialog(
             title = "注销账号",
             message = "注销后账号、云端账目和本机数据都无法恢复。",
             confirmText = if (deleteSeconds == 0) "确认永久注销" else "请等待 ${deleteSeconds}s",
@@ -1482,61 +1320,24 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
         }
     }
     if (showExportDialog) {
-        AlertDialog(
-            onDismissRequest = { showExportDialog = false },
-            title = { Text("确认导出数据", fontWeight = FontWeight.Bold, color = palette.ink) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "导出文件将包含账目时间、分类、账户、金额、备注等完整字段。请选择你信任的本机位置保存。",
-                        color = palette.muted,
-                        fontSize = 13.sp,
-                        lineHeight = 19.sp
-                    )
-                    ProfileWarmPanel(padding = 12.dp) {
-                        Text("文件名", color = palette.muted, fontSize = 12.sp)
-                        Text("rongrong-ledger-${LocalDate.now()}.csv", color = palette.ink, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-            dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text("取消") } },
-            confirmButton = {
-                TextButton(onClick = {
-                    showExportDialog = false
-                    exportLauncher.launch("rongrong-ledger-${LocalDate.now()}.csv")
-                }) { Text("确认导出") }
+        ExportDataDialog(
+            fileName = "rongrong-ledger-${LocalDate.now()}.csv",
+            onDismiss = { showExportDialog = false },
+            onConfirm = {
+                showExportDialog = false
+                exportLauncher.launch("rongrong-ledger-${LocalDate.now()}.csv")
             }
         )
     }
     if (showBillImportSource) {
-        AlertDialog(
-            onDismissRequest = { showBillImportSource = false },
-            title = { Text("选择账单来源", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("仅支持你从微信或支付宝主动导出的 CSV 文件。应用不会读取你的支付账号、密码或云端账单。", color = palette.muted, fontSize = 13.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { billImportProvider = "微信" },
-                            modifier = Modifier.weight(1f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (billImportProvider == "微信") palette.moss else palette.border)
-                        ) { Text("微信账单", color = if (billImportProvider == "微信") palette.moss else palette.ink) }
-                        OutlinedButton(
-                            onClick = { billImportProvider = "支付宝" },
-                            modifier = Modifier.weight(1f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (billImportProvider == "支付宝") palette.blue else palette.border)
-                        ) { Text("支付宝账单", color = if (billImportProvider == "支付宝") palette.blue else palette.ink) }
-                    }
-                }
-            },
-            dismissButton = { TextButton(onClick = { showBillImportSource = false }) { Text("取消") } },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBillImportSource = false
-                    billImportLauncher.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel"))
-                }) { Text("选择 CSV", color = palette.moss) }
-            },
-            containerColor = palette.surface
+        BillSourceDialog(
+            provider = billImportProvider,
+            onProvider = { billImportProvider = it },
+            onDismiss = { showBillImportSource = false },
+            onChoose = {
+                showBillImportSource = false
+                billImportLauncher.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel"))
+            }
         )
     }
     state.billImportPreview?.let { preview ->
@@ -1570,8 +1371,8 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
         )
     }
     if (showTheme) {
-        ThemeChoiceDialog(
-            currentTone = state.themeTone,
+        ThemePickerDialog(
+            current = state.themeTone,
             onDismiss = { showTheme = false },
             onChoose = {
                 viewModel.setThemeTone(it)
@@ -1580,87 +1381,36 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
         )
     }
     if (showReminder) {
-        AlertDialog(
-            onDismissRequest = { showReminder = false },
-            title = { Text("记账提醒", fontWeight = FontWeight.Bold) },
-            text = { Text("开启后，应用会保存每天 21:00 作为记账提醒时间。系统通知权限接入后会按此时间提醒。") },
-            dismissButton = {
-                TextButton(onClick = {
-                    reminderEnabled = false
-                    prefs.edit().putBoolean("ledger_reminder", false).apply()
-                    showReminder = false
-                }) { Text("关闭提醒") }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    reminderEnabled = true
-                    prefs.edit().putBoolean("ledger_reminder", true).apply()
-                    showReminder = false
-                    Toast.makeText(context, "记账提醒已保存", Toast.LENGTH_SHORT).show()
-                }) { Text("开启提醒") }
-            }
-        )
+        ReminderDialog(reminderEnabled, onDismiss = { showReminder = false }) { enabled ->
+            reminderEnabled = enabled
+            prefs.edit().putBoolean("ledger_reminder", enabled).apply()
+            showReminder = false
+            Toast.makeText(context, if (enabled) "记账提醒已保存" else "记账提醒已关闭", Toast.LENGTH_SHORT).show()
+        }
     }
     if (showCurrency) {
-        val options = listOf("人民币  ¥", "美元  $", "欧元  €", "日元  ¥")
-        AlertDialog(
-            onDismissRequest = { showCurrency = false },
-            title = { Text("货币单位", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    options.forEach { option ->
-                        OutlinedButton(
-                            onClick = {
-                                currency = option
-                                prefs.edit().putString("currency_unit", option).apply()
-                                showCurrency = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(option) }
-                    }
-                    Text("当前账目金额仍按最小货币单位保存，切换只改变新界面显示偏好。", color = palette.muted, fontSize = 12.sp)
-                }
-            },
-            confirmButton = {}
-        )
+        CurrencyDialog(currency, onDismiss = { showCurrency = false }) { option ->
+            currency = option
+            prefs.edit().putString("currency_unit", option).apply()
+            showCurrency = false
+        }
     }
     if (showDownloadLine) {
-        val options = listOf("国内优先", "GitHub 备用", "自动选择")
-        AlertDialog(
-            onDismissRequest = { showDownloadLine = false },
-            title = { Text("更新下载线路", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("国内网络访问 GitHub 可能较慢。发布端优先使用 Supabase/国内对象存储地址，GitHub 仅作为备用归档。", color = palette.muted, fontSize = 12.sp)
-                    options.forEach { option ->
-                        OutlinedButton(
-                            onClick = {
-                                downloadLine = option
-                                prefs.edit().putString("download_line", option).apply()
-                                showDownloadLine = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(option) }
-                    }
-                }
-            },
-            confirmButton = {}
-        )
+        DownloadLineDialog(downloadLine, onDismiss = { showDownloadLine = false }) { option ->
+            downloadLine = option
+            prefs.edit().putString("download_line", option).apply()
+            showDownloadLine = false
+        }
     }
     if (showCache) {
-        ConfirmDialog("清理缓存", "是否清除临时缓存？账本数据不会被删除。", onDismiss = { showCache = false }) {
+        SettingsConfirmDialog("清理缓存", "是否清除临时缓存？账本数据不会被删除。", confirmText = "确认删除", onDismiss = { showCache = false }) {
             val success = runCatching { context.cacheDir.deleteRecursively() }.getOrDefault(false)
             Toast.makeText(context, if (success) "缓存已清理" else "缓存清理完成", Toast.LENGTH_SHORT).show()
             showCache = false
         }
     }
     if (showLicense) {
-        AlertDialog(
-            onDismissRequest = { showLicense = false },
-            title = { Text("开源许可", fontWeight = FontWeight.Bold) },
-            text = { Text("绒绒记账当前以 PolyForm Noncommercial License 发布，可学习、研究、测试和个人非商业使用。商业使用需另行取得授权。") },
-            confirmButton = { TextButton(onClick = { showLicense = false }) { Text("知道了") } }
-        )
+        LicenseDialog { showLicense = false }
     }
 }
 
@@ -2023,15 +1773,7 @@ private fun ProfileMetric(icon: ImageVector, label: String, value: String, color
 private fun rememberDailyQuote(): String {
     val context = LocalContext.current
     var day by remember { mutableStateOf(LocalDate.now()) }
-    val quotes = remember(context) {
-        runCatching {
-            context.assets.open("daily_quotes.txt").bufferedReader().useLines { lines ->
-                lines.mapNotNull { line ->
-                    Regex("^\\s*\\d+\\.\\s*(.+)$").find(line)?.groupValues?.get(1)?.trim()
-                }.filter(String::isNotBlank).toList()
-            }
-        }.getOrDefault(listOf("今天也要温柔地掌控生活。"))
-    }
+    val quotes = rememberQuoteCollection()
     LaunchedEffect(Unit) {
         while (true) {
             val now = ZonedDateTime.now()
@@ -2041,6 +1783,20 @@ private fun rememberDailyQuote(): String {
         }
     }
     return quotes[Math.floorMod(day.toEpochDay().toInt(), quotes.size)]
+}
+
+@Composable
+private fun rememberQuoteCollection(): List<String> {
+    val context = LocalContext.current
+    return remember(context) {
+        runCatching {
+            context.assets.open("daily_quotes.txt").bufferedReader().useLines { lines ->
+                lines.mapNotNull { line ->
+                    Regex("^\\s*\\d+\\.\\s*(.+)$").find(line)?.groupValues?.get(1)?.trim()
+                }.filter(String::isNotBlank).toList()
+            }
+        }.getOrDefault(listOf("今天也要温柔地掌控生活。"))
+    }.ifEmpty { listOf("今天也要温柔地掌控生活。") }
 }
 
 @Composable

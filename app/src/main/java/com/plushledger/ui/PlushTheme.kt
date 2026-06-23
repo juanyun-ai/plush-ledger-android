@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -134,6 +135,32 @@ private val IceBluePalette = PlushPalette(
     border = Color(0xFFDCE9F5)
 )
 
+private val PurplePalette = PinkPalette.copy(
+    background = Color(0xFFFDFBFF),
+    surfaceAlt = Color(0xFFF4EEFF),
+    ink = Color(0xFF473D55),
+    muted = Color(0xFF978BA5),
+    rose = Color(0xFFA58AE8),
+    border = Color(0xFFE7DCF4)
+)
+
+private val OrangePalette = WarmPalette.copy(
+    background = Color(0xFFFFFCF9),
+    surfaceAlt = Color(0xFFFFF0E7),
+    rose = Color(0xFFFF9560),
+    coral = Color(0xFFFF806B),
+    border = Color(0xFFF5DFD2)
+)
+
+private val BrownPalette = MonoPalette.copy(
+    background = Color(0xFFFFFCF9),
+    surfaceAlt = Color(0xFFF8EFE7),
+    ink = Color(0xFF49372E),
+    muted = Color(0xFF96857A),
+    rose = Color(0xFF9B6B4B),
+    border = Color(0xFFE8D8CB)
+)
+
 private val DarkPalette = PlushPalette(
     background = Color(0xFF201C1D),
     surface = Color(0xFF2B2527),
@@ -156,6 +183,9 @@ fun plushThemeName(tone: String): String = when (tone) {
     "mono" -> "黑白"
     "green" -> "淡绿"
     "blue" -> "冰蓝"
+    "purple" -> "薰衣草紫"
+    "orange" -> "蜜桃橙"
+    "brown" -> "可可棕"
     else -> "暖黄"
 }
 
@@ -169,6 +199,9 @@ fun PlushLedgerTheme(darkMode: Boolean, themeTone: String = "warm", content: @Co
             "mono" -> MonoPalette
             "green" -> GreenPalette
             "blue" -> IceBluePalette
+            "purple" -> PurplePalette
+            "orange" -> OrangePalette
+            "brown" -> BrownPalette
             else -> WarmPalette
         }
     }
@@ -310,16 +343,24 @@ fun ConfirmDialog(
     onConfirm: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.Bold) },
-        text = { Text(message) },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        confirmButton = {
-            TextButton(onClick = onConfirm, enabled = confirmEnabled) {
-                Text(confirmText, color = if (confirmEnabled) palette.rose else palette.muted)
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(30.dp),
+            color = Color(0xFFFFFCF7),
+            border = BorderStroke(1.5.dp, Color(0xFFFFD8A0)),
+            shadowElevation = 18.dp
+        ) {
+            Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                MascotArt(72.dp)
+                Text(title, fontWeight = FontWeight.Black, color = palette.ink, fontSize = 24.sp)
+                Spacer(Modifier.height(10.dp))
+                Text(message, color = palette.muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 20.sp)
+                Spacer(Modifier.height(18.dp))
+                Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                    TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("取消", color = palette.ink) }
+                    PlushButton(confirmText, androidx.compose.material.icons.Icons.Default.CheckCircle, Modifier.weight(1f), enabled = confirmEnabled, color = palette.rose, onClick = onConfirm)
+                }
             }
-        },
-        containerColor = palette.surface
-    )
+        }
+    }
 }

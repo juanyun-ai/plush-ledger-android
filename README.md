@@ -5,7 +5,7 @@
 
   **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
 
-  ![Version](https://img.shields.io/badge/version-1.0.0-FFA126?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.0.1-FFA126?style=flat-square)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
   ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
@@ -29,7 +29,7 @@
 - 应用信箱、用户反馈和管理员身份；公测期间现有功能全部免费。
 - PIN、生物识别、隐私防截图、数据导出和账号注销。
 - 自动检查版本、信箱快捷下载、后台进度通知、断点续传、主备下载线路自动切换、校验 APK SHA-256 并交由 Android 系统安装器更新。
-- 宠物绒绒的陪伴值、成长里程碑均由实际账本数据计算；日记、穿搭、小窝、头像框和称号会按当前账号在本机保存，白噪音可离线播放。
+- 绒绒日记按当前账号在本机真实保存，支持心情选择、历史记录和带真实下载二维码的图片分享卡；“我的”页语录每次进入及点击均可切换。
 
 ## 数据安全
 
@@ -84,6 +84,14 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载由 Android 系统下载服务负责，应用读取真实字节和进度；主线路失败后会自动重试并切换备用线路，所有线路不可用时可交给系统浏览器下载。安装前必须通过 SHA-256 校验，校验失败不会进入安装流程。GitHub Release 与 Supabase Storage 互为主备，发布时按实测网络表现设置主线路。
+
+### v1.0.1
+
+1. 移除宠物专题及相关任务、白噪音和装扮资源，替换为真实可保存的绒绒日记。
+2. “我的”页新增日记摘要与可切换语录；独立日记页支持心情、历史记录和带真实 APK 二维码的分享卡。
+3. 修复分类表导致的 Supabase 400：规范旧版字段、过滤异常分类，并在批量失败时逐条补传。
+4. 主题、导出、账单来源、提醒、货币、下载线路、缓存、许可、联系、退出和注销弹窗按毛绒设计稿统一重构。
+5. 新版本弹窗新增“以后不再提醒”，经 2 秒确认后持久关闭自动提醒；仍可在“我的 → 设置 → 检查更新”手动更新。
 
 ### v1.0.0
 
