@@ -73,6 +73,7 @@ object CategoryCatalog {
         CategorySpec("expense.study.course", "课程考试", EXPENSE, "course", "#7198CC", "expense.study"),
         CategorySpec("expense.study.stationery", "文具打印", EXPENSE, "stationery", "#91B4DF", "expense.study"),
         CategorySpec("expense.study.software", "软件工具", EXPENSE, "software", "#6C92C7", "expense.study"),
+        CategorySpec("expense.study.ai_subscription", "AI软件订阅", EXPENSE, "ai_subscription", "#64B6A5", "expense.study"),
 
         CategorySpec("expense.health.medicine", "药品", EXPENSE, "medicine", "#E88782", "expense.health"),
         CategorySpec("expense.health.checkup", "就诊体检", EXPENSE, "checkup", "#DF7778", "expense.health"),

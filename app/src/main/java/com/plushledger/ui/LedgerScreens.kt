@@ -1175,7 +1175,7 @@ private fun BudgetNumber(label: String, value: Long, color: Color, modifier: Mod
         Spacer(Modifier.height(6.dp))
         Text(
             Money.formatCny(value),
-            color = palette.ink,
+            color = if (value < 0) color else palette.ink,
             fontWeight = FontWeight.Black,
             fontSize = 14.sp,
             maxLines = 1,
@@ -1798,6 +1798,7 @@ private fun subcategoryArtRes(name: String?): Int? = when (name) {
     "课程考试" -> R.drawable.sub_course
     "文具打印" -> R.drawable.sub_stationery
     "软件工具" -> R.drawable.sub_software
+    "AI软件订阅" -> R.drawable.sub_ai_subscription
     "药品" -> R.drawable.sub_medicine
     "就诊体检" -> R.drawable.sub_checkup
     "运动健身" -> R.drawable.sub_fitness
@@ -2024,7 +2025,12 @@ fun BudgetManagementScreen(ledger: LedgerState, onBack: () -> Unit, onBudget: (S
     val palette = LocalPlushPalette.current
     var amount by rememberSaveable { mutableStateOf("") }
     var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
-    val progress = if (ledger.summary.budgetLimitMinor == 0L) 0f else (ledger.summary.budgetUsedMinor.toFloat() / ledger.summary.budgetLimitMinor).coerceIn(0f, 1f)
+    val budgetLimit = ledger.summary.budgetLimitMinor
+    val budgetUsed = ledger.summary.budgetUsedMinor
+    val remainingBudget = budgetLimit - budgetUsed
+    val spentPercent = if (budgetLimit <= 0L) 0 else ((budgetUsed * 100) / budgetLimit).toInt()
+    val overPercent = if (budgetLimit > 0L && budgetUsed > budgetLimit) (((budgetUsed - budgetLimit) * 100) / budgetLimit).toInt() else 0
+    val progress = if (budgetLimit == 0L) 0f else (budgetUsed.toFloat() / budgetLimit).coerceIn(0f, 1f)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 112.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { ManagementHeader("预算管理", onBack) }
         item {
@@ -2034,9 +2040,9 @@ fun BudgetManagementScreen(ledger: LedgerState, onBack: () -> Unit, onBudget: (S
                         MonthPill(YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy年M月"))) {}
                         Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            BudgetNumber("本月预算", ledger.summary.budgetLimitMinor, palette.rose, Modifier.weight(1f))
-                            BudgetNumber("已花费", ledger.summary.budgetUsedMinor, palette.moss, Modifier.weight(1f))
-                            BudgetNumber("剩余预算", (ledger.summary.budgetLimitMinor - ledger.summary.budgetUsedMinor).coerceAtLeast(0), palette.rose, Modifier.weight(1f))
+                            BudgetNumber("本月预算", budgetLimit, palette.rose, Modifier.weight(1f))
+                            BudgetNumber("已花费", budgetUsed, palette.moss, Modifier.weight(1f))
+                            BudgetNumber("剩余预算", remainingBudget, if (remainingBudget < 0) palette.coral else palette.rose, Modifier.weight(1f))
                         }
                     }
                     MascotArt(70.dp)
@@ -2044,7 +2050,16 @@ fun BudgetManagementScreen(ledger: LedgerState, onBack: () -> Unit, onBudget: (S
                 Spacer(Modifier.height(10.dp))
                 LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(8.dp)), color = palette.rose, trackColor = palette.surfaceAlt)
                 Spacer(Modifier.height(8.dp))
-                Text("本月已花费 ${(progress * 100).toInt()}%", color = palette.rose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("本月已花费 $spentPercent%", color = palette.rose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        if (overPercent > 0) "超出预算 $overPercent%" else "未超预算",
+                        color = if (overPercent > 0) palette.coral else palette.muted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
         item {

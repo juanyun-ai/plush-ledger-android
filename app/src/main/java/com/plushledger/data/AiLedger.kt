@@ -281,6 +281,7 @@ object LocalAiLedgerParser {
         "书籍资料" to listOf("书", "资料"),
         "课程考试" to listOf("课程", "考试", "报名"),
         "文具打印" to listOf("文具", "打印"),
+        "AI软件订阅" to listOf("ai", "AI", "ChatGPT", "chatgpt", "GPT", "OpenAI", "openai", "Claude", "claude", "DeepSeek", "deepseek", "Kimi", "kimi", "豆包", "通义", "模型", "AI软件", "ai软件", "AI订阅", "ai订阅"),
         "软件工具" to listOf("软件", "工具", "订阅"),
         "药品" to listOf("药", "药店", "感冒药", "处方"),
         "就诊体检" to listOf("医院", "体检", "挂号"),

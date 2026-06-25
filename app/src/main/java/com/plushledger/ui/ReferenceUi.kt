@@ -239,6 +239,7 @@ private fun categoryArtRes(name: String?): Int = when (name?.trim()) {
     "课程考试" -> R.drawable.sub_course
     "文具打印" -> R.drawable.sub_stationery
     "软件工具" -> R.drawable.sub_software
+    "AI软件订阅" -> R.drawable.sub_ai_subscription
     "医疗健康", "医疗", "健康", "健康医疗" -> R.drawable.category_medical
     "药品" -> R.drawable.sub_medicine
     "就诊体检" -> R.drawable.sub_checkup

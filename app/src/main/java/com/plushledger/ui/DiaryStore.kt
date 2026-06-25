@@ -33,6 +33,13 @@ class DiaryStore(context: Context, private val userId: String) {
         return updated
     }
 
+    fun deleteEntry(date: String): List<DiaryEntry> {
+        val updated = load().filterNot { it.date == date }
+        save(updated)
+        clearDraft(date)
+        return updated
+    }
+
     fun draft(date: String): DiaryEntry? = runCatching {
         current.getString("draft_$date", null)?.let { raw ->
             val item = JSONObject(raw)
