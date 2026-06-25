@@ -1,6 +1,7 @@
 package com.plushledger.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,7 +43,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -278,10 +284,10 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
         Surface(Modifier.fillMaxWidth(0.91f).heightIn(max = 760.dp), shape = RoundedCornerShape(34.dp), color = Color(0xFFFFFCF7), border = BorderStroke(2.dp, Color(0xFFFFD8A0)), shadowElevation = 22.dp) {
             Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(Modifier.weight(1f))
+                    Text("Hi~", color = Color(0xFFFFA126), fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("绒绒 · 主题", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 27.sp)
-                        Text("不同心情，不同颜色", color = palette.muted, fontSize = 13.sp)
+                        Text("绒绒 · 主题", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 29.sp)
+                        Text("♥  不同心情，不同颜色  ♥", color = Color(0xFF9A7865), fontSize = 13.sp)
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Close, "关闭", tint = palette.muted) }
                 }
@@ -303,24 +309,100 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
 @Composable
 private fun ThemeChoiceCard(option: ThemeOption, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
-    Surface(
-        modifier = modifier.height(146.dp).clip(RoundedCornerShape(23.dp)).clickable(onClick = onClick),
-        shape = RoundedCornerShape(23.dp),
-        color = option.surface,
-        border = BorderStroke(if (selected) 2.5.dp else 1.dp, if (selected) option.color else palette.border),
-        shadowElevation = if (selected) 8.dp else 2.dp
+    Box(
+        modifier = modifier
+            .height(176.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.TopCenter
     ) {
-        Box(Modifier.fillMaxWidth().height(146.dp)) {
-            Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) { MascotArt(76.dp) }
+        ThemeMascotPreview(
+            color = option.color,
+            surface = option.surface,
+            modifier = Modifier.padding(top = 2.dp).size(126.dp)
+        )
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.86f),
+            shape = RoundedCornerShape(18.dp),
+            color = if (selected) option.color else Color(0xFFFFFCF7),
+            border = BorderStroke(1.dp, if (selected) option.color else Color(0xFFFFD7A1)),
+            shadowElevation = if (selected) 5.dp else 0.dp
+        ) {
             Row(
-                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 10.dp, bottom = 11.dp),
-                verticalAlignment = Alignment.CenterVertically
+                Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
             ) {
-                Surface(shape = CircleShape, color = option.color) { Spacer(Modifier.size(14.dp)) }
-                Spacer(Modifier.width(7.dp))
-                Text(option.label, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (selected) Icon(Icons.Default.CheckCircle, "已选中", tint = option.color, modifier = Modifier.size(20.dp))
+                Text(
+                    option.label,
+                    color = if (selected) Color.White else palette.ink,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (selected) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Default.CheckCircle, "已选中", tint = Color.White, modifier = Modifier.size(17.dp))
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun ThemeMascotPreview(color: Color, surface: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        val bookLeft = w * 0.18f
+        val bookTop = h * 0.07f
+        val bookW = w * 0.58f
+        val bookH = h * 0.73f
+        drawOval(
+            color = Color(0x22000000),
+            topLeft = Offset(w * 0.2f, h * 0.74f),
+            size = Size(w * 0.66f, h * 0.17f)
+        )
+        drawRoundRect(
+            brush = Brush.verticalGradient(listOf(surface.copy(alpha = 0.98f), color.copy(alpha = 0.9f))),
+            topLeft = Offset(bookLeft, bookTop),
+            size = Size(bookW, bookH),
+            cornerRadius = CornerRadius(w * 0.13f, w * 0.13f)
+        )
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.42f),
+            topLeft = Offset(bookLeft + w * 0.05f, bookTop + h * 0.04f),
+            size = Size(bookW * 0.78f, bookH * 0.18f),
+            cornerRadius = CornerRadius(w * 0.1f, w * 0.1f)
+        )
+        repeat(2) { index ->
+            drawCircle(Color.White, radius = w * 0.045f, center = Offset(bookLeft + w * 0.03f, bookTop + h * (0.22f + index * 0.2f)))
+            drawLine(Color(0xFFEADCCB), Offset(bookLeft - w * 0.05f, bookTop + h * (0.22f + index * 0.2f)), Offset(bookLeft + w * 0.06f, bookTop + h * (0.22f + index * 0.2f)), strokeWidth = w * 0.025f, cap = StrokeCap.Round)
+        }
+        drawCircle(Color(0xFF4D362B), radius = w * 0.025f, center = Offset(bookLeft + bookW * 0.38f, bookTop + bookH * 0.42f))
+        drawCircle(Color(0xFF4D362B), radius = w * 0.025f, center = Offset(bookLeft + bookW * 0.64f, bookTop + bookH * 0.42f))
+        drawLine(Color(0xFF4D362B), Offset(bookLeft + bookW * 0.48f, bookTop + bookH * 0.53f), Offset(bookLeft + bookW * 0.57f, bookTop + bookH * 0.53f), strokeWidth = w * 0.018f, cap = StrokeCap.Round)
+        drawCircle(Color(0xFFFF9FA6).copy(alpha = 0.65f), radius = w * 0.025f, center = Offset(bookLeft + bookW * 0.29f, bookTop + bookH * 0.51f))
+        drawCircle(Color(0xFFFF9FA6).copy(alpha = 0.65f), radius = w * 0.025f, center = Offset(bookLeft + bookW * 0.72f, bookTop + bookH * 0.51f))
+        drawRoundRect(
+            brush = Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0.95f), Color(0xFFFFF5E8))),
+            topLeft = Offset(bookLeft - w * 0.08f, bookTop + bookH * 0.49f),
+            size = Size(w * 0.25f, h * 0.19f),
+            cornerRadius = CornerRadius(w * 0.09f, w * 0.09f)
+        )
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(bookLeft + bookW * 0.78f, bookTop + bookH * 0.32f),
+            size = Size(w * 0.18f, h * 0.17f),
+            cornerRadius = CornerRadius(w * 0.05f, w * 0.05f)
+        )
+        drawCircle(Color.White.copy(alpha = 0.9f), radius = w * 0.036f, center = Offset(bookLeft + bookW * 0.91f, bookTop + bookH * 0.405f))
+        drawCircle(color, radius = w * 0.14f, center = Offset(w * 0.73f, h * 0.72f))
+        drawCircle(Color(0xFFFFD16A), radius = w * 0.105f, center = Offset(w * 0.68f, h * 0.72f))
+        drawCircle(Color(0xFF79C6A2), radius = w * 0.078f, center = Offset(w * 0.79f, h * 0.66f))
+        drawCircle(Color.White, radius = w * 0.105f, center = Offset(w * 0.66f, h * 0.73f))
+        drawLine(color, Offset(w * 0.61f, h * 0.72f), Offset(w * 0.65f, h * 0.77f), strokeWidth = w * 0.025f, cap = StrokeCap.Round)
+        drawLine(color, Offset(w * 0.65f, h * 0.77f), Offset(w * 0.73f, h * 0.67f), strokeWidth = w * 0.025f, cap = StrokeCap.Round)
     }
 }
