@@ -905,16 +905,22 @@ class LedgerRepository(
         val createdAt = now()
         return listOf(
             OfficialMessage(
+                id = "release_1_0_3_builtin",
+                title = "绒绒记账 v1.0.3 更新",
+                body = "1. AI 记账暂存后会提示并自动关闭弹窗，同时新增清空输入。\n2. 生活日历增加节气、休班角标、周末蓝色日期、今日按钮和法定假期倒计时。\n3. 纪念日拆分为独立专区，历史日记改为弹窗编辑，日记支持暂存和一键清空。\n4. 状态选择和日记分享卡片继续按新设计优化，二维码保持真实可扫。",
+                createdAt = createdAt
+            ),
+            OfficialMessage(
                 id = "release_1_0_2_builtin",
                 title = "绒绒记账 v1.0.2 更新",
                 body = "1. AI 记账支持一句话识别多笔账，并可暂存输入草稿。\n2. 生活日历增加节日农历、选中日期、全年重要日子和备注展开。\n3. 用户生日支持阳历/农历互换，日记支持状态、编辑和真实分享二维码。\n4. 云账号前台自动轻量同步，减少多设备等待。",
-                createdAt = createdAt
+                createdAt = createdAt - 1
             ),
             OfficialMessage(
                 id = "welcome",
                 title = "欢迎使用绒绒记账",
                 body = "邮箱账号会同步到云端；本地模式只保存在当前设备。请定期确认同步状态。",
-                createdAt = createdAt - 1
+                createdAt = createdAt - 2
             )
         )
     }

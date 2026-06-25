@@ -2,6 +2,7 @@ package com.plushledger.ui
 
 import android.app.TimePickerDialog
 import android.app.DatePickerDialog
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -162,6 +163,10 @@ fun HomeScreen(
             GiftWishScreen(plannerUserId, onBack = { plannerPage = null })
             return
         }
+        "anniversary" -> {
+            AnniversaryScreen(plannerUserId, ledger.profile, onBack = { plannerPage = null })
+            return
+        }
     }
     LaunchedEffect(aiSuggestions) {
         if (aiSuggestions.isNotEmpty()) {
@@ -285,6 +290,7 @@ fun HomeScreen(
                 userId = plannerUserId,
                 profile = ledger.profile,
                 onOpenCalendar = { plannerPage = "calendar" },
+                onOpenAnniversaries = { plannerPage = "anniversary" },
                 onOpenWishes = { plannerPage = "wishes" }
             )
         }
@@ -318,7 +324,16 @@ fun HomeScreen(
                 }
             },
             onAnalyze = { onAnalyzeAi(aiText) },
-            onSaveDraft = { aiDraftStore.save(aiText) }
+            onSaveDraft = {
+                aiDraftStore.save(aiText)
+                Toast.makeText(context, "AI 记账草稿已暂存", Toast.LENGTH_SHORT).show()
+                showAiDialog = false
+            },
+            onClearDraft = {
+                aiText = ""
+                aiDraftStore.clear()
+                Toast.makeText(context, "已清空 AI 记账输入", Toast.LENGTH_SHORT).show()
+            }
         )
     }
 
@@ -344,7 +359,8 @@ private fun AiEntryDialog(
     onTextChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onAnalyze: () -> Unit,
-    onSaveDraft: () -> Unit
+    onSaveDraft: () -> Unit,
+    onClearDraft: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -398,6 +414,9 @@ private fun AiEntryDialog(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     MascotArt(58.dp)
                     Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onClearDraft, enabled = text.isNotBlank() && !analyzing) {
+                        Text("清空", color = palette.coral, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
                     TextButton(onClick = onSaveDraft, enabled = text.isNotBlank() && !analyzing) {
                         Text("暂存", color = palette.muted, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }

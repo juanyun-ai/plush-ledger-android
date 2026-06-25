@@ -36,6 +36,14 @@ data class BirthdaySettings(
     val showInLifeCalendar: Boolean = true
 )
 
+data class CalendarDayInfo(
+    val label: String,
+    val isSolarTerm: Boolean = false,
+    val isMajorFestival: Boolean = false,
+    val isLegalHoliday: Boolean = false,
+    val isAdjustedWorkday: Boolean = false
+)
+
 class LifePlannerStore(context: Context, private val userId: String) {
     private val preferences = context.getSharedPreferences("life_planner_$userId", Context.MODE_PRIVATE)
 
@@ -178,11 +186,31 @@ fun lunarToSolarDate(year: Int, month: Int, day: Int, leapMonth: Boolean = false
 }
 
 fun LocalDate.calendarLabel(): String {
-    SOLAR_FESTIVALS[monthValue to dayOfMonth]?.let { return it }
-    val lunar = toLunarDate()
-    LUNAR_FESTIVALS[lunar.month to lunar.day]?.let { return it }
-    return lunar.display()
+    calendarDayInfo().label.takeIf { it.isNotBlank() }?.let { return it }
+    return lunarLabel()
 }
+
+fun LocalDate.calendarDayInfo(): CalendarDayInfo {
+    val legal = LEGAL_HOLIDAYS[this]
+    val workday = ADJUSTED_WORKDAYS[this]
+    SOLAR_TERMS[monthValue to dayOfMonth]?.let {
+        return CalendarDayInfo(it, isSolarTerm = true, isLegalHoliday = legal != null, isAdjustedWorkday = workday != null)
+    }
+    SOLAR_FESTIVALS[monthValue to dayOfMonth]?.let {
+        return CalendarDayInfo(it, isMajorFestival = true, isLegalHoliday = legal != null, isAdjustedWorkday = workday != null)
+    }
+    val lunar = toLunarDate()
+    LUNAR_FESTIVALS[lunar.month to lunar.day]?.let {
+        return CalendarDayInfo(it, isMajorFestival = true, isLegalHoliday = legal != null, isAdjustedWorkday = workday != null)
+    }
+    return CalendarDayInfo(lunar.display(), isLegalHoliday = legal != null, isAdjustedWorkday = workday != null)
+}
+
+fun statutoryHolidayPlans(from: LocalDate = LocalDate.now()): List<LifeEvent> =
+    LEGAL_HOLIDAY_STARTS
+        .filter { !it.first.isBefore(from) }
+        .map { (date, title) -> LifeEvent(id = "statutory_${date}", title = title, date = date.toString(), type = "statutory", note = "国家法定节假日") }
+        .take(8)
 
 private val LUNAR_MONTHS = listOf("正月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "冬月", "腊月")
 private val LUNAR_DAYS = listOf(
@@ -195,11 +223,17 @@ private val SOLAR_FESTIVALS = mapOf(
     (1 to 1) to "元旦",
     (2 to 14) to "情人节",
     (3 to 8) to "妇女节",
+    (4 to 4) to "清明",
     (5 to 1) to "劳动节",
     (5 to 4) to "青年节",
     (6 to 1) to "儿童节",
+    (7 to 1) to "建党节",
+    (8 to 1) to "建军节",
+    (9 to 3) to "抗战胜利",
     (9 to 10) to "教师节",
     (10 to 1) to "国庆节",
+    (10 to 24) to "联合国日",
+    (11 to 11) to "双十一",
     (12 to 25) to "圣诞节"
 )
 
@@ -208,8 +242,61 @@ private val LUNAR_FESTIVALS = mapOf(
     (1 to 15) to "元宵",
     (5 to 5) to "端午",
     (7 to 7) to "七夕",
+    (7 to 15) to "中元",
     (8 to 15) to "中秋",
     (9 to 9) to "重阳",
     (12 to 8) to "腊八",
     (12 to 23) to "小年"
 )
+
+private val SOLAR_TERMS = mapOf(
+    (1 to 5) to "小寒", (1 to 20) to "大寒",
+    (2 to 4) to "立春", (2 to 19) to "雨水",
+    (3 to 5) to "惊蛰", (3 to 20) to "春分",
+    (4 to 4) to "清明", (4 to 20) to "谷雨",
+    (5 to 5) to "立夏", (5 to 21) to "小满",
+    (6 to 5) to "芒种", (6 to 21) to "夏至",
+    (7 to 7) to "小暑", (7 to 22) to "大暑",
+    (8 to 7) to "立秋", (8 to 23) to "处暑",
+    (9 to 7) to "白露", (9 to 23) to "秋分",
+    (10 to 8) to "寒露", (10 to 23) to "霜降",
+    (11 to 7) to "立冬", (11 to 22) to "小雪",
+    (12 to 7) to "大雪", (12 to 21) to "冬至"
+)
+
+private val LEGAL_HOLIDAYS: Map<LocalDate, String> = buildMap {
+    fun mark(start: String, end: String, title: String) {
+        var cursor = LocalDate.parse(start)
+        val last = LocalDate.parse(end)
+        while (!cursor.isAfter(last)) {
+            put(cursor, title)
+            cursor = cursor.plusDays(1)
+        }
+    }
+    mark("2026-01-01", "2026-01-03", "元旦")
+    mark("2026-02-15", "2026-02-23", "春节")
+    mark("2026-04-04", "2026-04-06", "清明")
+    mark("2026-05-01", "2026-05-05", "劳动节")
+    mark("2026-06-19", "2026-06-21", "端午")
+    mark("2026-09-25", "2026-09-27", "中秋")
+    mark("2026-10-01", "2026-10-07", "国庆")
+}
+
+private val LEGAL_HOLIDAY_STARTS = listOf(
+    LocalDate.parse("2026-01-01") to "元旦假期",
+    LocalDate.parse("2026-02-15") to "春节假期",
+    LocalDate.parse("2026-04-04") to "清明假期",
+    LocalDate.parse("2026-05-01") to "劳动节假期",
+    LocalDate.parse("2026-06-19") to "端午假期",
+    LocalDate.parse("2026-09-25") to "中秋假期",
+    LocalDate.parse("2026-10-01") to "国庆假期"
+)
+
+private val ADJUSTED_WORKDAYS = listOf(
+    "2026-01-04",
+    "2026-02-14",
+    "2026-02-28",
+    "2026-05-09",
+    "2026-09-20",
+    "2026-10-10"
+).associate { LocalDate.parse(it) to "调休" }

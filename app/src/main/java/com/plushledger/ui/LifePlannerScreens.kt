@@ -59,8 +59,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.plushledger.data.Money
 import com.plushledger.data.ProfileEntity
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -68,7 +71,7 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 @Composable
-fun LifePlannerPreview(userId: String, profile: ProfileEntity?, onOpenCalendar: () -> Unit, onOpenWishes: () -> Unit) {
+fun LifePlannerPreview(userId: String, profile: ProfileEntity?, onOpenCalendar: () -> Unit, onOpenAnniversaries: () -> Unit, onOpenWishes: () -> Unit) {
     val context = LocalContext.current
     val store = remember(userId) { LifePlannerStore(context.applicationContext, userId) }
     var events by remember(userId) { mutableStateOf(store.events()) }
@@ -98,7 +101,7 @@ fun LifePlannerPreview(userId: String, profile: ProfileEntity?, onOpenCalendar: 
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Surface(
-                modifier = Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(24.dp)).clickable(onClick = onOpenCalendar),
+                modifier = Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(24.dp)).clickable(onClick = onOpenAnniversaries),
                 shape = RoundedCornerShape(24.dp), color = Color(0xFFFFFAF3), border = BorderStroke(1.dp, palette.border), shadowElevation = 5.dp
             ) {
                 Column(Modifier.padding(14.dp)) {
@@ -156,7 +159,12 @@ fun LifeCalendarScreen(userId: String, profile: ProfileEntity?, onBack: () -> Un
                     selectedDate = it.atDay(selectedDate.dayOfMonth.coerceAtMost(it.lengthOfMonth()))
                 },
                 onPrevious = { month = month.minusMonths(1) },
-                onNext = { month = month.plusMonths(1) }
+                onNext = { month = month.plusMonths(1) },
+                onToday = {
+                    val today = LocalDate.now()
+                    month = YearMonth.from(today)
+                    selectedDate = today
+                }
             )
         }
         item {
@@ -176,6 +184,71 @@ fun LifeCalendarScreen(userId: String, profile: ProfileEntity?, onBack: () -> Un
                     expandedEventIds = if (expanded) expandedEventIds - event.id else expandedEventIds + event.id
                 },
                 onClick = { if (!event.id.startsWith("birthday_")) editing = event }
+            )
+        }
+        item {
+            Text("最近倒计时", color = LocalPlushPalette.current.ink, fontSize = 21.sp, fontWeight = FontWeight.Black)
+        }
+        val countdowns = (allEvents.upcoming() + statutoryHolidayPlans()).distinctBy { it.id }.sortedBy { it.localDate() }.take(8)
+        if (countdowns.isEmpty()) item { PlannerEmpty("暂时没有临近的纪念日或法定假期。") }
+        items(countdowns, key = { "countdown_${it.id}" }) { event ->
+            PlannerEventCard(
+                event = event,
+                expanded = false,
+                onToggleNote = {},
+                onClick = { if (!event.id.startsWith("statutory_") && !event.id.startsWith("birthday_")) editing = event }
+            )
+        }
+    }
+    if (adding || editing != null) LifeEventDialog(
+        initial = editing,
+        onDismiss = { adding = false; editing = null },
+        onSave = { event -> events = store.saveEvent(event); adding = false; editing = null },
+        onDelete = editing?.takeIf { !it.id.startsWith("birthday_") }?.let { { events = store.deleteEvent(it.id); editing = null } }
+    )
+}
+
+@Composable
+fun AnniversaryScreen(userId: String, profile: ProfileEntity?, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val store = remember(userId) { LifePlannerStore(context.applicationContext, userId) }
+    var events by remember(userId) { mutableStateOf(store.events()) }
+    var editing by remember { mutableStateOf<LifeEvent?>(null) }
+    var adding by rememberSaveable { mutableStateOf(false) }
+    var expandedEventIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val settings = remember(userId) { store.birthdaySettings() }
+    val allEvents = events.withBirthday(profile, settings.showInLifeCalendar)
+    val anniversaryEvents = (allEvents.upcoming() + statutoryHolidayPlans())
+        .distinctBy { it.id }
+        .sortedBy { it.localDate() }
+    BackHandler(onBack = onBack)
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 18.dp, top = 16.dp, end = 18.dp, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item { PlannerHeader("纪念日", "那些值得期待和准备的日子，都在这里", onBack) }
+        item {
+            Surface(shape = RoundedCornerShape(28.dp), color = Color(0xFFFFF8EE), border = BorderStroke(1.dp, LocalPlushPalette.current.border), shadowElevation = 6.dp) {
+                Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    MascotArt(84.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("最近的温柔提醒", color = LocalPlushPalette.current.ink, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                        Text("自定义纪念日和法定节假日会一起倒计时。", color = LocalPlushPalette.current.muted, fontSize = 12.sp)
+                    }
+                    TextButton(onClick = { adding = true }) { Text("添加", color = LocalPlushPalette.current.rose, fontWeight = FontWeight.Black) }
+                }
+            }
+        }
+        if (anniversaryEvents.isEmpty()) item { PlannerEmpty("还没有纪念日，先加一个想记住的日子吧。") }
+        items(anniversaryEvents, key = { "anniversary_${it.id}" }) { event ->
+            val expanded = event.id in expandedEventIds
+            PlannerEventCard(
+                event = event,
+                expanded = expanded,
+                onToggleNote = { expandedEventIds = if (expanded) expandedEventIds - event.id else expandedEventIds + event.id },
+                onClick = { if (!event.id.startsWith("statutory_") && !event.id.startsWith("birthday_")) editing = event }
             )
         }
     }
@@ -232,7 +305,8 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
     onDate: (LocalDate) -> Unit,
     onMonthPick: (YearMonth) -> Unit,
     onPrevious: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onToday: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
     val context = LocalContext.current
@@ -264,6 +338,16 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
                     )
                 }
                 IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, "下个月", tint = palette.ink) }
+                Surface(
+                    modifier = Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onToday),
+                    shape = CircleShape,
+                    color = Color(0xFFFFB83D),
+                    shadowElevation = 5.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("今", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    }
+                }
             }
             PlannerCalendarGrid(month, events, selectedDate, onDate)
         }
@@ -275,30 +359,66 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
     val eventDates = events.groupBy { it.localDate() }
     Row(Modifier.fillMaxWidth()) { listOf("日", "一", "二", "三", "四", "五", "六").forEach { Text(it, modifier = Modifier.weight(1f), color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
     val leading = month.atDay(1).dayOfWeek.value % 7
-    val days = List(leading) { null } + (1..month.lengthOfMonth()).map(month::atDay)
+    val start = month.atDay(1).minusDays(leading.toLong())
+    val days = List(42) { start.plusDays(it.toLong()) }
     days.chunked(7).forEach { week ->
         Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
             week.forEach { date ->
                 Box(Modifier.weight(1f).height(45.dp), contentAlignment = Alignment.Center) {
-                    date?.let {
-                        val marked = eventDates[it].orEmpty().isNotEmpty()
-                        val selected = it == selectedDate
-                        Surface(
-                            modifier = Modifier.clip(CircleShape).clickable { onDate(it) },
-                            shape = CircleShape,
-                            color = if (it == LocalDate.now()) palette.rose.copy(alpha = 0.18f) else Color.Transparent,
-                            border = if (selected) BorderStroke(1.dp, Color(0xFF8EC5FF)) else null
-                        ) {
-                            Column(Modifier.padding(horizontal = 5.dp, vertical = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(it.dayOfMonth.toString(), color = palette.ink, fontWeight = if (marked) FontWeight.Black else FontWeight.Medium, fontSize = 14.sp)
-                                Text(it.calendarLabel(), color = palette.muted, fontSize = 7.sp, maxLines = 1)
-                                if (marked) Box(Modifier.size(5.dp).clip(CircleShape).background(eventDates[it]?.firstOrNull()?.plannerColor() ?: palette.rose))
+                    val inMonth = YearMonth.from(date) == month
+                    val customEvents = eventDates[date].orEmpty()
+                    val firstEvent = customEvents.firstOrNull()
+                    val info = date.calendarDayInfo()
+                    val marked = customEvents.isNotEmpty()
+                    val selected = date == selectedDate
+                    val weekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
+                    val dayColor = when {
+                        !inMonth -> Color(0xFFD5CEC5)
+                        weekend -> Color(0xFF3887D8)
+                        else -> palette.ink
+                    }
+                    val labelColor = when {
+                        !inMonth -> Color(0xFFCFC7BE)
+                        info.isSolarTerm || info.isMajorFestival || marked -> palette.ink
+                        else -> palette.muted
+                    }
+                    val background = when {
+                        marked -> Color(0xFFFFF2BF)
+                        info.isLegalHoliday -> Color(0xFFEAF3FF)
+                        info.isAdjustedWorkday -> Color(0xFFF4F1EE)
+                        date == LocalDate.now() -> palette.rose.copy(alpha = 0.14f)
+                        else -> Color.Transparent
+                    }
+                    Surface(
+                        modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable { onDate(date) },
+                        shape = RoundedCornerShape(14.dp),
+                        color = background,
+                        border = when {
+                            selected -> BorderStroke(1.5.dp, Color(0xFF4A90E2))
+                            marked -> BorderStroke(1.dp, Color(0xFFFFC84A))
+                            else -> null
+                        }
+                    ) {
+                        Box(Modifier.fillMaxWidth().height(45.dp), contentAlignment = Alignment.Center) {
+                            Column(Modifier.padding(horizontal = 2.dp, vertical = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(date.dayOfMonth.toString(), color = dayColor, fontWeight = if (info.isLegalHoliday || info.isSolarTerm || marked) FontWeight.Black else FontWeight.Medium, fontSize = 14.sp)
+                                Text(firstEvent?.title?.take(4) ?: info.label, color = labelColor, fontSize = 7.sp, maxLines = 1, fontWeight = if (info.isSolarTerm || info.isMajorFestival || marked) FontWeight.Black else FontWeight.Normal)
+                            }
+                            if (info.isLegalHoliday || info.isAdjustedWorkday) {
+                                Surface(
+                                    modifier = Modifier.align(Alignment.TopEnd).size(15.dp),
+                                    shape = CircleShape,
+                                    color = if (info.isLegalHoliday) Color(0xFF3B8BEA) else Color(0xFFFF8B3D)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(if (info.isLegalHoliday) "休" else "班", color = Color.White, fontWeight = FontWeight.Black, fontSize = 8.sp)
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-            repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
         }
     }
 }
@@ -319,12 +439,105 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
 @Composable private fun PlannerEmpty(message: String) { Surface(shape = RoundedCornerShape(22.dp), color = Color(0xFFFFFAF3), border = BorderStroke(1.dp, LocalPlushPalette.current.border)) { Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) { MascotArt(58.dp); Spacer(Modifier.width(12.dp)); Text(message, color = LocalPlushPalette.current.muted, fontSize = 13.sp) } } }
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable private fun LifeEventDialog(initial: LifeEvent?, onDismiss: () -> Unit, onSave: (LifeEvent) -> Unit, onDelete: (() -> Unit)?) { val context = LocalContext.current; var title by remember(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }; var type by remember(initial?.id) { mutableStateOf(initial?.type ?: "birthday") }; var date by remember(initial?.id) { mutableStateOf(initial?.localDate() ?: LocalDate.now()) }; var note by remember(initial?.id) { mutableStateOf(initial?.note.orEmpty()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text(if (initial == null) "添加重要日子" else "编辑重要日子", fontWeight = FontWeight.Black) }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedTextField(title, { title = it.take(24) }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true); FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("birthday" to "生日", "gift" to "礼物", "travel" to "旅行", "meet" to "见面", "other" to "其他").forEach { (key, label) -> SoftChip(label, type == key, LocalPlushPalette.current.rose) { type = key } } }; Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { DatePickerDialog(context, { _, year, month, day -> date = LocalDate.of(year, month + 1, day) }, date.year, date.monthValue - 1, date.dayOfMonth).show() }, shape = RoundedCornerShape(16.dp), color = Color(0xFFFFF8EC), border = BorderStroke(1.dp, LocalPlushPalette.current.border)) { Text(date.format(DateTimeFormatter.ofPattern("yyyy年M月d日 EEEE", Locale.CHINA)), Modifier.padding(14.dp), color = LocalPlushPalette.current.ink, fontWeight = FontWeight.Bold) }; OutlinedTextField(note, { note = it.take(80) }, label = { Text("备注（选填）") }, modifier = Modifier.fillMaxWidth(), singleLine = true) } }, dismissButton = { if (onDelete != null) TextButton(onClick = onDelete) { Text("删除", color = LocalPlushPalette.current.coral) } else TextButton(onClick = onDismiss) { Text("取消") } }, confirmButton = { TextButton(onClick = { if (title.isNotBlank()) onSave(LifeEvent(id = initial?.id ?: java.util.UUID.randomUUID().toString(), title = title.trim(), date = date.toString(), type = type, note = note.trim())) }) { Text("保存", color = LocalPlushPalette.current.rose, fontWeight = FontWeight.Black) } }) }
+@Composable
+private fun LifeEventDialog(initial: LifeEvent?, onDismiss: () -> Unit, onSave: (LifeEvent) -> Unit, onDelete: (() -> Unit)?) {
+    val context = LocalContext.current
+    val palette = LocalPlushPalette.current
+    var title by remember(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }
+    var type by remember(initial?.id) { mutableStateOf(initial?.type ?: "birthday") }
+    var date by remember(initial?.id) { mutableStateOf(initial?.localDate() ?: LocalDate.now()) }
+    var note by remember(initial?.id) { mutableStateOf(initial?.note.orEmpty()) }
+    val typeOptions = listOf("birthday" to "🎂 生日", "gift" to "🎁 礼物", "travel" to "🧳 旅行", "meet" to "👥 见面", "other" to "🌸 其他")
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.92f),
+            shape = RoundedCornerShape(34.dp),
+            color = Color(0xFFFFFCF7),
+            border = BorderStroke(1.5.dp, Color(0xFFFFD7A3)),
+            shadowElevation = 22.dp
+        ) {
+            Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (initial == null) "添加重要日子" else "编辑重要日子", modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 28.sp)
+                    MascotArt(64.dp)
+                }
+                OutlinedTextField(
+                    title,
+                    { title = it.take(24) },
+                    label = { Text("名称") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(22.dp)
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    typeOptions.forEach { (key, label) ->
+                        Surface(
+                            modifier = Modifier.clip(RoundedCornerShape(22.dp)).clickable { type = key },
+                            shape = RoundedCornerShape(22.dp),
+                            color = if (type == key) Color(0xFFFFE8B9) else Color.White,
+                            border = BorderStroke(1.dp, if (type == key) Color(0xFFFFA126) else palette.border),
+                            shadowElevation = if (type == key) 4.dp else 0.dp
+                        ) {
+                            Text(label, Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = if (type == key) Color(0xFF9E5C00) else palette.ink, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).clickable {
+                        DatePickerDialog(context, { _, year, month, day -> date = LocalDate.of(year, month + 1, day) }, date.year, date.monthValue - 1, date.dayOfMonth).show()
+                    },
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color(0xFFFFF8EC),
+                    border = BorderStroke(1.dp, Color(0xFFFFD7A3))
+                ) {
+                    Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CalendarMonth, null, tint = Color(0xFFFFA126))
+                        Spacer(Modifier.width(12.dp))
+                        Text(date.format(DateTimeFormatter.ofPattern("yyyy年M月d日 EEEE", Locale.CHINA)), modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Icon(Icons.Default.ChevronRight, null, tint = palette.muted)
+                    }
+                }
+                OutlinedTextField(
+                    note,
+                    { note = it.take(80) },
+                    label = { Text("备注（选填）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    shape = RoundedCornerShape(22.dp)
+                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (onDelete != null) TextButton(onClick = onDelete) { Text("删除", color = palette.coral, fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) { Text("取消", color = palette.ink, fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.width(12.dp))
+                    Surface(
+                        modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(enabled = title.isNotBlank()) {
+                            if (title.isNotBlank()) onSave(
+                                LifeEvent(
+                                    id = initial?.id ?: java.util.UUID.randomUUID().toString(),
+                                    title = title.trim(),
+                                    date = date.toString(),
+                                    type = type,
+                                    note = note.trim()
+                                )
+                            )
+                        },
+                        shape = RoundedCornerShape(24.dp),
+                        color = if (title.isNotBlank()) Color(0xFFFFA126) else Color(0xFFFFD7A3),
+                        shadowElevation = 6.dp
+                    ) {
+                        Text("保存", Modifier.padding(horizontal = 36.dp, vertical = 12.dp), color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable private fun WishDialog(initial: WishPlan?, onDismiss: () -> Unit, onSave: (WishPlan) -> Unit, onDelete: (() -> Unit)?) { var title by remember(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }; var budget by remember(initial?.id) { mutableStateOf(if (initial == null || initial.targetMinor == 0L) "" else "%.2f".format(Locale.US, initial.targetMinor / 100.0)) }; var saved by remember(initial?.id) { mutableStateOf(if (initial == null || initial.savedMinor == 0L) "" else "%.2f".format(Locale.US, initial.savedMinor / 100.0)) }; var note by remember(initial?.id) { mutableStateOf(initial?.note.orEmpty()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text(if (initial == null) "添加心愿" else "编辑心愿", fontWeight = FontWeight.Black) }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedTextField(title, { title = it.take(24) }, label = { Text("心愿或礼物") }, modifier = Modifier.fillMaxWidth(), singleLine = true); OutlinedTextField(budget, { budget = it.filter { c -> c.isDigit() || c == '.' }.take(12) }, label = { Text("预算金额") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true); OutlinedTextField(saved, { saved = it.filter { c -> c.isDigit() || c == '.' }.take(12) }, label = { Text("已存金额") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true); OutlinedTextField(note, { note = it.take(80) }, label = { Text("备注（选填）") }, modifier = Modifier.fillMaxWidth(), singleLine = true) } }, dismissButton = { if (onDelete != null) TextButton(onClick = onDelete) { Text("删除", color = LocalPlushPalette.current.coral) } else TextButton(onClick = onDismiss) { Text("取消") } }, confirmButton = { TextButton(onClick = { val target = Money.parseToMinor(budget) ?: 0L; val savedAmount = Money.parseToMinor(saved) ?: 0L; if (title.isNotBlank() && target > 0) onSave(WishPlan(id = initial?.id ?: java.util.UUID.randomUUID().toString(), title = title.trim(), targetMinor = target, savedMinor = savedAmount.coerceAtMost(target), note = note.trim())) }) { Text("保存", color = LocalPlushPalette.current.rose, fontWeight = FontWeight.Black) } }) }
 
 private fun List<LifeEvent>.withBirthday(profile: ProfileEntity?, enabled: Boolean): List<LifeEvent> { val birthday = profile?.birthDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }; if (!enabled || birthday == null) return this; val today = LocalDate.now(); var next = birthday.withYear(today.year); if (next.isBefore(today)) next = next.plusYears(1); return (this.filterNot { it.id == "birthday_${profile.id}" } + LifeEvent(id = "birthday_${profile.id}", title = "我的生日", date = next.toString(), type = "birthday", note = "给自己留一份温柔祝福")).sortedBy { it.localDate() } }
 private fun List<LifeEvent>.upcoming(): List<LifeEvent> = filter { !it.localDate().isBefore(LocalDate.now()) }.sortedBy { it.localDate() }
-private fun LifeEvent.plannerColor(): Color = when (type) { "birthday" -> Color(0xFFFF718F); "gift" -> Color(0xFFFFA126); "travel" -> Color(0xFF69C79A); "meet" -> Color(0xFF83B7F1); else -> Color(0xFFA58AE8) }
-private fun LifeEvent.plannerIcon() = when (type) { "birthday" -> Icons.Default.Celebration; "gift" -> Icons.Default.Redeem; "travel" -> Icons.Default.Flight; "meet" -> Icons.Default.Favorite; else -> Icons.Default.CalendarMonth }
+private fun LifeEvent.plannerColor(): Color = when (type) { "birthday" -> Color(0xFFFF718F); "gift" -> Color(0xFFFFA126); "travel" -> Color(0xFF69C79A); "meet" -> Color(0xFF83B7F1); "statutory" -> Color(0xFF3B8BEA); else -> Color(0xFFA58AE8) }
+private fun LifeEvent.plannerIcon() = when (type) { "birthday" -> Icons.Default.Celebration; "gift" -> Icons.Default.Redeem; "travel" -> Icons.Default.Flight; "meet" -> Icons.Default.Favorite; "statutory" -> Icons.Default.WorkspacePremium; else -> Icons.Default.CalendarMonth }
 private fun LifeEvent.lunarHint(): String = localDate().calendarLabel()

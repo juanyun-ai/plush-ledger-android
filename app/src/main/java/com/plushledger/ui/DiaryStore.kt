@@ -29,7 +29,40 @@ class DiaryStore(context: Context, private val userId: String) {
         val updated = (listOf(DiaryEntry(date, text.trim(), mood, status.trim())) + load().filterNot { it.date == date })
             .take(180)
         save(updated)
+        clearDraft(date)
         return updated
+    }
+
+    fun draft(date: String): DiaryEntry? = runCatching {
+        current.getString("draft_$date", null)?.let { raw ->
+            val item = JSONObject(raw)
+            DiaryEntry(
+                date = date,
+                text = item.optString("text").trim(),
+                mood = item.optString("mood", "开心"),
+                status = item.optString("status")
+            )
+        }
+    }.getOrNull()?.takeIf { it.text.isNotBlank() || it.status.isNotBlank() }
+
+    fun saveDraft(date: String, text: String, mood: String, status: String = "") {
+        val trimmed = text.trim()
+        if (trimmed.isBlank() && status.isBlank()) {
+            clearDraft(date)
+            return
+        }
+        current.edit().putString(
+            "draft_$date",
+            JSONObject()
+                .put("text", trimmed)
+                .put("mood", mood)
+                .put("status", status.trim())
+                .toString()
+        ).apply()
+    }
+
+    fun clearDraft(date: String) {
+        current.edit().remove("draft_$date").apply()
     }
 
     private fun save(entries: List<DiaryEntry>) {
