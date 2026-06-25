@@ -57,6 +57,10 @@ data class RemoteAiLedgerParse(
     val occurredAt: Long?
 )
 
+data class RemoteAiLedgerBatchParse(
+    val entries: List<RemoteAiLedgerParse>
+)
+
 class SupabaseClient {
     private val baseUrl = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
     private val anonKey = BuildConfig.SUPABASE_ANON_KEY.trim()
@@ -153,7 +157,7 @@ class SupabaseClient {
         text: String,
         categories: List<CategoryEntity>,
         accounts: List<AccountEntity>
-    ): RemoteAiLedgerParse {
+    ): RemoteAiLedgerBatchParse {
         val byId = categories.associateBy { it.id }
         val categoryPayload = JSONArray().apply {
             categories.filter { it.kind == "expense" || it.kind == "income" }.forEach { category ->
@@ -177,16 +181,23 @@ class SupabaseClient {
                 .put("accounts", accountPayload),
             accessToken = accessToken
         )
-        return RemoteAiLedgerParse(
-            type = response.optString("type", "expense"),
-            amountMinor = response.optLong("amount_minor", 0),
-            categoryName = response.optString("category_name").takeIf(String::isNotBlank),
-            parentCategoryName = response.optString("category_parent").takeIf(String::isNotBlank),
-            accountName = response.optString("account_name").takeIf(String::isNotBlank),
-            note = response.optString("note").takeIf(String::isNotBlank),
-            occurredAt = response.optLong("occurred_at", 0).takeIf { it > 0 }
+        val rows = response.optJSONArray("entries") ?: JSONArray().put(response)
+        return RemoteAiLedgerBatchParse(
+            entries = List(rows.length()) { index -> rows.getJSONObject(index).toRemoteAiLedgerParse() }
+                .filter { it.amountMinor > 0 }
+                .take(8)
         )
     }
+
+    private fun JSONObject.toRemoteAiLedgerParse() = RemoteAiLedgerParse(
+        type = optString("type", "expense"),
+        amountMinor = optLong("amount_minor", 0),
+        categoryName = optString("category_name").takeIf(String::isNotBlank),
+        parentCategoryName = optString("category_parent").takeIf(String::isNotBlank),
+        accountName = optString("account_name").takeIf(String::isNotBlank),
+        note = optString("note").takeIf(String::isNotBlank),
+        occurredAt = optLong("occurred_at", 0).takeIf { it > 0 }
+    )
 
     suspend fun submitFeedback(accessToken: String, userId: String, email: String?, content: String) {
         val payload = JSONArray().put(

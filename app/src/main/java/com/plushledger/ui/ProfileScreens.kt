@@ -354,7 +354,7 @@ private fun MyRoot(
                     dailyQuote,
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                     color = palette.muted,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -656,6 +656,7 @@ private fun ProfileScreen(
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var showVerify by rememberSaveable { mutableStateOf(false) }
     var showDelete by rememberSaveable { mutableStateOf(false) }
+    var showBirthdayPicker by rememberSaveable { mutableStateOf(false) }
     var privacyOn by rememberSaveable(userKey) { mutableStateOf(prefs.getBoolean("privacy_$userKey", false)) }
     var verified by rememberSaveable(userKey) { mutableStateOf(prefs.getBoolean("verified_$userKey", false)) }
     var verifiedName by rememberSaveable(userKey) { mutableStateOf(prefs.getString("verified_name_$userKey", "") ?: "") }
@@ -747,31 +748,23 @@ private fun ProfileScreen(
                     privacyOn = privacyOn,
                     settings = birthdaySettings,
                     onModeChange = { mode ->
-                        birthdaySettings = birthdaySettings.copy(calendarMode = mode)
-                        plannerStore.saveBirthdaySettings(birthdaySettings)
+                        val updated = birthdaySettings.copy(calendarMode = mode)
+                        birthdaySettings = updated
+                        plannerStore.saveBirthdaySettings(updated)
                     },
                     onPickDate = {
                         editMode = true
-                        val initial = runCatching { LocalDate.parse(birthDate) }.getOrDefault(LocalDate.now().minusYears(20))
-                        DatePickerDialog(
-                            context,
-                            { _, year, month, day ->
-                                val selected = LocalDate.of(year, month + 1, day)
-                                birthDate = selected.toString()
-                                age = Period.between(selected, LocalDate.now()).years.coerceAtLeast(0).toString()
-                            },
-                            initial.year,
-                            initial.monthValue - 1,
-                            initial.dayOfMonth
-                        ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                        showBirthdayPicker = true
                     },
                     onReminderChange = { enabled ->
-                        birthdaySettings = birthdaySettings.copy(reminderEnabled = enabled)
-                        plannerStore.saveBirthdaySettings(birthdaySettings)
+                        val updated = birthdaySettings.copy(reminderEnabled = enabled)
+                        birthdaySettings = updated
+                        plannerStore.saveBirthdaySettings(updated)
                     },
                     onSyncChange = { enabled ->
-                        birthdaySettings = birthdaySettings.copy(showInLifeCalendar = enabled)
-                        plannerStore.saveBirthdaySettings(birthdaySettings)
+                        val updated = birthdaySettings.copy(showInLifeCalendar = enabled)
+                        birthdaySettings = updated
+                        plannerStore.saveBirthdaySettings(updated)
                     }
                 )
                 ProfileDivider()
@@ -933,6 +926,21 @@ private fun ProfileScreen(
             showDelete = false
         }
     }
+    if (showBirthdayPicker) {
+        BirthdayPickerDialog(
+            initial = runCatching { LocalDate.parse(birthDate) }.getOrDefault(LocalDate.now().minusYears(20)),
+            initialMode = birthdaySettings.calendarMode,
+            onDismiss = { showBirthdayPicker = false },
+            onConfirm = { solarDate, mode ->
+                birthDate = solarDate.toString()
+                age = Period.between(solarDate, LocalDate.now()).years.coerceAtLeast(0).toString()
+                val updated = birthdaySettings.copy(calendarMode = mode)
+                birthdaySettings = updated
+                plannerStore.saveBirthdaySettings(updated)
+                showBirthdayPicker = false
+            }
+        )
+    }
     identityChannel?.let { channel ->
         IdentityChangeDialog(
             channel = channel,
@@ -1018,7 +1026,7 @@ private fun BirthdayProfileCard(
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("重要日子同步到生活日历", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            Text("生日将在首页日历和倒计时中显示", color = palette.muted, fontSize = 11.sp)
+            Text("生日将在首页日历和纪念日中显示", color = palette.muted, fontSize = 11.sp)
         }
         Switch(checked = settings.showInLifeCalendar, onCheckedChange = onSyncChange)
     }
@@ -1030,6 +1038,106 @@ private fun BirthdayModeButton(label: String, selected: Boolean, onClick: () -> 
     Surface(modifier = Modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), color = if (selected) palette.rose else Color.Transparent) {
         Text(label, Modifier.padding(horizontal = 13.dp, vertical = 7.dp), color = if (selected) Color.White else palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
     }
+}
+
+@Composable
+private fun BirthdayPickerDialog(
+    initial: LocalDate,
+    initialMode: String,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDate, String) -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    var mode by rememberSaveable { mutableStateOf(initialMode.takeIf { it == "lunar" } ?: "solar") }
+    var yearText by rememberSaveable { mutableStateOf(initial.year.toString()) }
+    var monthText by rememberSaveable {
+        mutableStateOf(if (mode == "lunar") initial.toLunarDate().month.toString() else initial.monthValue.toString())
+    }
+    var dayText by rememberSaveable {
+        mutableStateOf(if (mode == "lunar") initial.toLunarDate().day.toString() else initial.dayOfMonth.toString())
+    }
+    fun resolvedSolar(): LocalDate? {
+        val year = yearText.toIntOrNull() ?: return null
+        val month = monthText.toIntOrNull() ?: return null
+        val day = dayText.toIntOrNull() ?: return null
+        return if (mode == "solar") {
+            runCatching { LocalDate.of(year, month, day) }.getOrNull()
+        } else lunarToSolarDate(year, month, day)
+    }
+    fun switchMode(next: String) {
+        val solar = resolvedSolar() ?: initial
+        mode = next
+        if (next == "solar") {
+            yearText = solar.year.toString()
+            monthText = solar.monthValue.toString()
+            dayText = solar.dayOfMonth.toString()
+        } else {
+            val lunar = solar.toLunarDate()
+            yearText = solar.year.toString()
+            monthText = lunar.month.toString()
+            dayText = lunar.day.toString()
+        }
+    }
+    val solar = resolvedSolar()
+    val counterpart = if (mode == "solar") {
+        solar?.let { "对应农历 ${it.toLunarDate().display()}" } ?: "请检查阳历日期"
+    } else {
+        solar?.let { "对应公历 ${it.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))}" } ?: "请检查农历日期"
+    }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.9f),
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFFFFFCF7),
+            border = androidx.compose.foundation.BorderStroke(1.dp, palette.border),
+            shadowElevation = 16.dp
+        ) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("选择生日", modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 23.sp)
+                    MascotArt(50.dp)
+                }
+                Surface(shape = RoundedCornerShape(24.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                    Row(Modifier.padding(4.dp)) {
+                        BirthdayModeButton("阳历", mode == "solar") { switchMode("solar") }
+                        BirthdayModeButton("农历", mode == "lunar") { switchMode("lunar") }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BirthdayNumberField("年", yearText, { yearText = it.filter(Char::isDigit).take(4) }, Modifier.weight(1.2f))
+                    BirthdayNumberField("月", monthText, { monthText = it.filter(Char::isDigit).take(2) }, Modifier.weight(1f))
+                    BirthdayNumberField("日", dayText, { dayText = it.filter(Char::isDigit).take(2) }, Modifier.weight(1f))
+                }
+                Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFFFFF4E4), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFDEB8))) {
+                    Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = palette.rose)
+                        Spacer(Modifier.width(10.dp))
+                        Text(counterpart, color = if (solar == null) palette.coral else palette.ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("取消", color = palette.muted) }
+                    TextButton(
+                        enabled = solar != null,
+                        onClick = { solar?.let { onConfirm(it, mode) } }
+                    ) { Text("保存生日", color = palette.rose, fontWeight = FontWeight.Black) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BirthdayNumberField(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable
@@ -1890,7 +1998,6 @@ private fun ProfileMetric(icon: ImageVector, label: String, value: String, color
 
 @Composable
 private fun rememberDailyQuote(): String {
-    val context = LocalContext.current
     var day by remember { mutableStateOf(LocalDate.now()) }
     val quotes = rememberQuoteCollection()
     LaunchedEffect(Unit) {
@@ -1901,7 +2008,8 @@ private fun rememberDailyQuote(): String {
             day = LocalDate.now()
         }
     }
-    return quotes[Math.floorMod(day.toEpochDay().toInt(), quotes.size)]
+    val seed = day.toEpochDay().toInt() xor 0x5F3759DF
+    return quotes[kotlin.random.Random(seed).nextInt(quotes.size)]
 }
 
 @Composable

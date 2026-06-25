@@ -22,6 +22,13 @@ data class AiLedgerAnalysis(
     val notice: String? = null
 )
 
+data class AiLedgerBatch(
+    val sourceText: String,
+    val entries: List<AiLedgerAnalysis>,
+    val cloudAssisted: Boolean,
+    val notice: String? = null
+)
+
 object LocalAiLedgerParser {
     private val currencyAmountPattern = Regex(
         "(?:[¥￥]\\s*(\\d+(?:\\.\\d{1,2})?)|(\\d+(?:\\.\\d{1,2})?)\\s*(?:元|块(?:钱)?|rmb))",
@@ -29,11 +36,20 @@ object LocalAiLedgerParser {
     )
     private val bareNumberPattern = Regex("\\d+(?:\\.\\d{1,2})?")
 
-    fun parse(text: String, categories: List<CategoryEntity>, accounts: List<AccountEntity>): AiLedgerAnalysis? {
+    fun parse(text: String, categories: List<CategoryEntity>, accounts: List<AccountEntity>): AiLedgerAnalysis? =
+        parseAll(text, categories, accounts).firstOrNull()
+
+    fun parseAll(text: String, categories: List<CategoryEntity>, accounts: List<AccountEntity>): List<AiLedgerAnalysis> {
         val source = text.trim().take(160)
-        if (source.isBlank()) return null
-        val amount = parseAmount(source)
-            ?: return null
+        if (source.isBlank()) return emptyList()
+        return splitIntoEntries(source)
+            .mapNotNull { entry -> parseSingle(entry, categories, accounts) }
+            .distinctBy { listOf(it.type, it.amountMinor, it.note, it.occurredAt) }
+            .take(8)
+    }
+
+    private fun parseSingle(source: String, categories: List<CategoryEntity>, accounts: List<AccountEntity>): AiLedgerAnalysis? {
+        val amount = parseAmount(source) ?: return null
         val type = if (listOf("收入", "工资", "兼职", "收款", "到账", "报销", "理财", "收益", "利息", "稿费", "转租", "租金").any(source::contains)) "income" else "expense"
         val category = chooseCategory(source, type, categories)
         val account = chooseAccount(source, accounts)
@@ -50,6 +66,30 @@ object LocalAiLedgerParser {
             cloudAssisted = false,
             notice = "已使用本地规则预填；配置 AI 服务后可识别更自然的表达。"
         )
+    }
+
+    /**
+     * 优先按中文语句拆分。没有句号时，按金额和其前面的短语拆分，能覆盖
+     * “昨天咖啡 15 元，今天买菜 30 元”这类一口气输入的常见表达。
+     */
+    private fun splitIntoEntries(source: String): List<String> {
+        val sentences = source.split(Regex("[；;。\\n]+"))
+            .map(String::trim)
+            .filter(String::isNotBlank)
+        return sentences.flatMap { sentence ->
+            val amounts = currencyAmountPattern.findAll(sentence).toList()
+            if (amounts.size <= 1) return@flatMap listOf(sentence)
+            amounts.map { amount ->
+                val beforeAmount = sentence.substring(0, amount.range.first)
+                val delimiter = beforeAmount.lastIndexOfAny(charArrayOf('，', ',', '、', '；', ';'))
+                val start = (delimiter + 1).coerceAtLeast(0)
+                val afterAmount = sentence.substring(amount.range.last + 1)
+                val accountTail = accountKeyword.find(afterAmount)?.let { match ->
+                    if (match.range.first <= 8) "，${match.value}" else ""
+                }.orEmpty()
+                (sentence.substring(start, amount.range.last + 1) + accountTail).trim()
+            }
+        }.filter(String::isNotBlank)
     }
 
     fun resolveCategory(
@@ -258,4 +298,5 @@ object LocalAiLedgerParser {
     private val genericCategoryNames = setOf("其他", "其他收入", "未分类", "无法归类", "临时支出")
     private val dateNumberDelimiters = setOf('年', '月', '日', '号', '点', ':', '：', '/', '-', '.', '~', '～')
     private val weekdayNames = listOf("一", "二", "三", "四", "五", "六", "日", "天")
+    private val accountKeyword = Regex("微信(?:支付)?|支付宝|现金|银行卡|银行")
 }

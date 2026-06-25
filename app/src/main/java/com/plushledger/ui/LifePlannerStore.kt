@@ -165,9 +165,51 @@ fun LocalDate.toLunarDate(): LunarDate {
 
 fun LocalDate.lunarLabel(): String = toLunarDate().display()
 
+fun lunarToSolarDate(year: Int, month: Int, day: Int, leapMonth: Boolean = false): LocalDate? {
+    if (year !in 1901..2100 || month !in 1..12 || day !in 1..30) return null
+    var cursor = LocalDate.of(year, 1, 1)
+    val end = LocalDate.of(year + 1, 3, 1)
+    while (!cursor.isAfter(end)) {
+        val lunar = cursor.toLunarDate()
+        if (lunar.month == month && lunar.day == day && lunar.isLeapMonth == leapMonth) return cursor
+        cursor = cursor.plusDays(1)
+    }
+    return null
+}
+
+fun LocalDate.calendarLabel(): String {
+    SOLAR_FESTIVALS[monthValue to dayOfMonth]?.let { return it }
+    val lunar = toLunarDate()
+    LUNAR_FESTIVALS[lunar.month to lunar.day]?.let { return it }
+    return lunar.display()
+}
+
 private val LUNAR_MONTHS = listOf("正月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "冬月", "腊月")
 private val LUNAR_DAYS = listOf(
     "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
     "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
     "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+)
+
+private val SOLAR_FESTIVALS = mapOf(
+    (1 to 1) to "元旦",
+    (2 to 14) to "情人节",
+    (3 to 8) to "妇女节",
+    (5 to 1) to "劳动节",
+    (5 to 4) to "青年节",
+    (6 to 1) to "儿童节",
+    (9 to 10) to "教师节",
+    (10 to 1) to "国庆节",
+    (12 to 25) to "圣诞节"
+)
+
+private val LUNAR_FESTIVALS = mapOf(
+    (1 to 1) to "春节",
+    (1 to 15) to "元宵",
+    (5 to 5) to "端午",
+    (7 to 7) to "七夕",
+    (8 to 15) to "中秋",
+    (9 to 9) to "重阳",
+    (12 to 8) to "腊八",
+    (12 to 23) to "小年"
 )

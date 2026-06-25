@@ -58,7 +58,7 @@ data class UiState(
     val automaticUpdatePrompts: Boolean = true,
     val defaultAccountId: String? = null,
     val exportPath: String? = null,
-    val aiSuggestion: AiLedgerAnalysis? = null,
+    val aiSuggestions: List<AiLedgerAnalysis> = emptyList(),
     val isAiAnalyzing: Boolean = false,
     val billImportPreview: ExternalBillPreview? = null,
     val isBusy: Boolean = false
@@ -73,6 +73,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     private var ledgerJob: Job? = null
     private var cooldownJob: Job? = null
     private var mailboxRefreshJob: Job? = null
+    private var cloudRefreshJob: Job? = null
     private var lastAvatarKey: String? = null
     private val tabHistory = ArrayDeque<AppTab>()
 
@@ -99,6 +100,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                 ledger.ensureUserWorkspace(it.userId, it.displayName, it.phone, it.email)
                 if (!state.value.locked) observeLedger(it.userId)
             }
+            if (!state.value.locked) startCloudRefresh(it)
         }
         viewModelScope.launch {
             delay(2_000)
@@ -271,6 +273,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             is AuthOutcome.SignedIn -> {
                 state.value = state.value.copy(locked = false, message = result.message)
                 observeLedger(result.session.userId)
+                startCloudRefresh(result.session)
             }
             is AuthOutcome.Failed -> state.value = state.value.copy(message = result.message)
             else -> Unit
@@ -282,6 +285,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         val session = sessions.currentSession() ?: return
         state.value = state.value.copy(locked = false, message = "已通过生物识别解锁")
         observeLedger(session.userId)
+        startCloudRefresh(session)
     }
 
     fun setPin(pin: String) {
@@ -378,13 +382,13 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         if (state.value.isAiAnalyzing) return
         val currentLedger = state.value.ledger
         viewModelScope.launch {
-            state.value = state.value.copy(isAiAnalyzing = true, aiSuggestion = null, message = null)
-            runCatching { ledger.analyzeAiEntry(trimmed, currentLedger) }
-                .onSuccess { suggestion ->
-                    state.value = if (suggestion == null) {
+            state.value = state.value.copy(isAiAnalyzing = true, aiSuggestions = emptyList(), message = null)
+            runCatching { ledger.analyzeAiEntries(trimmed, currentLedger) }
+                .onSuccess { suggestions ->
+                    state.value = if (suggestions.isEmpty()) {
                         state.value.copy(isAiAnalyzing = false, message = "没有识别到金额，请试试“6月27日，瑞幸咖啡15元，微信支付”")
                     } else {
-                        state.value.copy(isAiAnalyzing = false, aiSuggestion = suggestion)
+                        state.value.copy(isAiAnalyzing = false, aiSuggestions = suggestions)
                     }
                 }
                 .onFailure { error ->
@@ -396,56 +400,57 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun saveAiSuggestion(suggestion: AiLedgerAnalysis) {
+    fun saveAiSuggestions(suggestions: List<AiLedgerAnalysis>) {
         val session = state.value.session
         if (session == null) {
             state.value = state.value.copy(message = "请先登录或进入本地模式")
             return
         }
-        if (suggestion.amountMinor <= 0) {
+        if (suggestions.isEmpty() || suggestions.any { it.amountMinor <= 0 }) {
             state.value = state.value.copy(message = "智能识别到的金额无效，请重新识别")
             return
         }
         val liveLedger = state.value.ledger
-        val categoryId = suggestion.categoryId
-            ?.takeIf { id -> liveLedger.categories.any { it.id == id && it.kind == suggestion.type } }
-            ?: LocalAiLedgerParser.resolveCategory(
-                type = suggestion.type,
-                categoryName = suggestion.categoryLabel,
-                parentName = null,
-                categories = liveLedger.categories,
-                sourceText = suggestion.sourceText
-            )?.id
-        if (categoryId == null) {
-            state.value = state.value.copy(message = "当前账本还没有可用分类，请稍后重试")
-            return
+        val prepared = suggestions.mapNotNull { suggestion ->
+            val categoryId = suggestion.categoryId
+                ?.takeIf { id -> liveLedger.categories.any { it.id == id && it.kind == suggestion.type } }
+                ?: LocalAiLedgerParser.resolveCategory(
+                    type = suggestion.type,
+                    categoryName = suggestion.categoryLabel,
+                    parentName = null,
+                    categories = liveLedger.categories,
+                    sourceText = suggestion.sourceText
+                )?.id
+            val accountId = suggestion.accountId
+                ?.takeIf { id -> liveLedger.accounts.any { it.id == id } }
+                ?: state.value.defaultAccountId?.takeIf { id -> liveLedger.accounts.any { it.id == id } }
+                ?: liveLedger.accounts.firstOrNull { it.name == "现金" }?.id
+                ?: liveLedger.accounts.firstOrNull()?.id
+            if (categoryId == null || accountId == null) null else Triple(suggestion, categoryId, accountId)
         }
-        val accountId = suggestion.accountId
-            ?.takeIf { id -> liveLedger.accounts.any { it.id == id } }
-            ?: state.value.defaultAccountId?.takeIf { id -> liveLedger.accounts.any { it.id == id } }
-            ?: liveLedger.accounts.firstOrNull { it.name == "现金" }?.id
-            ?: liveLedger.accounts.firstOrNull()?.id
-        if (accountId == null) {
-            state.value = state.value.copy(message = "请先添加账户")
+        if (prepared.size != suggestions.size) {
+            state.value = state.value.copy(message = "请检查每一笔的分类和账户后再确认")
             return
         }
         viewModelScope.launch {
             state.value = state.value.copy(isBusy = true, message = null)
             runCatching {
                 ledger.ensureUserWorkspace(session.userId, session.displayName, session.phone, session.email)
-                ledger.addTransaction(
-                    userId = session.userId,
-                    type = suggestion.type,
-                    amountMinor = suggestion.amountMinor,
-                    categoryId = categoryId,
-                    accountId = accountId,
-                    toAccountId = null,
-                    note = suggestion.note,
-                    occurredAt = suggestion.occurredAt
-                )
+                prepared.forEach { (suggestion, categoryId, accountId) ->
+                    ledger.addTransaction(
+                        userId = session.userId,
+                        type = suggestion.type,
+                        amountMinor = suggestion.amountMinor,
+                        categoryId = categoryId,
+                        accountId = accountId,
+                        toAccountId = null,
+                        note = suggestion.note,
+                        occurredAt = suggestion.occurredAt
+                    )
+                }
             }.onSuccess {
                 app.enqueueImmediateSync()
-                state.value = state.value.copy(isBusy = false, aiSuggestion = null, message = "智能记账已保存")
+                state.value = state.value.copy(isBusy = false, aiSuggestions = emptyList(), message = "智能记账已保存 ${prepared.size} 笔")
             }.onFailure { error ->
                 state.value = state.value.copy(
                     isBusy = false,
@@ -456,7 +461,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun clearAiSuggestion() {
-        state.value = state.value.copy(aiSuggestion = null)
+        state.value = state.value.copy(aiSuggestions = emptyList())
     }
 
     fun previewExternalBill(uri: Uri, provider: String) {
@@ -827,6 +832,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     fun signOut() {
         auth.signOut()
         ledgerJob?.cancel()
+        cloudRefreshJob?.cancel()
         lastAvatarKey = null
         state.value = UiState(
             secureScreen = sessions.isSecureScreenEnabled(),
@@ -843,6 +849,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             runCatching { ledger.deleteCloudAccount() }
                 .onSuccess {
                     ledgerJob?.cancel()
+                    cloudRefreshJob?.cancel()
                     state.value = UiState(
                         message = "账号和云端数据已注销",
                         secureScreen = sessions.isSecureScreenEnabled(),
@@ -890,6 +897,22 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         )
         tabHistory.clear()
         observeLedger(session.userId)
+        startCloudRefresh(session)
+    }
+
+    private fun startCloudRefresh(session: UserSession?) {
+        cloudRefreshJob?.cancel()
+        if (session?.accessToken.isNullOrBlank()) return
+        cloudRefreshJob = viewModelScope.launch {
+            delay(8_000)
+            while (true) {
+                if (!state.value.isBusy && !state.value.locked) {
+                    runCatching { ledger.syncNow() }
+                        .onSuccess { label -> state.value = state.value.copy(syncLabel = label) }
+                }
+                delay(30_000)
+            }
+        }
     }
 
     private fun observeLedger(userId: String) {

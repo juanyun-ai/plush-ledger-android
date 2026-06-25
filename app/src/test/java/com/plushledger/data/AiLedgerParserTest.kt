@@ -78,6 +78,19 @@ class AiLedgerParserTest {
         assertEquals(120_000L, rental.amountMinor)
     }
 
+    @Test
+    fun splitsOneSentenceIntoMultipleLedgerEntries() {
+        val entries = LocalAiLedgerParser.parseAll("昨天瑞幸咖啡15元微信支付，今天地铁4元现金", categories, emptyList())
+
+        assertEquals(2, entries.size)
+        assertEquals("奶茶咖啡", entries[0].categoryLabel)
+        assertEquals(1_500L, entries[0].amountMinor)
+        assertEquals(LocalDate.now().minusDays(1), entries[0].localDate())
+        assertEquals("公交地铁", entries[1].categoryLabel)
+        assertEquals(400L, entries[1].amountMinor)
+        assertEquals(LocalDate.now(), entries[1].localDate())
+    }
+
     private fun AiLedgerAnalysis.localDate(): LocalDate =
         Instant.ofEpochMilli(occurredAt).atZone(ZoneId.systemDefault()).toLocalDate()
 

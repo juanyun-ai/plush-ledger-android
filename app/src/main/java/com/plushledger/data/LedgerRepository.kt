@@ -610,38 +610,45 @@ class LedgerRepository(
             .ifEmpty { builtInMessages() }
     }
 
-    suspend fun analyzeAiEntry(text: String, ledgerState: LedgerState): AiLedgerAnalysis? {
-        val local = LocalAiLedgerParser.parse(text, ledgerState.categories, ledgerState.accounts) ?: return null
+    suspend fun analyzeAiEntries(text: String, ledgerState: LedgerState): List<AiLedgerAnalysis> {
+        val local = LocalAiLedgerParser.parseAll(text, ledgerState.categories, ledgerState.accounts)
+        if (local.isEmpty()) return emptyList()
         val session = sessionStore.currentSession()
         val token = session?.accessToken ?: return local
         val remote = runCatching {
             supabaseClient.parseAiLedger(token, text, ledgerState.categories, ledgerState.accounts)
         }.getOrNull() ?: return local
-        if (remote.amountMinor <= 0) return local
-        val type = remote.type.takeIf { it == "income" || it == "expense" } ?: local.type
-        val category = LocalAiLedgerParser.resolveCategory(
-            type = type,
-            categoryName = remote.categoryName,
-            parentName = remote.parentCategoryName,
-            categories = ledgerState.categories,
-            sourceText = text
-        )
-        val account = LocalAiLedgerParser.resolveAccount(remote.accountName, ledgerState.accounts, text)
-        return AiLedgerAnalysis(
-            sourceText = text.trim().take(160),
-            type = type,
-            amountMinor = remote.amountMinor,
-            categoryId = category?.id,
-            categoryLabel = category?.name ?: "无法归类",
-            accountId = account?.id,
-            accountLabel = account?.name ?: "默认账户",
-            note = remote.note ?: text.trim().take(80),
-            // Dates are deterministic locally. Model timestamps are not allowed to
-            // replace explicit or relative dates with hallucinated years/months.
-            occurredAt = local.occurredAt,
-            cloudAssisted = true
-        )
+        if (remote.entries.isEmpty()) return local
+        return remote.entries.mapIndexedNotNull { index, entry ->
+            val seed = local.getOrNull(index) ?: local.lastOrNull() ?: return@mapIndexedNotNull null
+            val type = entry.type.takeIf { it == "income" || it == "expense" } ?: seed.type
+            val category = LocalAiLedgerParser.resolveCategory(
+                type = type,
+                categoryName = entry.categoryName,
+                parentName = entry.parentCategoryName,
+                categories = ledgerState.categories,
+                sourceText = seed.sourceText
+            )
+            val account = LocalAiLedgerParser.resolveAccount(entry.accountName, ledgerState.accounts, seed.sourceText)
+            AiLedgerAnalysis(
+                sourceText = seed.sourceText,
+                type = type,
+                amountMinor = entry.amountMinor,
+                categoryId = category?.id,
+                categoryLabel = category?.name ?: "无法归类",
+                accountId = account?.id,
+                accountLabel = account?.name ?: "默认账户",
+                note = entry.note ?: seed.note,
+                // The local parser owns dates so a model never changes an explicit
+                // "6月7日" into a hallucinated year or month.
+                occurredAt = seed.occurredAt,
+                cloudAssisted = true
+            )
+        }.ifEmpty { local }
     }
+
+    suspend fun analyzeAiEntry(text: String, ledgerState: LedgerState): AiLedgerAnalysis? =
+        analyzeAiEntries(text, ledgerState).firstOrNull()
 
     suspend fun submitFeedback(content: String) {
         val session = sessionStore.currentSession() ?: error("请先登录云端账号")
@@ -894,14 +901,23 @@ class LedgerRepository(
             .apply()
     }
 
-    private fun builtInMessages() = listOf(
-        OfficialMessage(
-            id = "welcome",
-            title = "欢迎使用绒绒记账",
-            body = "邮箱账号会同步到云端；本地模式只保存在当前设备。请定期确认同步状态。",
-            createdAt = now()
+    private fun builtInMessages(): List<OfficialMessage> {
+        val createdAt = now()
+        return listOf(
+            OfficialMessage(
+                id = "release_1_0_2_builtin",
+                title = "绒绒记账 v1.0.2 更新",
+                body = "1. AI 记账支持一句话识别多笔账，并可暂存输入草稿。\n2. 生活日历增加节日农历、选中日期、全年重要日子和备注展开。\n3. 用户生日支持阳历/农历互换，日记支持状态、编辑和真实分享二维码。\n4. 云账号前台自动轻量同步，减少多设备等待。",
+                createdAt = createdAt
+            ),
+            OfficialMessage(
+                id = "welcome",
+                title = "欢迎使用绒绒记账",
+                body = "邮箱账号会同步到云端；本地模式只保存在当前设备。请定期确认同步状态。",
+                createdAt = createdAt - 1
+            )
         )
-    )
+    }
 }
 
 data class LedgerState(

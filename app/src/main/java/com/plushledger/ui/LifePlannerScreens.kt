@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.plushledger.data.Money
@@ -104,7 +105,7 @@ fun LifePlannerPreview(userId: String, profile: ProfileEntity?, onOpenCalendar: 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.WorkspacePremium, null, tint = palette.coral)
                         Spacer(Modifier.width(8.dp))
-                        Text("小倒计时", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                        Text("纪念日", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp)
                     }
                     Spacer(Modifier.height(8.dp))
                     if (upcoming.isEmpty()) Text("添加生日、旅行或见面日", color = palette.muted, fontSize = 11.sp)
@@ -135,6 +136,8 @@ fun LifeCalendarScreen(userId: String, profile: ProfileEntity?, onBack: () -> Un
     val store = remember(userId) { LifePlannerStore(context.applicationContext, userId) }
     var events by remember(userId) { mutableStateOf(store.events()) }
     var month by rememberSaveable { mutableStateOf(YearMonth.now()) }
+    var selectedDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    var expandedEventIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var editing by remember { mutableStateOf<LifeEvent?>(null) }
     var adding by rememberSaveable { mutableStateOf(false) }
     val settings = remember(userId) { store.birthdaySettings() }
@@ -142,16 +145,39 @@ fun LifeCalendarScreen(userId: String, profile: ProfileEntity?, onBack: () -> Un
     BackHandler(onBack = onBack)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 18.dp, top = 16.dp, end = 18.dp, bottom = 112.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { PlannerHeader("生活日历", "每一个重要的日子，都值得被温柔记录", onBack) }
-        item { PlannerCalendarCard(month, allEvents, onPrevious = { month = month.minusMonths(1) }, onNext = { month = month.plusMonths(1) }) }
+        item {
+            PlannerCalendarCard(
+                month = month,
+                events = allEvents,
+                selectedDate = selectedDate,
+                onDate = { selectedDate = it },
+                onMonthPick = {
+                    month = it
+                    selectedDate = it.atDay(selectedDate.dayOfMonth.coerceAtMost(it.lengthOfMonth()))
+                },
+                onPrevious = { month = month.minusMonths(1) },
+                onNext = { month = month.plusMonths(1) }
+            )
+        }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("重要日子", color = LocalPlushPalette.current.ink, fontSize = 21.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                Text("${month.year} 年重要日子", color = LocalPlushPalette.current.ink, fontSize = 21.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
                 TextButton(onClick = { adding = true }) { Text("添加日子", color = LocalPlushPalette.current.rose, fontWeight = FontWeight.Bold) }
             }
         }
-        val shown = allEvents.filter { YearMonth.from(it.localDate()) == month }.sortedBy { it.localDate() }
-        if (shown.isEmpty()) item { PlannerEmpty("${month.format(DateTimeFormatter.ofPattern("M月", Locale.CHINA))}还没有安排，加一个想记住的日子吧。") }
-        items(shown, key = { it.id }) { event -> PlannerEventCard(event, onClick = { if (!event.id.startsWith("birthday_")) editing = event }) }
+        val shown = allEvents.filter { it.localDate().year == month.year }.sortedBy { it.localDate() }
+        if (shown.isEmpty()) item { PlannerEmpty("${month.year} 年还没有安排，加一个想记住的日子吧。") }
+        items(shown, key = { it.id }) { event ->
+            val expanded = event.id in expandedEventIds
+            PlannerEventCard(
+                event = event,
+                expanded = expanded,
+                onToggleNote = {
+                    expandedEventIds = if (expanded) expandedEventIds - event.id else expandedEventIds + event.id
+                },
+                onClick = { if (!event.id.startsWith("birthday_")) editing = event }
+            )
+        }
     }
     if (adding || editing != null) LifeEventDialog(
         initial = editing,
@@ -199,17 +225,52 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
     }
 }
 
-@Composable private fun PlannerCalendarCard(month: YearMonth, events: List<LifeEvent>, onPrevious: () -> Unit, onNext: () -> Unit) {
+@Composable private fun PlannerCalendarCard(
+    month: YearMonth,
+    events: List<LifeEvent>,
+    selectedDate: LocalDate,
+    onDate: (LocalDate) -> Unit,
+    onMonthPick: (YearMonth) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
     val palette = LocalPlushPalette.current
+    val context = LocalContext.current
     Surface(shape = RoundedCornerShape(28.dp), color = Color(0xFFFFFCF7), border = BorderStroke(1.dp, palette.border), shadowElevation = 6.dp) {
         Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onPrevious) { Icon(Icons.Default.ChevronLeft, "上个月", tint = palette.ink) }; Text(month.format(DateTimeFormatter.ofPattern("yyyy年M月", Locale.CHINA)), modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 21.sp); IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, "下个月", tint = palette.ink) } }
-            PlannerCalendarGrid(month, events)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPrevious) { Icon(Icons.Default.ChevronLeft, "上个月", tint = palette.ink) }
+                Surface(
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).clickable {
+                        DatePickerDialog(
+                            context,
+                            { _, year, pickedMonth, _ -> onMonthPick(YearMonth.of(year, pickedMonth + 1)) },
+                            month.year,
+                            month.monthValue - 1,
+                            1
+                        ).show()
+                    },
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xFFFFF6EA),
+                    border = BorderStroke(1.dp, palette.border)
+                ) {
+                    Text(
+                        month.format(DateTimeFormatter.ofPattern("yyyy年M月", Locale.CHINA)),
+                        modifier = Modifier.padding(vertical = 9.dp),
+                        color = palette.ink,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 21.sp
+                    )
+                }
+                IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, "下个月", tint = palette.ink) }
+            }
+            PlannerCalendarGrid(month, events, selectedDate, onDate)
         }
     }
 }
 
-@Composable private fun PlannerCalendarGrid(month: YearMonth, events: List<LifeEvent>) {
+@Composable private fun PlannerCalendarGrid(month: YearMonth, events: List<LifeEvent>, selectedDate: LocalDate, onDate: (LocalDate) -> Unit) {
     val palette = LocalPlushPalette.current
     val eventDates = events.groupBy { it.localDate() }
     Row(Modifier.fillMaxWidth()) { listOf("日", "一", "二", "三", "四", "五", "六").forEach { Text(it, modifier = Modifier.weight(1f), color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
@@ -221,10 +282,16 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
                 Box(Modifier.weight(1f).height(45.dp), contentAlignment = Alignment.Center) {
                     date?.let {
                         val marked = eventDates[it].orEmpty().isNotEmpty()
-                        Surface(shape = CircleShape, color = if (it == LocalDate.now()) palette.rose.copy(alpha = 0.18f) else Color.Transparent) {
+                        val selected = it == selectedDate
+                        Surface(
+                            modifier = Modifier.clip(CircleShape).clickable { onDate(it) },
+                            shape = CircleShape,
+                            color = if (it == LocalDate.now()) palette.rose.copy(alpha = 0.18f) else Color.Transparent,
+                            border = if (selected) BorderStroke(1.dp, Color(0xFF8EC5FF)) else null
+                        ) {
                             Column(Modifier.padding(horizontal = 5.dp, vertical = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(it.dayOfMonth.toString(), color = palette.ink, fontWeight = if (marked) FontWeight.Black else FontWeight.Medium, fontSize = 14.sp)
-                                Text(it.lunarLabel(), color = palette.muted, fontSize = 7.sp, maxLines = 1)
+                                Text(it.calendarLabel(), color = palette.muted, fontSize = 7.sp, maxLines = 1)
                                 if (marked) Box(Modifier.size(5.dp).clip(CircleShape).background(eventDates[it]?.firstOrNull()?.plannerColor() ?: palette.rose))
                             }
                         }
@@ -245,7 +312,7 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
 
 @Composable private fun CountdownLine(event: LifeEvent) { val palette = LocalPlushPalette.current; val days = ChronoUnit.DAYS.between(LocalDate.now(), event.localDate()).coerceAtLeast(0); Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) { Icon(event.plannerIcon(), null, tint = event.plannerColor(), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(event.title, modifier = Modifier.weight(1f), color = palette.ink, fontSize = 11.sp, maxLines = 1); Text("${days}天", color = event.plannerColor(), fontWeight = FontWeight.Black, fontSize = 18.sp) } }
 
-@Composable private fun PlannerEventCard(event: LifeEvent, onClick: () -> Unit) { val palette = LocalPlushPalette.current; Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), color = palette.surface, border = BorderStroke(1.dp, palette.border), shadowElevation = 3.dp) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = RoundedCornerShape(15.dp), color = event.plannerColor().copy(alpha = 0.14f)) { Icon(event.plannerIcon(), null, tint = event.plannerColor(), modifier = Modifier.padding(11.dp).size(28.dp)) }; Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(event.title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 17.sp); Text(event.localDate().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) + "  ·  " + event.lunarHint(), color = palette.muted, fontSize = 12.sp) }; Text("${ChronoUnit.DAYS.between(LocalDate.now(), event.localDate()).coerceAtLeast(0)}天", color = event.plannerColor(), fontWeight = FontWeight.Black, fontSize = 18.sp) } } }
+@Composable private fun PlannerEventCard(event: LifeEvent, expanded: Boolean, onToggleNote: () -> Unit, onClick: () -> Unit) { val palette = LocalPlushPalette.current; Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), color = palette.surface, border = BorderStroke(1.dp, palette.border), shadowElevation = 3.dp) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = RoundedCornerShape(15.dp), color = event.plannerColor().copy(alpha = 0.14f)) { Icon(event.plannerIcon(), null, tint = event.plannerColor(), modifier = Modifier.padding(11.dp).size(28.dp)) }; Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(event.title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 17.sp); Text(event.localDate().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) + "  ·  " + event.lunarHint(), color = palette.muted, fontSize = 12.sp); if (event.note.isNotBlank()) Text(event.note, modifier = Modifier.clickable(onClick = onToggleNote), color = palette.ink, fontSize = 12.sp, maxLines = if (expanded) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis) }; Text("${ChronoUnit.DAYS.between(LocalDate.now(), event.localDate()).coerceAtLeast(0)}天", color = event.plannerColor(), fontWeight = FontWeight.Black, fontSize = 18.sp) } } }
 
 @Composable private fun WishCard(wish: WishPlan, onClick: () -> Unit) { val palette = LocalPlushPalette.current; val progress = if (wish.targetMinor == 0L) 0f else (wish.savedMinor.toFloat() / wish.targetMinor).coerceIn(0f, 1f); Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(22.dp), color = palette.surface, border = BorderStroke(1.dp, palette.border), shadowElevation = 4.dp) { Column(Modifier.padding(15.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Surface(shape = RoundedCornerShape(14.dp), color = palette.moss.copy(alpha = 0.14f)) { Icon(Icons.Default.Savings, null, tint = palette.moss, modifier = Modifier.padding(11.dp).size(28.dp)) }; Spacer(Modifier.width(11.dp)); Column(Modifier.weight(1f)) { Text(wish.title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 17.sp); Text(wish.note.ifBlank { "给生活留一个期待" }, color = palette.muted, fontSize = 12.sp, maxLines = 1) }; Icon(Icons.Default.ChevronRight, null, tint = palette.muted) }; Spacer(Modifier.height(12.dp)); androidx.compose.material3.LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp)), color = palette.moss, trackColor = palette.moss.copy(alpha = 0.13f)); Spacer(Modifier.height(7.dp)); Text("已存 ${Money.formatCny(wish.savedMinor)}  /  预算 ${Money.formatCny(wish.targetMinor)}", color = palette.moss, fontWeight = FontWeight.Bold, fontSize = 12.sp) } } }
 
@@ -260,4 +327,4 @@ private fun List<LifeEvent>.withBirthday(profile: ProfileEntity?, enabled: Boole
 private fun List<LifeEvent>.upcoming(): List<LifeEvent> = filter { !it.localDate().isBefore(LocalDate.now()) }.sortedBy { it.localDate() }
 private fun LifeEvent.plannerColor(): Color = when (type) { "birthday" -> Color(0xFFFF718F); "gift" -> Color(0xFFFFA126); "travel" -> Color(0xFF69C79A); "meet" -> Color(0xFF83B7F1); else -> Color(0xFFA58AE8) }
 private fun LifeEvent.plannerIcon() = when (type) { "birthday" -> Icons.Default.Celebration; "gift" -> Icons.Default.Redeem; "travel" -> Icons.Default.Flight; "meet" -> Icons.Default.Favorite; else -> Icons.Default.CalendarMonth }
-private fun LifeEvent.lunarHint(): String = localDate().lunarLabel()
+private fun LifeEvent.lunarHint(): String = localDate().calendarLabel()

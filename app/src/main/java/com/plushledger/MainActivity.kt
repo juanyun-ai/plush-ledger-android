@@ -1109,10 +1109,10 @@ private fun LedgerShell(
                     viewModel::deleteTransaction,
                     onRecord = { viewModel.selectTab(AppTab.RECORD) },
                     onBills = { viewModel.selectTab(AppTab.BILLS) },
-                    aiSuggestion = state.aiSuggestion,
+                    aiSuggestions = state.aiSuggestions,
                     isAiAnalyzing = state.isAiAnalyzing,
                     onAnalyzeAi = viewModel::analyzeAiEntry,
-                    onSaveAi = viewModel::saveAiSuggestion,
+                    onSaveAi = viewModel::saveAiSuggestions,
                     onDismissAi = viewModel::clearAiSuggestion
                 )
                 AppTab.BILLS -> BillsScreen(

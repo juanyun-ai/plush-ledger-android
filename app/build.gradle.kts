@@ -31,10 +31,8 @@ android {
         applicationId = "online.xiaoxing.rongrongledger"
         minSdk = 26
         targetSdk = 36
-        // Keep the public 1.0.1 label for this same-version repair while allowing
-        // devices that installed the earlier 1.0.1 build to receive it as an update.
-        versionCode = 102
-        versionName = "1.0.1"
+        versionCode = 103
+        versionName = "1.0.2"
 
         val supabaseUrl = providers.gradleProperty("SUPABASE_URL").orNull ?: ""
         val supabaseAnonKey = providers.gradleProperty("SUPABASE_ANON_KEY").orNull ?: ""

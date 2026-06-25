@@ -8,7 +8,8 @@ import org.json.JSONObject
 data class DiaryEntry(
     val date: String,
     val text: String,
-    val mood: String
+    val mood: String,
+    val status: String = ""
 )
 
 class DiaryStore(context: Context, private val userId: String) {
@@ -21,9 +22,11 @@ class DiaryStore(context: Context, private val userId: String) {
 
     fun load(): List<DiaryEntry> = decode(current.getString("entries", "[]"))
 
-    fun saveToday(text: String, mood: String): List<DiaryEntry> {
-        val today = LocalDate.now().toString()
-        val updated = (listOf(DiaryEntry(today, text.trim(), mood)) + load().filterNot { it.date == today })
+    fun saveToday(text: String, mood: String, status: String = ""): List<DiaryEntry> =
+        saveEntry(LocalDate.now().toString(), text, mood, status)
+
+    fun saveEntry(date: String, text: String, mood: String, status: String = ""): List<DiaryEntry> {
+        val updated = (listOf(DiaryEntry(date, text.trim(), mood, status.trim())) + load().filterNot { it.date == date })
             .take(180)
         save(updated)
         return updated
@@ -32,7 +35,13 @@ class DiaryStore(context: Context, private val userId: String) {
     private fun save(entries: List<DiaryEntry>) {
         val payload = JSONArray().apply {
             entries.forEach { entry ->
-                put(JSONObject().put("date", entry.date).put("text", entry.text).put("mood", entry.mood))
+                put(
+                    JSONObject()
+                        .put("date", entry.date)
+                        .put("text", entry.text)
+                        .put("mood", entry.mood)
+                        .put("status", entry.status)
+                )
             }
         }
         current.edit().putString("entries", payload.toString()).apply()
@@ -52,7 +61,8 @@ class DiaryStore(context: Context, private val userId: String) {
                 val entry = DiaryEntry(
                     date = item.optString("date"),
                     text = item.optString("text").trim(),
-                    mood = item.optString("mood", "开心")
+                    mood = item.optString("mood", "开心"),
+                    status = item.optString("status")
                 )
                 if (entry.date.isNotBlank() && entry.text.isNotBlank()) add(entry)
             }

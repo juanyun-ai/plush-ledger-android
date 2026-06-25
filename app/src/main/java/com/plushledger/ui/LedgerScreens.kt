@@ -35,10 +35,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
@@ -137,18 +139,20 @@ fun HomeScreen(
     onDelete: (String) -> Unit,
     onRecord: () -> Unit,
     onBills: () -> Unit,
-    aiSuggestion: AiLedgerAnalysis?,
+    aiSuggestions: List<AiLedgerAnalysis>,
     isAiAnalyzing: Boolean,
     onAnalyzeAi: (String) -> Unit,
-    onSaveAi: (AiLedgerAnalysis) -> Unit,
+    onSaveAi: (List<AiLedgerAnalysis>) -> Unit,
     onDismissAi: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
+    val context = LocalContext.current
+    val plannerUserId = ledger.profile?.id ?: "local"
     var showCalendar by rememberSaveable { mutableStateOf(false) }
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
-    var aiText by rememberSaveable { mutableStateOf("") }
+    val aiDraftStore = remember(plannerUserId) { AiDraftStore(context.applicationContext, plannerUserId) }
+    var aiText by rememberSaveable(plannerUserId) { mutableStateOf("") }
     var plannerPage by rememberSaveable { mutableStateOf<String?>(null) }
-    val plannerUserId = ledger.profile?.id ?: "local"
     when (plannerPage) {
         "calendar" -> {
             LifeCalendarScreen(plannerUserId, ledger.profile, onBack = { plannerPage = null })
@@ -159,10 +163,9 @@ fun HomeScreen(
             return
         }
     }
-    LaunchedEffect(aiSuggestion) {
-        if (aiSuggestion != null) {
+    LaunchedEffect(aiSuggestions) {
+        if (aiSuggestions.isNotEmpty()) {
             showAiDialog = false
-            aiText = ""
         }
     }
     val month = YearMonth.from(selectedDate)
@@ -270,7 +273,7 @@ fun HomeScreen(
                     Modifier.weight(1f),
                     color = palette.moss,
                     onClick = {
-                        aiText = ""
+                        aiText = aiDraftStore.load()
                         onDismissAi()
                         showAiDialog = true
                     }
@@ -311,21 +314,25 @@ fun HomeScreen(
             onTextChange = { aiText = it.take(160) },
             onDismiss = {
                 if (!isAiAnalyzing) {
-                    aiText = ""
                     showAiDialog = false
                 }
             },
-            onAnalyze = { onAnalyzeAi(aiText) }
+            onAnalyze = { onAnalyzeAi(aiText) },
+            onSaveDraft = { aiDraftStore.save(aiText) }
         )
     }
 
-    aiSuggestion?.let { suggestion ->
-        AiConfirmationDialog(
-            suggestion = suggestion,
+    if (aiSuggestions.isNotEmpty()) {
+        AiBatchConfirmationDialog(
+            suggestions = aiSuggestions,
             categories = ledger.categories,
             accounts = ledger.accounts,
             onDismiss = onDismissAi,
-            onConfirm = onSaveAi
+            onConfirm = { confirmed ->
+                aiDraftStore.clear()
+                aiText = ""
+                onSaveAi(confirmed)
+            }
         )
     }
 }
@@ -336,7 +343,8 @@ private fun AiEntryDialog(
     analyzing: Boolean,
     onTextChange: (String) -> Unit,
     onDismiss: () -> Unit,
-    onAnalyze: () -> Unit
+    onAnalyze: () -> Unit,
+    onSaveDraft: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -390,6 +398,9 @@ private fun AiEntryDialog(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     MascotArt(58.dp)
                     Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onSaveDraft, enabled = text.isNotBlank() && !analyzing) {
+                        Text("暂存", color = palette.muted, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
                     TextButton(onClick = onDismiss, enabled = !analyzing) {
                         Text("取消", color = palette.pink, fontWeight = FontWeight.Black, fontSize = 15.sp)
                     }
@@ -561,6 +572,140 @@ private fun AiConfirmationDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AiBatchConfirmationDialog(
+    suggestions: List<AiLedgerAnalysis>,
+    categories: List<CategoryEntity>,
+    accounts: List<AccountEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<AiLedgerAnalysis>) -> Unit
+) {
+    if (suggestions.size == 1) {
+        AiConfirmationDialog(
+            suggestion = suggestions.first(),
+            categories = categories,
+            accounts = accounts,
+            onDismiss = onDismiss,
+            onConfirm = { onConfirm(listOf(it)) }
+        )
+        return
+    }
+    val palette = LocalPlushPalette.current
+    val formatter = remember { DateTimeFormatter.ofPattern("M月d日 HH:mm", Locale.CHINA) }
+    var drafts by remember(suggestions) { mutableStateOf(suggestions) }
+    var editingIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.9f),
+            shape = RoundedCornerShape(30.dp),
+            color = palette.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD58A)),
+            shadowElevation = 20.dp
+        ) {
+            Column(Modifier.padding(horizontal = 22.dp, vertical = 18.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(Modifier.weight(1f)) {
+                        Text("确认 ${drafts.size} 笔账", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 25.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text("点击任意一条，可以修改金额、日期、分类和账户。", color = palette.muted, fontSize = 12.sp)
+                    }
+                    MascotArt(62.dp)
+                }
+                Spacer(Modifier.height(12.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    drafts.forEachIndexed { index, suggestion ->
+                        val date = Instant.ofEpochMilli(suggestion.occurredAt)
+                            .atZone(ZoneId.systemDefault())
+                            .format(formatter)
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable { editingIndex = index },
+                            shape = RoundedCornerShape(18.dp),
+                            color = if (suggestion.type == "income") palette.moss.copy(alpha = 0.11f) else Color(0xFFFFF7EC),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
+                        ) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(shape = CircleShape, color = if (suggestion.type == "income") palette.moss else palette.rose) {
+                                    Text(
+                                        "${index + 1}",
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "${if (suggestion.type == "income") "+" else "-"}${Money.formatCny(suggestion.amountMinor)}  ·  ${suggestion.categoryLabel}",
+                                        color = palette.ink,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 15.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        "$date  ·  ${suggestion.accountLabel}  ·  ${suggestion.note.ifBlank { suggestion.sourceText }}",
+                                        color = palette.muted,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = "编辑", tint = palette.muted, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = palette.muted, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("未确认前不会写入账本。确认后会一次保存 ${drafts.size} 笔。", color = palette.muted, fontSize = 10.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onDismiss) {
+                        Text("取消", color = palette.pink, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Surface(
+                        modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable { onConfirm(drafts) },
+                        shape = RoundedCornerShape(24.dp),
+                        color = palette.moss,
+                        shadowElevation = 7.dp
+                    ) {
+                        Text(
+                            "确认全部",
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+    editingIndex?.let { index ->
+        AiConfirmationDialog(
+            suggestion = drafts[index],
+            categories = categories,
+            accounts = accounts,
+            onDismiss = { editingIndex = null },
+            onConfirm = { edited ->
+                drafts = drafts.toMutableList().also { it[index] = edited }
+                editingIndex = null
+            }
+        )
     }
 }
 

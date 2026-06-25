@@ -44,7 +44,7 @@ Deno.serve(async (request: Request) => {
           role: "system",
           content: [
             "你是记账解析器。只输出一个 JSON 对象，不要 Markdown。",
-            "字段固定为 type, amount_minor, category_name, category_parent, account_name, note, occurred_at。",
+            "顶层字段固定为 entries，entries 是 1-8 个账目的数组。数组每项字段固定为 type, amount_minor, category_name, category_parent, account_name, note, occurred_at。",
             "type 只能是 expense 或 income；amount_minor 必须是人民币分的正整数。",
             "category_name 与 category_parent 必须从用户提供的分类中选择；account_name 必须从用户账户中选择。",
             "用户明确点名分类、父分类或账户时必须优先采用，不得用模型猜测覆盖用户指令。",
@@ -54,6 +54,7 @@ Deno.serve(async (request: Request) => {
             "房屋转租、收租、租金收入优先归入现有的房屋收入分类，不得归入兼职。",
             "occurred_at 必须是所识别日期时间的毫秒时间戳；只有文字完全没有日期线索时才返回 null。",
             "无法判断时选择最贴近的现有分类，不要创造分类。note 只保留商户、用途或物品等简短事实，不重复日期、金额和账户。",
+            "一段话里存在两笔或更多金额且分别表达不同收支时，必须拆为多条 entries，保持原文本中的先后顺序；不要合并金额。",
           ].join("\n"),
         },
         {
@@ -76,24 +77,13 @@ Deno.serve(async (request: Request) => {
   const parsed = parseModelJson(content);
   if (!parsed) return json({ error: "AI 返回格式异常" }, 502);
 
-  const type = parsed.type === "income" ? "income" : "expense";
-  const amountMinor = toPositiveInt(parsed.amount_minor);
-  if (!amountMinor) return json({ error: "未能识别有效金额" }, 422);
-  const names = new Set(categories.filter((item) => item.type === type).map((item) => item.name));
-  const parentNames = new Set(categories.filter((item) => item.type === type && !item.parent).map((item) => item.name));
-  const categoryName = names.has(stringValue(parsed.category_name, 24)) ? stringValue(parsed.category_name, 24) : null;
-  const categoryParent = parentNames.has(stringValue(parsed.category_parent, 24)) ? stringValue(parsed.category_parent, 24) : null;
-  const accountName = accounts.includes(stringValue(parsed.account_name, 24)) ? stringValue(parsed.account_name, 24) : null;
-
-  return json({
-    type,
-    amount_minor: amountMinor,
-    category_name: categoryName,
-    category_parent: categoryParent,
-    account_name: accountName,
-    note: stringValue(parsed.note, 80) || text,
-    occurred_at: toTimestamp(parsed.occurred_at),
-  });
+  const candidateEntries = Array.isArray(parsed.entries) ? parsed.entries : [parsed];
+  const entries = candidateEntries
+    .slice(0, 8)
+    .map((candidate) => normalizeEntry(candidate, categories, accounts, text))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  if (!entries.length) return json({ error: "未能识别有效金额" }, 422);
+  return json({ entries });
 });
 
 function json(payload: Record<string, unknown>, status = 200): Response {
@@ -147,6 +137,32 @@ function parseModelJson(value: unknown): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function normalizeEntry(
+  value: unknown,
+  categories: Array<{ name: string; type: string; parent: string | null }>,
+  accounts: string[],
+  fallbackText: string,
+): Record<string, unknown> | null {
+  const parsed = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const type = parsed.type === "income" ? "income" : "expense";
+  const amountMinor = toPositiveInt(parsed.amount_minor);
+  if (!amountMinor) return null;
+  const names = new Set(categories.filter((item) => item.type === type).map((item) => item.name));
+  const parentNames = new Set(categories.filter((item) => item.type === type && !item.parent).map((item) => item.name));
+  const categoryName = names.has(stringValue(parsed.category_name, 24)) ? stringValue(parsed.category_name, 24) : null;
+  const categoryParent = parentNames.has(stringValue(parsed.category_parent, 24)) ? stringValue(parsed.category_parent, 24) : null;
+  const accountName = accounts.includes(stringValue(parsed.account_name, 24)) ? stringValue(parsed.account_name, 24) : null;
+  return {
+    type,
+    amount_minor: amountMinor,
+    category_name: categoryName,
+    category_parent: categoryParent,
+    account_name: accountName,
+    note: stringValue(parsed.note, 80) || fallbackText,
+    occurred_at: toTimestamp(parsed.occurred_at),
+  };
 }
 
 function toPositiveInt(value: unknown): number | null {
