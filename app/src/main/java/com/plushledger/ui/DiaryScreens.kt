@@ -775,7 +775,7 @@ private object DiaryShareCard {
         }, "分享绒绒日记"))
     }
 
-    private fun downloadUrl(): String = "https://privacy.xiaoxing.online/"
+    private fun downloadUrl(): String = "https://juanyun-ai.github.io/plush-ledger-android/"
 
     private fun drawSoftCircle(canvas: Canvas, paint: Paint, x: Float, y: Float, radius: Float, color: Int) {
         paint.color = color

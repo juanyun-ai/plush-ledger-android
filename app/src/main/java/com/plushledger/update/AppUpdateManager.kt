@@ -476,7 +476,7 @@ class AppUpdateManager(private val activity: FragmentActivity) {
         const val POLL_INTERVAL_MS = 750L
         const val INVALID_DOWNLOAD_ID = -1L
         const val RETIRED_WORK_NAME = "app-update-download"
-        const val DOWNLOAD_PAGE_URL = "https://privacy.xiaoxing.online/"
+        const val DOWNLOAD_PAGE_URL = "https://juanyun-ai.github.io/plush-ledger-android/"
         const val KEY_RETIRED_WORK_ID = "work_id"
         const val KEY_DOWNLOAD_ID = "system_download_id"
         const val KEY_PRIMARY_URL = "primary_url"
