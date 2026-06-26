@@ -290,6 +290,7 @@ private fun AvailableUpdateDialog(
                 Text("发现新版本 ${update.versionName}", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 25.sp)
                 Text(update.releaseNotes.ifBlank { "修复问题并改进使用体验。" }, color = palette.ink, fontSize = 14.sp, lineHeight = 21.sp)
                 Text("安装包约 ${update.fileSizeBytes / 1024 / 1024}MB，下载完成后由 Android 系统安装器确认更新。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                Text("若下载长时间无反应，可取消后重试，或打开下载页用浏览器下载。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
                 Text("稍后也可前往“我的 → 设置 → 检查更新”手动更新。", color = palette.moss, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 PlushButton("下载更新", Icons.Default.Refresh, Modifier.fillMaxWidth(), color = palette.rose, onClick = onDownload)
                 if (!update.isMandatory) {
@@ -438,6 +439,7 @@ private fun UpdateDownloadStatusDialog(
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFFFE4BD)))
                     Text("♥ 安装包大小 ${if (state.totalBytes > 0L) formatDownloadBytes(state.totalBytes) else "获取中"}", color = palette.muted, fontSize = 13.sp)
                     Text("★ 只有收到真实文件字节后才会显示百分比。", color = palette.muted, fontSize = 13.sp)
+                    Text("如果一直卡住，请取消后重试，或点“打开下载页”复制给浏览器下载。", color = palette.muted, fontSize = 13.sp, lineHeight = 18.sp)
                 }
                 when (state.phase) {
                     UpdateDownloadPhase.FAILED, UpdateDownloadPhase.CANCELLED -> {
@@ -449,7 +451,10 @@ private fun UpdateDownloadStatusDialog(
                         }
                         TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("关闭", color = palette.muted) }
                     }
-                    else -> TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("取消下载", color = palette.rose, fontWeight = FontWeight.Bold) }
+                    else -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(onClick = onExternalDownload, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp)) { Text("打开下载页") }
+                        TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("取消下载", color = palette.rose, fontWeight = FontWeight.Bold) }
+                    }
                 }
             }
         }
@@ -964,7 +969,7 @@ private fun SocialLoginRow(viewModel: LedgerViewModel, withDivider: Boolean = fa
             Text("微信", color = palette.ink, fontWeight = FontWeight.Bold)
         }
         OutlinedButton(onClick = { viewModel.socialLogin("QQ") }, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, palette.border)) {
-            Image(painterResource(R.drawable.logo_qq_official), contentDescription = null, modifier = Modifier.size(30.dp), contentScale = ContentScale.Fit)
+            Image(painterResource(R.drawable.logo_qq), contentDescription = null, modifier = Modifier.size(30.dp), contentScale = ContentScale.Fit)
             Spacer(Modifier.size(6.dp))
             Text("QQ", color = palette.ink, fontWeight = FontWeight.Bold)
         }

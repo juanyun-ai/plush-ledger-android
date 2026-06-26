@@ -36,8 +36,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
@@ -55,6 +58,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -146,11 +150,17 @@ fun DiaryScreen(userId: String, quotes: List<String>, onBack: () -> Unit) {
                     Column(Modifier.weight(0.9f).padding(start = 22.dp, top = 18.dp, bottom = 18.dp)) {
                         Text("今日日记", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 26.sp)
                         Text(selectedDate.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)), color = palette.ink, fontSize = 15.sp)
-                        Spacer(Modifier.height(20.dp))
-                        Text("把这刻写下来，", color = palette.ink, fontFamily = FontFamily.Cursive, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                        Text("以后回看也会觉得温暖。", color = palette.ink, fontFamily = FontFamily.Cursive, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                        Spacer(Modifier.height(12.dp))
-                        Text("—— 绒绒日记", color = palette.muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(18.dp))
+                        Text(
+                            "“把这刻写下来，\n以后回看也会觉得温暖。”",
+                            color = palette.ink,
+                            fontFamily = FontFamily.Cursive,
+                            fontStyle = FontStyle.Italic,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            lineHeight = 30.sp,
+                            maxLines = 3
+                        )
                     }
                     Image(
                         painter = painterResource(R.drawable.diary_hero_mascot),
@@ -320,6 +330,36 @@ private fun DiaryActionButton(
 }
 
 @Composable
+private fun DiaryOutlineActionButton(
+    text: String,
+    icon: ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = modifier
+            .height(42.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFFFFFEFA),
+        border = BorderStroke(1.dp, Color(0xFFFFD7A3))
+    ) {
+        Row(
+            Modifier.padding(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(text, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+        }
+    }
+}
+
+@Composable
 private fun SwipeDeleteDiaryHistoryCard(entry: DiaryEntry, onClick: () -> Unit, onDelete: () -> Unit) {
     val palette = LocalPlushPalette.current
     val reveal = with(LocalDensity.current) { 86.dp.toPx() }
@@ -399,49 +439,77 @@ private fun DiaryEditDialog(
     val displayStatus = status.ifBlank { mood }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
-            modifier = Modifier.fillMaxWidth(0.88f),
-            shape = RoundedCornerShape(32.dp),
+            modifier = Modifier.fillMaxWidth(0.9f),
+            shape = RoundedCornerShape(28.dp),
             color = Color(0xFFFFFCF7),
             border = BorderStroke(1.5.dp, Color(0xFFFFD7A3)),
             shadowElevation = 22.dp
         ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    MascotArt(54.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("编辑日记", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 24.sp)
-                        Text(initial.date, color = palette.muted, fontSize = 12.sp)
-                    }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "关闭", tint = palette.muted) }
+            Box {
+                Box(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 8.dp)) {
+                    MascotArt(58.dp)
                 }
+                Surface(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 14.dp).size(38.dp).clip(CircleShape).clickable(onClick = onDismiss),
+                    shape = CircleShape,
+                    color = Color(0xFFFFF1E3),
+                    border = BorderStroke(1.dp, Color(0xFFFFD7A3))
+                ) {
+                    Icon(Icons.Default.Close, "关闭", tint = palette.ink, modifier = Modifier.padding(8.dp))
+                }
+                Column(
+                    Modifier.padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                Text("编辑日记", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 26.sp)
+                Spacer(Modifier.height(6.dp))
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable { showStatus = true },
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFFFFF8EC),
+                    color = Color(0xFFFFFEFA),
                     border = BorderStroke(1.dp, Color(0xFFFFD7A3))
                 ) {
-                    Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(statusIcon(status), fontSize = 22.sp)
-                        Spacer(Modifier.width(9.dp))
-                        Text(if (status.isBlank()) "不设置状态" else status, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold)
+                    Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = palette.rose, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(initial.date, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Spacer(Modifier.weight(1f))
+                        Text("|", color = Color(0xFFEED8C4), fontSize = 16.sp)
+                        Spacer(Modifier.weight(1f))
+                        Text(statusIcon(status), fontSize = 18.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (status.isBlank()) "不设置状态" else status, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Spacer(Modifier.width(6.dp))
                         Icon(Icons.Default.ChevronRight, null, tint = palette.muted)
                     }
                 }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it.take(1000) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 6,
-                    placeholder = { Text("写下今天的日记吧...") },
-                    shape = RoundedCornerShape(22.dp)
-                )
+                Box(Modifier.fillMaxWidth().height(218.dp)) {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it.take(1000) },
+                        modifier = Modifier.fillMaxSize(),
+                        minLines = 8,
+                        placeholder = { Text("写下今天的日记吧...") },
+                        shape = RoundedCornerShape(22.dp)
+                    )
+                    Image(
+                        painterResource(R.drawable.diary_card_mascot),
+                        contentDescription = null,
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(118.dp).alpha(0.24f),
+                        contentScale = ContentScale.Fit
+                    )
+                    Text("${text.length}/1000", modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 14.dp), color = palette.muted, fontSize = 12.sp)
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DiaryActionButton("一键清空", Icons.Default.Delete, palette.coral, Modifier.weight(1f)) { text = "" }
-                    DiaryActionButton("暂存", Icons.Default.Favorite, Color(0xFF76A9E8), Modifier.weight(1f)) {
+                    DiaryOutlineActionButton("输入", Icons.Default.Edit, palette.rose, Modifier.weight(1f)) {}
+                    DiaryOutlineActionButton("一键清空", Icons.Default.Delete, palette.coral, Modifier.weight(1f)) { text = "" }
+                    DiaryOutlineActionButton("暂存", Icons.Default.Favorite, palette.rose, Modifier.weight(1f)) {
                         onDraft(initial.copy(text = text, mood = displayStatus, status = status))
                     }
-                    DiaryActionButton("保存", Icons.Default.Save, palette.pink, Modifier.weight(1f), enabled = text.trim().isNotBlank()) {
+                }
+                Spacer(Modifier.height(6.dp))
+                DiaryActionButton("保存", Icons.Default.Save, palette.pink, Modifier.fillMaxWidth(0.56f), enabled = text.trim().isNotBlank()) {
                         onSave(initial.copy(text = text, mood = displayStatus, status = status))
                     }
                 }
@@ -591,110 +659,107 @@ private fun matchingQuote(mood: String, quotes: List<String>): String {
 }
 
 private object DiaryShareCard {
-    private const val WIDTH = 1080
-    private const val HEIGHT = 1440
+    private const val WIDTH = 1254
+    private const val HEIGHT = 1254
 
     fun create(context: Context, date: LocalDate, mood: String, diary: String, quote: String): Bitmap {
         val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        canvas.drawColor(AndroidColor.rgb(255, 250, 242))
+        canvas.drawColor(AndroidColor.rgb(255, 250, 244))
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val brown = AndroidColor.rgb(82, 61, 48)
-        val peach = AndroidColor.rgb(255, 154, 115)
         val border = AndroidColor.rgb(248, 218, 180)
 
-        paint.color = AndroidColor.rgb(255, 253, 247)
-        canvas.drawRoundRect(RectF(82f, 58f, 998f, 1382f), 86f, 86f, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 4f
-        paint.color = border
-        canvas.drawRoundRect(RectF(82f, 58f, 998f, 1382f), 86f, 86f, paint)
-        paint.style = Paint.Style.FILL
+        drawSoftCircle(canvas, paint, 102f, 1030f, 74f, AndroidColor.rgb(255, 246, 232))
+        drawSoftCircle(canvas, paint, 1150f, 245f, 64f, AndroidColor.rgb(255, 244, 226))
+        drawHeart(canvas, paint, 940f, 205f, 20f, AndroidColor.rgb(255, 184, 166))
+        drawStar(canvas, paint, 922f, 300f, 36f, AndroidColor.rgb(255, 198, 72))
+        drawHeart(canvas, paint, 184f, 1052f, 22f, AndroidColor.rgb(255, 152, 118))
 
         val logo = BitmapFactory.decodeResource(context.resources, R.drawable.brand_logo_transparent)
-        canvas.drawBitmap(logo, Rect(0, 0, logo.width, logo.height * 3 / 5), RectF(300f, 104f, 420f, 224f), paint)
+        canvas.drawBitmap(logo, Rect(0, 0, logo.width, logo.height * 3 / 5), RectF(396f, 42f, 504f, 150f), paint)
         paint.color = brown
-        paint.textSize = 64f
+        paint.textSize = 62f
         paint.isFakeBoldText = true
         paint.textAlign = Paint.Align.LEFT
-        canvas.drawText("绒绒记账", 442f, 190f, paint)
+        canvas.drawText("绒绒记账", 535f, 122f, paint)
         paint.textAlign = Paint.Align.CENTER
         paint.textSize = 27f
         paint.isFakeBoldText = false
         paint.color = AndroidColor.rgb(160, 128, 104)
-        canvas.drawText("♥  温暖每一笔，记录每一天  ♥", WIDTH / 2f, 270f, paint)
+        canvas.drawText("♥  温暖每一笔，记录每一天  ♥", WIDTH / 2f, 180f, paint)
 
         paint.color = AndroidColor.rgb(255, 253, 248)
-        canvas.drawRoundRect(RectF(192f, 322f, 888f, 1060f), 58f, 58f, paint)
+        canvas.drawRoundRect(RectF(238f, 218f, 1016f, 1002f), 58f, 58f, paint)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 2.5f
         paint.color = AndroidColor.rgb(246, 224, 197)
-        canvas.drawRoundRect(RectF(192f, 322f, 888f, 1060f), 58f, 58f, paint)
+        canvas.drawRoundRect(RectF(238f, 218f, 1016f, 1002f), 58f, 58f, paint)
         paint.style = Paint.Style.FILL
 
         paint.color = AndroidColor.rgb(220, 174, 140)
-        paint.textSize = 72f
+        paint.textSize = 80f
         paint.isFakeBoldText = true
         paint.textAlign = Paint.Align.LEFT
-        canvas.drawText("“", 248f, 440f, paint)
-        paint.textSize = 34f
+        canvas.drawText("“", 282f, 330f, paint)
+        paint.textSize = 32f
         paint.isFakeBoldText = false
         paint.textAlign = Paint.Align.CENTER
         paint.color = AndroidColor.rgb(130, 103, 83)
-        canvas.drawText(date.format(DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.CHINA)), WIDTH / 2f, 410f, paint)
+        canvas.drawText(date.format(DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.CHINA)), WIDTH / 2f, 318f, paint)
         paint.color = AndroidColor.rgb(228, 197, 166)
         paint.strokeWidth = 2f
-        canvas.drawLine(465f, 440f, 525f, 440f, paint)
-        canvas.drawLine(555f, 440f, 615f, 440f, paint)
+        canvas.drawLine(548f, 348f, 604f, 348f, paint)
+        canvas.drawCircle(627f, 348f, 4f, paint)
+        canvas.drawLine(650f, 348f, 706f, 348f, paint)
         paint.textAlign = Paint.Align.LEFT
-        paint.textSize = 55f
+        paint.textSize = 56f
         paint.color = brown
         paint.isFakeBoldText = true
         paint.typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL)
-        drawWrappedText(canvas, quote, 260f, 545f, 430f, 82f, paint, 3)
+        drawWrappedText(canvas, quote.ifBlank { "平凡的一天，也值得被温柔记录。" }, 366f, 430f, 420f, 80f, paint, 3)
         paint.typeface = null
         paint.isFakeBoldText = false
 
-        paint.color = AndroidColor.rgb(255, 247, 236)
-        canvas.drawRoundRect(RectF(260f, 795f, 520f, 868f), 36f, 36f, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2f
-        paint.color = border
-        canvas.drawRoundRect(RectF(260f, 795f, 520f, 868f), 36f, 36f, paint)
-        paint.style = Paint.Style.FILL
+        paint.color = AndroidColor.rgb(113, 185, 148)
+        canvas.drawCircle(322f, 618f, 10f, paint)
         paint.textSize = 28f
-        paint.textAlign = Paint.Align.CENTER
-        paint.color = peach
-        canvas.drawText("${statusIcon(mood)}  ${if (mood.isBlank()) "未设置" else mood}", 390f, 842f, paint)
+        paint.textAlign = Paint.Align.LEFT
+        paint.color = AndroidColor.rgb(130, 103, 83)
+        canvas.drawText("今日状态 ·", 360f, 636f, paint)
+        paint.color = AndroidColor.rgb(255, 112, 91)
+        canvas.drawText(if (mood.isBlank()) "未设置" else mood, 532f, 636f, paint)
+        paint.color = AndroidColor.rgb(226, 205, 184)
+        canvas.drawLine(360f, 670f, 630f, 670f, paint)
 
         val mascot = BitmapFactory.decodeResource(context.resources, R.drawable.diary_card_mascot)
-        canvas.drawBitmap(mascot, null, RectF(520f, 625f, 920f, 1015f), paint)
+        canvas.drawBitmap(mascot, null, RectF(680f, 564f, 1062f, 965f), paint)
 
         paint.color = AndroidColor.rgb(255, 253, 248)
-        canvas.drawRoundRect(RectF(235f, 915f, 845f, 1026f), 28f, 28f, paint)
+        canvas.drawRoundRect(RectF(280f, 786f, 748f, 896f), 24f, 24f, paint)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 2f
         paint.color = AndroidColor.rgb(248, 224, 200)
-        canvas.drawRoundRect(RectF(235f, 915f, 845f, 1026f), 28f, 28f, paint)
+        canvas.drawRoundRect(RectF(280f, 786f, 748f, 896f), 24f, 24f, paint)
         paint.style = Paint.Style.FILL
         paint.textAlign = Paint.Align.LEFT
         paint.color = AndroidColor.rgb(130, 103, 83)
-        paint.textSize = 24f
-        drawWrappedText(canvas, diary.ifBlank { "今天也值得被温柔记录。" }, 300f, 965f, 470f, 36f, paint, 2)
+        paint.textSize = 25f
+        drawWrappedText(canvas, diary.ifBlank { "今天也值得被温柔记录。" }, 330f, 835f, 370f, 35f, paint, 2)
 
         val qr = qrBitmap(downloadUrl(), 205)
         paint.color = AndroidColor.WHITE
-        canvas.drawRoundRect(RectF(424f, 1100f, 656f, 1332f), 34f, 34f, paint)
+        canvas.drawRoundRect(RectF(522f, 994f, 732f, 1204f), 28f, 28f, paint)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 2f
         paint.color = AndroidColor.rgb(246, 224, 197)
-        canvas.drawRoundRect(RectF(424f, 1100f, 656f, 1332f), 34f, 34f, paint)
+        canvas.drawRoundRect(RectF(522f, 994f, 732f, 1204f), 28f, 28f, paint)
         paint.style = Paint.Style.FILL
-        canvas.drawBitmap(qr, null, RectF(450f, 1124f, 630f, 1304f), paint)
+        canvas.drawBitmap(qr, null, RectF(540f, 1012f, 714f, 1186f), paint)
         paint.textAlign = Paint.Align.CENTER
         paint.color = brown
         paint.textSize = 20f
-        canvas.drawText("扫码下载绒绒记账", WIDTH / 2f, 1388f, paint)
+        canvas.drawText("扫码下载绒绒记账", WIDTH / 2f, 1230f, paint)
         return bitmap
     }
 
@@ -710,8 +775,26 @@ private object DiaryShareCard {
         }, "分享绒绒日记"))
     }
 
-    private fun downloadUrl(): String =
-        "https://github.com/juanyun-ai/plush-ledger-android/releases/latest"
+    private fun downloadUrl(): String = "https://privacy.xiaoxing.online/"
+
+    private fun drawSoftCircle(canvas: Canvas, paint: Paint, x: Float, y: Float, radius: Float, color: Int) {
+        paint.color = color
+        canvas.drawCircle(x, y, radius, paint)
+    }
+
+    private fun drawStar(canvas: Canvas, paint: Paint, x: Float, y: Float, size: Float, color: Int) {
+        paint.color = color
+        paint.textSize = size
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText("★", x, y, paint)
+    }
+
+    private fun drawHeart(canvas: Canvas, paint: Paint, x: Float, y: Float, size: Float, color: Int) {
+        paint.color = color
+        paint.textSize = size
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText("♥", x, y, paint)
+    }
 
     private fun qrBitmap(content: String, size: Int): Bitmap {
         val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size)

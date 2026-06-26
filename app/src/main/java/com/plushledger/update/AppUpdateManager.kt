@@ -127,15 +127,10 @@ class AppUpdateManager(private val activity: FragmentActivity) {
     }
 
     fun openExternalDownload() {
-        val source = currentSource() ?: savedSources().firstOrNull()
-        if (source == null) {
-            showToast("更新地址已失效，请重新检查版本", Toast.LENGTH_LONG)
-            return
-        }
         runCatching {
-            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source)))
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DOWNLOAD_PAGE_URL)))
         }.onSuccess {
-            showToast("已交给系统浏览器下载，完成后请打开安装包", Toast.LENGTH_LONG)
+            showToast("已打开下载页，可在浏览器中选择下载线路", Toast.LENGTH_LONG)
         }.onFailure {
             showToast("无法打开系统浏览器，请检查默认浏览器设置", Toast.LENGTH_LONG)
         }
@@ -481,6 +476,7 @@ class AppUpdateManager(private val activity: FragmentActivity) {
         const val POLL_INTERVAL_MS = 750L
         const val INVALID_DOWNLOAD_ID = -1L
         const val RETIRED_WORK_NAME = "app-update-download"
+        const val DOWNLOAD_PAGE_URL = "https://privacy.xiaoxing.online/"
         const val KEY_RETIRED_WORK_ID = "work_id"
         const val KEY_DOWNLOAD_ID = "system_download_id"
         const val KEY_PRIMARY_URL = "primary_url"

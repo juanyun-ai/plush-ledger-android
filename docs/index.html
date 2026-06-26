@@ -3,31 +3,102 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="绒绒记账官方隐私与服务说明">
-  <title>绒绒记账 - 隐私与服务说明</title>
+  <meta name="description" content="绒绒记账，一款温暖治愈的记账与日记应用。">
+  <title>绒绒记账 - 温暖每一笔，记录每一天</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<main>
-  <header>
-    <img src="app-icon.png" alt="绒绒记账图标">
-    <div>
-      <h1>绒绒记账</h1>
-      <p class="meta">隐私、安全与服务说明</p>
-    </div>
-  </header>
-  <section class="panel">
-    <p>绒绒记账是一款本地优先的个人记账应用。我们不接入广告，不使用第三方行为分析，也不会出售用户数据。</p>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="绒绒记账首页">
+      <img src="assets/rongrong-icon.png" alt="绒绒记账图标">
+      <span>绒绒记账</span>
+    </a>
     <nav>
+      <a href="#features">功能</a>
+      <a href="#diary">日记</a>
+      <a href="#wishes">心愿</a>
+      <a href="#download">下载</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>绒绒记账</h1>
+        <p class="tagline">温暖每一笔，记录每一天</p>
+        <p class="intro">一款温暖治愈的记账与日记应用，轻松记录收支，也收藏生活里的小美好。</p>
+        <div class="actions">
+          <a class="primary" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk">立即下载</a>
+          <a class="secondary" href="#features">查看功能</a>
+        </div>
+        <p class="tip">如果手机下载较慢，可以长按复制下载链接，或换浏览器重新打开本页。</p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <img class="mascot" src="assets/rongrong-mascot.png" alt="">
+        <img class="phone phone-home" src="assets/screen-home.png" alt="">
+        <img class="phone phone-diary" src="assets/screen-diary.png" alt="">
+      </div>
+    </section>
+
+    <section id="features" class="feature-grid">
+      <article>
+        <div class="feature-icon note"></div>
+        <h2>轻松记账</h2>
+        <p>随手记录，分类、账户、预算和统计都保持清晰。</p>
+      </article>
+      <article>
+        <div class="feature-icon chart"></div>
+        <h2>清晰统计</h2>
+        <p>收支趋势、分类占比、月度结余，一眼看懂。</p>
+      </article>
+      <article>
+        <div class="feature-icon diary"></div>
+        <h2>绒绒日记</h2>
+        <p>记录心情与状态，让账本也能留下生活温度。</p>
+      </article>
+      <article>
+        <div class="feature-icon gift"></div>
+        <h2>重要日子与心愿</h2>
+        <p>生日、纪念日、礼物清单和小目标都能温柔提醒。</p>
+      </article>
+    </section>
+
+    <section id="diary" class="story">
+      <div>
+        <h2>清晰掌握每一笔</h2>
+        <p>收支明细、趋势图表、财务状况，一目了然。</p>
+        <div class="mini-card">
+          <img src="assets/screen-home.png" alt="绒绒记账首页截图">
+        </div>
+      </div>
+      <div>
+        <h2>记录心情，分享美好</h2>
+        <p>写下每一天的心情，也可以生成温暖的分享卡片。</p>
+        <div class="mini-card diary-card">
+          <p>6月22日 星期一</p>
+          <strong>今天很倒霉。</strong>
+          <span>治愈</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="wishes" class="download-strip">
+      <img src="assets/rongrong-icon.png" alt="">
+      <div>
+        <h2>绒绒陪伴，温暖生活的每一天</h2>
+        <p>支持 Android；iOS 版本规划中。数据本地优先，登录后支持云端同步。</p>
+      </div>
+      <img class="qr" src="assets/download-qr.png" alt="绒绒记账下载二维码">
+      <a class="store android" id="download" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk">Android 下载</a>
+      <a class="store muted" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest">备用线路</a>
+    </section>
+
+    <section class="legal">
       <a href="privacy.html">隐私政策</a>
       <a href="agreement.html">用户协议</a>
       <a href="deletion.html">账号注销与数据删除</a>
-    </nav>
-    <h2>联系我们</h2>
-    <p>运营及研发主体：丁嘉兴</p>
-    <p>支持邮箱：<a href="mailto:support@xiaoxing.online">support@xiaoxing.online</a></p>
-  </section>
-  <footer>最后更新：2026年6月14日</footer>
-</main>
+      <a href="mailto:support@xiaoxing.online">联系支持</a>
+    </section>
+  </main>
 </body>
 </html>

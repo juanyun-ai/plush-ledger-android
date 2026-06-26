@@ -281,18 +281,18 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
         ThemeOption("mono", "牛奶白", Color(0xFFB7A18F), Color(0xFFFFFCF5))
     )
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxWidth(0.91f).heightIn(max = 760.dp), shape = RoundedCornerShape(34.dp), color = Color(0xFFFFFCF7), border = BorderStroke(2.dp, Color(0xFFFFD8A0)), shadowElevation = 22.dp) {
-            Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(Modifier.fillMaxWidth(0.9f).heightIn(max = 820.dp), shape = RoundedCornerShape(34.dp), color = Color(0xFFFFFCF7), border = BorderStroke(2.dp, Color(0xFFFFD8A0)), shadowElevation = 22.dp) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Hi~", color = Color(0xFFFFA126), fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                    Text("Hi~", color = Color(0xFFFFA126), fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("绒绒 · 主题", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 29.sp)
-                        Text("♥  不同心情，不同颜色  ♥", color = Color(0xFF9A7865), fontSize = 13.sp)
+                        Text("绒绒 · 主题", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 32.sp)
+                        Text("♥  不同心情，不同颜色  ♥", color = Color(0xFF9A7865), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Close, "关闭", tint = palette.muted) }
                 }
-                Spacer(Modifier.height(10.dp))
-                LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(Modifier.height(12.dp))
+                LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(options.chunked(2)) { row ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             row.forEach { option ->
@@ -311,7 +311,7 @@ private fun ThemeChoiceCard(option: ThemeOption, selected: Boolean, modifier: Mo
     val palette = LocalPlushPalette.current
     Box(
         modifier = modifier
-            .height(176.dp)
+            .height(194.dp)
             .clip(RoundedCornerShape(26.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.TopCenter
@@ -319,7 +319,7 @@ private fun ThemeChoiceCard(option: ThemeOption, selected: Boolean, modifier: Mo
         ThemeMascotPreview(
             color = option.color,
             surface = option.surface,
-            modifier = Modifier.padding(top = 2.dp).size(126.dp)
+            modifier = Modifier.padding(top = 2.dp).size(142.dp)
         )
         Surface(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.86f),
