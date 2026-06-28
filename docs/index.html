@@ -1,104 +1,450 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="绒绒记账，一款温暖治愈的记账与日记应用。">
-  <title>绒绒记账 - 温暖每一笔，记录每一天</title>
-  <link rel="stylesheet" href="styles.css">
+<!DOCTYPE html><html lang="zh-CN" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>绒绒记账 - 温暖每一笔，记录每一天</title>
+<meta content="绒绒记账是一款温暖治愈的 Android 记账与日记应用，支持本地记录、云端同步、统计分析、绒绒日记和重要日子提醒。" name="description">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;700&amp;family=Work+Sans:wght@500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "on-surface-variant": "#524535",
+                "inverse-primary": "#ffb95a",
+                "primary": "#845400",
+                "on-error-container": "#93000a",
+                "surface-container-highest": "#eee0d4",
+                "tertiary": "#006780",
+                "surface-tint": "#845400",
+                "on-primary-fixed": "#2a1800",
+                "warm-yellow": "#FFD97D",
+                "inverse-on-surface": "#fceee2",
+                "primary-fixed": "#ffddb6",
+                "background": "#fff8f4",
+                "surface-variant": "#eee0d4",
+                "secondary-fixed-dim": "#ffb2b7",
+                "primary-container": "#ffb347",
+                "on-secondary-fixed-variant": "#782e37",
+                "on-primary-container": "#704700",
+                "on-secondary-container": "#762d36",
+                "on-tertiary-container": "#00576d",
+                "outline-variant": "#d6c3b0",
+                "surface-bright": "#fff8f4",
+                "on-primary": "#ffffff",
+                "error-container": "#ffdad6",
+                "on-tertiary-fixed-variant": "#004d61",
+                "on-surface": "#211a13",
+                "secondary-fixed": "#ffdadb",
+                "on-tertiary-fixed": "#001f28",
+                "on-primary-fixed-variant": "#643f00",
+                "secondary": "#96454d",
+                "tertiary-container": "#52d0f9",
+                "surface-container-low": "#fff1e5",
+                "surface-container-lowest": "#ffffff",
+                "surface-container-high": "#f3e6da",
+                "surface": "#fff8f4",
+                "soft-mint": "#B8E4D0",
+                "tertiary-fixed": "#b8eaff",
+                "secondary-container": "#fb979f",
+                "cream-bg": "#FFF9F0",
+                "primary-fixed-dim": "#ffb95a",
+                "on-secondary-fixed": "#3f020f",
+                "inverse-surface": "#372f27",
+                "surface-dim": "#e5d8cc",
+                "charcoal-text": "#4A453E",
+                "on-error": "#ffffff",
+                "on-secondary": "#ffffff",
+                "outline": "#847463",
+                "on-background": "#211a13",
+                "on-tertiary": "#ffffff",
+                "error": "#ba1a1a",
+                "tertiary-fixed-dim": "#58d5fe",
+                "peach-highlight": "#FFDAC1",
+                "surface-container": "#f9ecdf"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px",
+                "blob": "40% 60% 70% 30% / 40% 50% 60% 50%",
+                "blob2": "60% 40% 30% 70% / 60% 30% 70% 40%"
+        },
+        "spacing": {
+                "gutter": "24px",
+                "unit": "8px",
+                "margin-desktop": "40px",
+                "stack-sm": "8px",
+                "stack-md": "16px",
+                "margin-mobile": "16px",
+                "container-max": "1200px",
+                "stack-lg": "32px",
+                "section": "120px"
+        },
+        "fontFamily": {
+                "headline-lg-mobile": [
+                        "Be Vietnam Pro"
+                ],
+                "display": [
+                        "Be Vietnam Pro"
+                ],
+                "headline-lg": [
+                        "Be Vietnam Pro"
+                ],
+                "label-md": [
+                        "Work Sans"
+                ],
+                "body-md": [
+                        "Be Vietnam Pro"
+                ],
+                "title-md": [
+                        "Be Vietnam Pro"
+                ],
+                "label-sm": [
+                        "Work Sans"
+                ],
+                "body-lg": [
+                        "Be Vietnam Pro"
+                ]
+        },
+        "fontSize": {
+                "headline-lg-mobile": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "display": [
+                        "40px",
+                        {
+                                "lineHeight": "48px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "headline-lg": [
+                        "28px",
+                        {
+                                "lineHeight": "36px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "label-md": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "letterSpacing": "0.01em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "title-md": [
+                        "20px",
+                        {
+                                "lineHeight": "28px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "label-sm": [
+                        "12px",
+                        {
+                                "lineHeight": "16px",
+                                "fontWeight": "500"
+                        }
+                ],
+                "body-lg": [
+                        "18px",
+                        {
+                                "lineHeight": "28px",
+                                "fontWeight": "400"
+                        }
+                ]
+        },
+        "boxShadow": {
+            "soft": "0 10px 40px -10px rgba(74, 69, 62, 0.08)",
+            "squishy": "inset 0 -4px 0 0 rgba(0,0,0,0.1), 0 4px 10px rgba(74, 69, 62, 0.1)",
+            "float": "0 20px 40px -15px rgba(132, 84, 0, 0.15)"
+        }
+},
+    },
+  }
+</script>
+<style>
+        body {
+            background-color: #FFF9F0;
+            color: #4A453E;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+        .plush-shadow {
+            box-shadow: 0 20px 40px -15px rgba(132, 84, 0, 0.15);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Animations */
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(2deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+        .animate-float-delay-1 {
+            animation: float 7s ease-in-out infinite 1s;
+        }
+        .animate-float-delay-2 {
+            animation: float 5s ease-in-out infinite 2s;
+        }
+        
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-up {
+            animation: fadeUp 0.8s ease-out forwards;
+        }
+
+        @keyframes slideLeft {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .animate-slide {
+            animation: slideLeft 30s linear infinite;
+        }
+
+        @keyframes morph {
+            0%, 100% { border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; }
+            34% { border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%; }
+            67% { border-radius: 100% 60% 60% 100% / 100% 100% 60% 60%; }
+        }
+        .animate-morph {
+            animation: morph 8s ease-in-out infinite;
+        }
+        
+        /* Utility class to trigger animation when in viewport (simulated with standard animation here for simplicity) */
+        .reveal {
+            opacity: 0;
+            animation: fadeUp 0.8s ease-out forwards;
+            animation-delay: 0.2s;
+        }
+        .reveal-delay-1 { animation-delay: 0.4s; }
+        .reveal-delay-2 { animation-delay: 0.6s; }
+
+        /* Hide scrollbar for gallery */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
 </head>
-<body>
-  <header class="site-header">
-    <a class="brand" href="#top" aria-label="绒绒记账首页">
-      <img src="assets/rongrong-icon.png" alt="绒绒记账图标">
-      <span>绒绒记账</span>
-    </a>
-    <nav>
-      <a href="#features">功能</a>
-      <a href="#diary">日记</a>
-      <a href="#wishes">心愿</a>
-      <a href="#download">下载</a>
-    </nav>
-  </header>
+<body class="bg-cream-bg font-body-md text-charcoal-text relative">
+<!-- Background Blobs -->
+<div class="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden -z-10">
+<div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-warm-yellow/20 rounded-blob animate-morph mix-blend-multiply blur-3xl"></div>
+<div class="absolute top-[30%] right-[-10%] w-[40vw] h-[40vw] bg-soft-mint/20 rounded-blob2 animate-morph mix-blend-multiply blur-3xl" style="animation-delay: 2s;"></div>
+<div class="absolute bottom-[-10%] left-[20%] w-[60vw] h-[60vw] bg-secondary-container/20 rounded-blob animate-morph mix-blend-multiply blur-3xl" style="animation-delay: 4s;"></div>
+</div>
+<!-- Top Navigation Bar -->
+<nav class="full-width top-0 z-50 pt-6 px-margin-mobile md:px-margin-desktop">
+<div class="max-w-container-max mx-auto flex items-center justify-between">
+<!-- Logo -->
+<a aria-label="回到绒绒记账首页" class="flex items-center" href="#top">
+<img alt="绒绒记账 Logo" class="h-16 w-auto mix-blend-multiply" src="assets/rongrong-icon.png">
+</a>
+<!-- Center Pill -->
+<div class="hidden md:flex items-center gap-10 bg-white/70 px-12 py-3 rounded-full backdrop-blur-md border border-white shadow-sm">
+<a class="font-body-lg text-body-lg text-primary font-bold hover:scale-105 transition-all" href="#top">首页</a>
+<a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#features">核心功能</a>
+<a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#healing">治愈体验</a>
+<a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#stats">统计分析</a>
+<a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#download">愿望清单</a>
+</div>
+<!-- Right Button -->
+<a class="bg-[#845400] text-white font-title-md text-body-md px-8 py-3 rounded-full shadow-md hover:-translate-y-1 hover:shadow-lg transition-all" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk">
+            立即下载
+        </a>
+</div>
+</nav>
+<main id="top" class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop pt-12 pb-24 overflow-visible">
+<!-- Hero Section with Staggered Floating Layout -->
+<section class="flex flex-col lg:flex-row items-center gap-12 lg:gap-8 mb-section reveal pt-12">
+<!-- Left text -->
+<div class="flex-1 text-left space-y-10 z-20 relative w-full lg:max-w-[50%]">
+<h1 class="text-[64px] lg:text-[76px] font-bold text-primary leading-[1.1] tracking-tight font-display">
+            绒绒记账<br>
+<span class="text-charcoal-text text-[44px] lg:text-[52px] mt-4 block font-medium">温暖每一笔，记录每一天</span>
+</h1>
+<div class="bg-white/40 p-8 rounded-[2rem] backdrop-blur-sm border border-white/60 inline-block max-w-[95%] shadow-sm">
+<p class="font-body-lg text-xl text-on-surface-variant leading-relaxed">
+                一款温暖治愈的记账与日记应用，轻松记录收支，也收藏生活里的小美好。
+            </p>
+</div>
+<div class="flex flex-col sm:flex-row items-center gap-6 pt-2">
+<a class="bg-[#ffb347] text-white font-title-md text-xl px-12 py-4 rounded-full shadow-md hover:-translate-y-1 hover:scale-105 hover:bg-[#ffb95a] transition-all duration-300 w-full sm:w-auto text-center" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk">
+                立即下载
+            </a>
+<a class="bg-[#fceee2]/80 backdrop-blur-md text-charcoal-text font-title-md text-xl px-12 py-4 rounded-full hover:bg-white hover:-translate-y-1 hover:shadow-lg transition-all duration-300 w-full sm:w-auto border border-white text-center" href="#features">
+                查看功能
+            </a>
+</div>
+</div>
+<!-- Right Images -->
+<div class="flex-1 relative w-full h-[600px] lg:h-[700px] flex justify-center items-center mt-12 lg:mt-0">
+<div class="relative w-full h-full flex items-center justify-center">
+<!-- Back Left: Image 6 (Stats) -->
+<img alt="统计页面" class="absolute z-10 w-[45%] max-w-[300px] rounded-[2.5rem] shadow-soft transform -rotate-12 -translate-x-32 -translate-y-12 transition-all duration-700 ease-out border-[6px] border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKfURu5qA7OrHnoa8aX5uBPfP4Ptjho_d15lDBgKOV5nT1Dc1eLpPKwnwx9T8ybY2_YPfMcN414oGxxu2f3L5i4_gipBginLuqkPmLx8Yr0sgJY5BrY8TQIR_mQirkI2FVKC1swHfZLSs17N3OQPtydwDoNjiG1cbvmOCX50qeuu35_4tzpNCTiC5joHoYkWiRNWkI5Lj1AF2hVdIPYkwkERB1x3smBy4mSzXtVMi7fUNhkVWP5FiCNK2WEkhNruJZ7IatCcDrnDM">
+<!-- Back Right: Image 8 (Login) -->
+<img alt="登录页面" class="absolute z-10 w-[45%] max-w-[300px] rounded-[2.5rem] shadow-soft transform rotate-12 translate-x-32 -translate-y-16 transition-all duration-700 ease-out border-[6px] border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBn0JlRtCLMbQZ6Faj8koq7_958LP-0PAmHp5IUc7BC9SyqCKrbXe-EtbgF5E6zzlXm4D2w_HZVJUuWfUrYvuisvq_xqiRpTDgIfX5atfQ1PVRjko4yHcJVywwXmfLAQ1WZGI3eO51uD4cuj6lmtoD-OscGCTyuvOGcp5IgK8mqX8LFHkMio2MD0mvlC8PnOtWt_eOdPvreqJ1j4Q2CleN_zkqrR9F5iRtx469poSeBjjOaRdwq3DPdpS1BYzl1PoZ9TaU3zQE_Lpk">
+<!-- Front Center: Image 5 (Main) -->
+<img alt="主页面" class="absolute z-30 w-[55%] max-w-[360px] rounded-[3rem] shadow-float transform transition-all duration-700 ease-out scale-105 translate-y-16 border-[8px] border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5AJjRYatDq65APYwWlgKDAV8IJV1Ttt5UDz_PdU-KzygZWaACOf-cUj6Kj0YvSWH3WmNuiQPDg0J6YEA3YTlH3dLL_VjpDUSgQfha_BskJOQi_sxZFLpijAVs0eqzJAenttNb3-R1KQNe6MjChydL1TZ3u2wwsFAT50vuLNRKF7VX6iZsQiSjQ735WfdmjFkBcj1C0AsPmtBRldKeklSSSkzVZTj2mLUuHVXsaTsoqw_nErBzo6XCdasI_U_wgU5sXzwV5MT59SI">
+</div>
+</div>
+</section>
+<!-- Auto-sliding Promotional Carousel -->
+<section id="stats" class="mb-section reveal reveal-delay-1 w-full relative overflow-hidden -mx-margin-mobile md:-mx-margin-desktop px-margin-mobile md:px-margin-desktop py-12">
+<div class="absolute inset-y-0 left-0 w-48 bg-gradient-to-r from-cream-bg via-cream-bg/80 to-transparent z-20 pointer-events-none"></div>
+<div class="absolute inset-y-0 right-0 w-48 bg-gradient-to-l from-cream-bg via-cream-bg/80 to-transparent z-20 pointer-events-none"></div>
+<div class="flex gap-8 w-[200%] animate-slide hover:[animation-play-state:paused] items-center py-8"><img alt="首页" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuACixbgxjSlvaBof5jbIfEZfjvWx33kovbUr4vEl1HA3-w08g5r71ixLWqsB6EHLUtseQh_fsH2rVHIw7se6tRIYVZL1i6mz4Dh9eNT2w0Kx2IxXPx_7JxYVQY-PaTe6DrmM9Y0W_9I8tXOY5YHhhNrqPfMTTV6JvINzi2zBQT4NJzjtrsvj_BLbtnYdxclnyzaTh82v1YiS1c4anAGtIHX_Sr1S2S8PRCpAa5vL_o9xZTHoSs4bq5nVEjCtaVJcdjCMR_2f0SdJBQ"><img alt="账单列表" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAg5PunjKMTOdTofoep-GbsOSh6YnRP_QBW74Byk-BlCCk-vCTdx2g-wgXQmOl-8sZXqh0pcHYxSfMOp1s1oroncwqhdztVAKI3cPIT6vUGp1KPvq3jWIJ70PBU-kusgPIezEcVX_E1jVQ91MrAyFFDBzG5Qu2_rHpoVnWmCe0FhkvDiNVUnuDe2thyTxX_MpxCXJlrbp0FHcA29J2v43vq2K73M5pPojweW7JarqvFLnFo5tW5-GArfapACCgC7fkNmT1f1oVYaxc"><img alt="统计分析" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDKdLU-0NDin7fG2gyn_S63P2psAwKUt3QiT5k1PaUa4__viDtMLmu6UgYnUFB4MJi08rkv3g03Mx3idjw7Yh75aQ8GywVpduq6jS6MN23kZTnX-h-Ic0RMMqJTOPgtMeuvuw_6Tdf6C-syZFGMQf58DvjRckjyO19tfz78U9VP0kQO-mdfL7eXzQW88BiuVsl69M_0jmbu7C0y7V-56FdOLYhj_U3vtwwTEPWMCL1eM-L6KtwwwFmqpkior2C7cvRO0xXwLfQs38"><img alt="记账" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCznVL2BBrdlLzDumkSYNShqVFrHEf_FSuyrDDZ6ooAuVAqBXLXaOuO04ixqso5Z_f-fZiEgKtrbo-naKkr-8IOzjkVnaIi3zPJSTrCufdS5iN4mQQXbkwcTLb2q235wIKkZaLczY11GWEVFgPLRu1sdzO9ciISZsQggyyLBi8NkS5hU42QchrIKakSA9ZrHwADFIYrEErK4ztpNraGDKSB8CWW0KASELSp4rFa3idEuV515D-HK2oxlmTVGWklOOO-KkP4sCKSntM"><img alt="账户管理" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdiVDM67chx07MjqaeCpm6anO5_IDbKUTvMUFOuPaYPLMS5Z5y5Yakxem-LrJK6lewxzZQpSuTYle28-E9KiEZCFj9tUDJUmqK2x5RZoglUOmJKuJn0ThrK0jGiQ8m1yG-7Nt9_CQ9LDYbL0N3QGF2tctizcNbVizpWmMJPo2lDlWF2gXBZeOQI7o4gcqwS_AzYhRbqCLoVeJwhkh5wJIi-rn9JD-EVBALDDlAUl-hwrmtJgvubqZjnHEUOikvhsFhsYMRt0wqU3o"><img alt="预算管理" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDZP-abs-0tKcZegj1DCyM_4povKi4h2OztxE8zmMX91YHCUlsGfD70qPpgYWv19lNtrx0ZuOzCWIByhOX4X4I6HOE-vhPiVJ1efN-kO0gq4p64_6xSL1eH57hW8NWkn2VOBdu02Ym7zOVTpy3GUM5qqMcmEAd946JMJ6GDxsiyUskAfET0pHIGN7zdgszCG_XMN03wG7JvmpXbU2XZlG4iErUHRX2zdPzBuFeeJmt8jUTkv-FZUDU5avWSm3XzszamL5l4b1MvYwc"><img alt="分类管理" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsPdmsIS5_odtuzjy8mp6wvQJCR1gKVUBHPBJSsAmdDCoxFvCZRjfClANRA6Z_avplbhjgsFCDQo3bYUPnrLxUVbZSTnUXi_a2miVKwRTDE08rquzrdg4DGvDdNl1UhYO8OkBj8ogzQDWonnImUq5vWwAWKRP3c3iIhvQe71vGsdhjssuNL3rwYctpASoBkpLFi6oSmzrflAJcOWAGeT7BCXxkqyh8TzjUAfLH5pGcdf75-rLRpBWUv9Z6NV6ma2fMvq2lFtXV8c0"><img alt="个人中心" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQWiPjqbxfpvhbioUx9hLwxty0j82qgdugjxVcoMH7BTb7zlH96goeL0i3Hnwo4jjAAaQYg_z7n5QV6w2f2z52vjFGgNfqGsxW1O_XF6XT2kvy_SSkzPZwj_IfIsKD-C5FGb-6wZka6fWIw-ehUyVubuGRxFdVn9ZwjFGqofdvxbXjj30EFYl9-GX_8SoDtTqAy8u1S-WN9MZlk0xq1QzwqRR9H3uAG844JPQKp-R_IoLT92d-ULzvRo6zBZ10j8nW-HsOIql3K2o"><img alt="账单详情" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnCxzn4fNNEksAbQSp6SgXGJ62IAUu9KJ5QdLPyd7ZX80vnzhzvpQmz0jYwo9AL9u0Sr80JXRp5VQa6oDM_luZ10WgQ9rB3D543dxnRIPFm7dlsH_ucFdFwGFFfaC0v-ojcrjsIbm-EHFrr02YKGeV_fHCGx6OqYkUqlOGzfpmG8uVpAykeLifIYGGMQ5KOi78clYUm4xodWK1vFB6gDaQ0DRyr_gidbZB8unvkF_BKzCF7NPj9cxxLdb_SHcxeZbH1De3MvDjwu8"><img alt="用户信息" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSI1_akMeIfsJ5880KSnmwerYxXORnU7vMv6zyTGGd6ReCqcDT-qJODrK-KWwIvqQqpuDBj0zyffbPPP3HUETur61DcraEi88mPo1Y7HWd0oOty9w9fHIyfSMPti4saio64a4m1CT3eybZqrLix7vysXYqiZghJeAtUyrjuLF7bxZIHYyZv0G57a-h-MTAvZbMpmy6FQFz9KYPFqxXZ71YwrIStfRKC4SxqNmKxUyF4uG2EYIgepEmd2zywXSy4YXyEbSZisT9BO4"><img alt="设置" class="h-80 w-auto rounded-[2.5rem] object-cover shadow-float border-4 border-white/80 hover:scale-105 hover:-translate-y-4 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCo4LjEgM2w1-si5wc__v-LN924ERfCIZZZd5KmvS0OixtcVn73NkxzUItdQoIK9FOf4YnYuJKlLtZXp5TyZmZkf2vIQVx2Ixw89R2Y3drTl3tEpiQJz4UlY0DlMf0AcRHBkRvXkMAPkK3YB8FAZqOTVJ7AugcYNUSXFjwbpx0qiKvlZg7X_Bf-DS1n6DnrYxYNjsrzUf_GDzhbHMpBms9faATG02nYQEwNXWb2XWTz_cXxV0iMZ_MSJAd6CkD3pYbkqoCvv391nic"></div>
+</section>
+<!-- Features Flexible Grid -->
+<section id="features" class="mb-section reveal reveal-delay-1 relative z-10">
+<div class="flex flex-wrap justify-center gap-8 lg:gap-12">
+<!-- Feature 1 -->
+<div class="bg-white/60 backdrop-blur-md rounded-blob p-10 w-full md:w-[calc(50%-2rem)] lg:w-[calc(25%-3rem)] min-w-[280px] shadow-float hover:-translate-y-4 hover:shadow-2xl hover:bg-white transition-all duration-500 ease-out group border border-white/50">
+<div class="absolute inset-0 bg-warm-yellow/10 rounded-blob opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+<div class="w-20 h-20 bg-warm-yellow/30 rounded-full flex items-center justify-center mb-6 overflow-hidden relative z-10 mx-auto group-hover:scale-110 group-hover:rotate-12 transition-transform duration-500">
+<img alt="轻松记账" class="w-full h-full object-cover opacity-80 mix-blend-multiply" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC00FOuV0WyNrd0BEYgRNh6voCzQJ8LSG227w5W8Wh16z0R90xG1AV7AbR_NoTk5XiYJPEOVltgs1H2nJ5BE5-d6DRXuxwLto2lS0CfzBZbK6qwgNEPDfk25CldNYbWFkzzSCrzIMJNFIRrlf1LxNl2HrQyPQPhK6IHWfehGMvlpEk1kRO9YFDjxo9gYIieY7etglzIVU3WBDbD_l5itu_8PK1aPGopInafVTrqHgMsVYT74aAmV2Bgn3bZGQGCnMSoy-7Nh_-P7eQ">
+</div>
+<h3 class="font-title-md text-title-md text-charcoal-text mb-4 text-center relative z-10 group-hover:text-primary transition-colors">轻松记账</h3>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed text-center relative z-10">
+                        随手记录，分类、账户、预算和统计都保持清晰。
+                    </p>
+</div>
+<!-- Feature 2 -->
+<div class="bg-white/60 backdrop-blur-md rounded-blob2 p-10 w-full md:w-[calc(50%-2rem)] lg:w-[calc(25%-3rem)] min-w-[280px] shadow-float hover:-translate-y-4 hover:shadow-2xl hover:bg-white transition-all duration-500 ease-out group border border-white/50 mt-0 lg:mt-12">
+<div class="absolute inset-0 bg-soft-mint/10 rounded-blob2 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+<div class="w-20 h-20 bg-soft-mint/40 rounded-full flex items-center justify-center mb-6 overflow-hidden relative z-10 mx-auto group-hover:scale-110 group-hover:-rotate-12 transition-transform duration-500">
+<img alt="清晰统计" class="w-full h-full object-cover opacity-80 mix-blend-multiply" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCx9LL4M42N0WsEZnwhWrBrVmO7m8oBaH1FUBoqVfDIqoEsuwSC_THCcyhTfZNGm0S1mTNIcub5Q93u7_2Fq0dONMbn75CsDlYap8TAVSDKHtaDJbDMBJRour7aXv467cjmCybcvB9nxLVODs1U9nSrlerxmgrEAawQz7MnnlrV6Ymw6YSavNN1aA3gmYI48ok3XAHnn2gRngoHyBbq2g5lhVz2ngzIfz4djJd-N6AV1NaMf1LwndkJKGC0TQbaxUlbWvTNkqUoOk0">
+</div>
+<h3 class="font-title-md text-title-md text-charcoal-text mb-4 text-center relative z-10 group-hover:text-tertiary transition-colors">清晰统计</h3>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed text-center relative z-10">
+                        收支趋势、分类占比、月度结余，一眼看懂。
+                    </p>
+</div>
+<!-- Feature 3 -->
+<div class="bg-white/60 backdrop-blur-md rounded-blob p-10 w-full md:w-[calc(50%-2rem)] lg:w-[calc(25%-3rem)] min-w-[280px] shadow-float hover:-translate-y-4 hover:shadow-2xl hover:bg-white transition-all duration-500 ease-out group border border-white/50">
+<div class="absolute inset-0 bg-secondary-container/10 rounded-blob opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+<div class="w-20 h-20 bg-secondary-container/40 rounded-full flex items-center justify-center mb-6 relative z-10 mx-auto group-hover:scale-110 group-hover:rotate-12 transition-transform duration-500">
+<span class="material-symbols-outlined text-secondary text-4xl group-hover:animate-bounce" style="font-variation-settings: &quot;FILL&quot; 1;">favorite</span>
+</div>
+<h3 class="font-title-md text-title-md text-charcoal-text mb-4 text-center relative z-10 group-hover:text-secondary transition-colors">绒绒日记</h3>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed text-center relative z-10">
+                        记录心情与状态，让账本也能留下生活温度。
+                    </p>
+</div>
+<!-- Feature 4 -->
+<div class="bg-white/60 backdrop-blur-md rounded-blob2 p-10 w-full md:w-[calc(50%-2rem)] lg:w-[calc(25%-3rem)] min-w-[280px] shadow-float hover:-translate-y-4 hover:shadow-2xl hover:bg-white transition-all duration-500 ease-out group border border-white/50 mt-0 lg:mt-12">
+<div class="absolute inset-0 bg-peach-highlight/20 rounded-blob2 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+<div class="w-20 h-20 bg-peach-highlight/60 rounded-full flex items-center justify-center mb-6 relative z-10 mx-auto group-hover:scale-110 group-hover:-rotate-12 transition-transform duration-500">
+<span class="material-symbols-outlined text-primary-container text-4xl group-hover:animate-pulse" style="font-variation-settings: &quot;FILL&quot; 1;">event</span>
+</div>
+<h3 class="font-title-md text-title-md text-charcoal-text mb-4 text-center relative z-10 group-hover:text-primary-container transition-colors">重要日子与心愿</h3>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed text-center relative z-10">
+                        生日、纪念日、礼物清单和小目标都能温柔提醒。
+                    </p>
+</div>
+</div>
+</section>
+<!-- Interactive Expandable Stack Section -->
+<section id="healing" class="mb-section reveal reveal-delay-2 relative z-10">
+<div class="bg-white/40 backdrop-blur-xl rounded-[4rem] p-8 md:p-16 shadow-float group relative overflow-hidden border border-white/50 hover:bg-white/60 transition-colors duration-500">
+<div class="absolute -top-32 -right-32 w-[600px] h-[600px] bg-gradient-to-br from-primary-fixed/30 to-warm-yellow/30 rounded-blob animate-morph opacity-40 z-0"></div>
+<div class="absolute -bottom-32 -left-32 w-[500px] h-[500px] bg-gradient-to-tr from-soft-mint/30 to-secondary-container/30 rounded-blob2 animate-morph opacity-40 z-0" style="animation-delay: 3s;"></div>
+<div class="flex flex-col lg:flex-row gap-16 items-center relative z-10">
+<div class="flex-1 space-y-8 text-center lg:text-left">
+<h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-charcoal-text bg-white/50 inline-block px-6 py-3 rounded-full backdrop-blur-sm">清晰记录，温暖分享</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant text-lg">无论是详尽的账单明细，还是充满心意的日记卡片，每一次互动都能感受到治愈的力量。鼠标悬浮展开查看更多细节。</p>
+<a class="text-primary font-title-md font-bold flex items-center gap-2 hover:gap-4 transition-all mx-auto lg:mx-0 bg-white/80 px-8 py-4 rounded-full shadow-sm hover:shadow-md hover:bg-white" href="#features">
+                    探索更多功能 <span class="material-symbols-outlined">arrow_forward</span>
+</a>
+</div>
+<div class="flex-1 relative h-[500px] w-full flex items-center justify-center group/stack"><div class="absolute z-10 -rotate-[10deg] -translate-x-20 translate-y-8 w-[280px] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white/80 transition-all duration-700 ease-out group-hover/stack:-translate-x-40 group-hover/stack:-rotate-[20deg] group-hover/stack:-translate-y-4">
+<img alt="Daily Records" class="w-full h-auto object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuARhGjvYx6ykxefWk2ZRHBESk0O_-m0PKnQIwzbkwBFvdEt_UekiUTIwSOSRUpgCV3sSWNvXwOabBu2w2VyXfYT8hfvRHUUDJ9gFqBovwgLA67geSQqaXaJhsrmojIjnEfzgGneK1HHlkqlYe8l6zF8MoJIVCIuHqj00ZEqHnu7RBRpoi7gx9QDieFYWVJxQgmHvBbdMrOrq9eay-UX_JjvRVgR_UvuZ-N6XfWWtimq5y-QXFAVw6IzIOElDEcxJnzranzM2cm1x14">
+</div>
+<div class="absolute z-20 rotate-[5deg] -translate-y-8 w-[280px] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white/80 transition-all duration-700 ease-out group-hover/stack:-translate-y-16 group-hover/stack:scale-105">
+<img alt="Statistics" class="w-full h-auto object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAh-6m-rfT0_Im2OCAYW8XGqEDuoAyGaOrlvYmdj4cLxO8fp4bqv7CIhmJ8miDSKDAHqCzwNr8_tvnZgfo29zqlnLhEBBRk997bRM41uXnhg2Lt3oFlNxUiub043gBxszM2wc1vjozAN8ujCLlhCpUmQBlBNhXOw7K8urmzcjVdoYHGKrlkm3EGyQo2sMerMUnoieJG6i5nXWpD1YfnovPOhEfQKUkCFVqmqRe3H_CvY9Iz-0-8cIi0vEhR81_DaVuPwXDaPvByc5k">
+</div>
+<div class="absolute z-30 rotate-[15deg] translate-x-20 translate-y-12 w-[280px] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white transition-all duration-700 ease-out group-hover/stack:translate-x-40 group-hover/stack:rotate-[25deg] group-hover/stack:translate-y-8">
+<img alt="Login Brand" class="w-full h-auto object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXtjH1GzFGB2R1e1PVEkxmsDJ9Fcms46f8lzABQZbja6XpUH8aajhJ1HmyevHEf9zneWEo1HwR8IWKkJv7UnJVa3qAc55ZoRs7MDdMXuFOLr7t7xvOLsrMyQR5baUABkwXg7r25V4CQ0YQanQxHVWhL6kdyCZ5mrOtZsZsdZqPenL_DO_J-43vO0TfUYIKr4kehAvHslwLN2E9u5k9rkzHioYWk0baIioPclavFiIdww7WzKIZd8JQ8J9s4mRdjCAzVAmewyq7MxM">
+</div></div>
+</div>
+</div>
+</section>
+<!-- Download & Support Section -->
+<section id="download" class="bg-gradient-to-r from-primary-fixed/50 to-warm-yellow/40 backdrop-blur-md rounded-[4rem] p-10 md:p-16 shadow-float flex flex-col md:flex-row items-center justify-between gap-12 mb-section reveal relative overflow-hidden border border-white/60">
+<div class="absolute inset-0 bg-white/20 rounded-[4rem]"></div>
+<div class="flex items-center gap-8 flex-col md:flex-row text-center md:text-left w-full md:w-auto relative z-10">
+<div class="w-32 h-32 rounded-blob flex-shrink-0 flex items-center justify-center p-3 relative shadow-lg hover:scale-105 transition-transform duration-300">
+<img alt="绒绒记账下载二维码" class="w-full h-full object-cover rounded-[2rem] mix-blend-multiply" src="assets/download-qr.png">
+</div>
+<div>
+<h3 class="font-title-md text-[28px] text-charcoal-text mb-4 font-bold">绒绒陪伴，温暖生活的每一天</h3>
+<p class="font-body-md text-body-lg text-on-surface-variant bg-white/40 px-6 py-3 rounded-full inline-block backdrop-blur-sm">支持 Android；iOS 版本规划中。<br>数据本地优先，登录后支持云端同步。</p>
+</div>
+</div>
+<div class="relative z-10 flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+<a class="inline-flex items-center justify-center gap-2 bg-[#ffb347] text-white font-title-md text-lg px-8 py-4 rounded-full shadow-md hover:-translate-y-1 hover:scale-105 hover:bg-[#ffb95a] transition-all duration-300" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk">
+<span class="material-symbols-outlined">android</span>
+Android 下载
+</a>
+<a class="inline-flex items-center justify-center gap-2 bg-white/85 text-charcoal-text font-title-md text-lg px-8 py-4 rounded-full shadow-md hover:-translate-y-1 hover:shadow-lg transition-all duration-300 border border-white" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest">
+<svg aria-hidden="true" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+<path d="M12 .5C5.65.5.5 5.65.5 12c0 5.09 3.29 9.39 7.86 10.92.58.1.79-.25.79-.56v-2.16c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.34.96.1-.74.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18A10.9 10.9 0 0 1 12 6.06c.97 0 1.95.13 2.87.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.42-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.13v3.18c0 .31.21.67.8.56A11.52 11.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+</svg>
+Github下载
+</a>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container/60 backdrop-blur-lg dark:bg-surface-container-high/60 full-width py-12 relative z-10 border-t border-white/50">
+<div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop flex flex-col items-center gap-8">
+<div class="flex flex-wrap justify-center gap-x-12 gap-y-6">
+<a class="font-label-md text-body-md text-on-surface-variant dark:text-outline hover:text-primary hover:-translate-y-1 transition-all opacity-90 hover:opacity-100 bg-white/40 px-6 py-2 rounded-full" href="privacy.html">隐私政策</a>
+<a class="font-label-md text-body-md text-on-surface-variant dark:text-outline hover:text-primary hover:-translate-y-1 transition-all opacity-90 hover:opacity-100 bg-white/40 px-6 py-2 rounded-full" href="agreement.html">用户协议</a>
+<a class="font-label-md text-body-md text-on-surface-variant dark:text-outline hover:text-primary hover:-translate-y-1 transition-all opacity-90 hover:opacity-100 bg-white/40 px-6 py-2 rounded-full" href="agreement.html">服务条款</a>
+<a class="font-label-md text-body-md text-on-surface-variant dark:text-outline hover:text-primary hover:-translate-y-1 transition-all opacity-90 hover:opacity-100 bg-white/40 px-6 py-2 rounded-full" href="deletion.html">账号注销与数据删除</a>
+<a class="font-label-md text-body-md text-on-surface-variant dark:text-outline hover:text-primary hover:-translate-y-1 transition-all opacity-90 hover:opacity-100 bg-white/40 px-6 py-2 rounded-full" href="mailto:support@xiaoxing.online">联系支持</a>
+</div>
+<p class="font-label-sm text-body-md text-outline mt-4 text-center">
+                © 2026 绒绒记账软件官方。温暖每一笔，记录每一天。
+            </p>
+</div>
+</footer>
 
-  <main id="top">
-    <section class="hero">
-      <div class="hero-copy">
-        <h1>绒绒记账</h1>
-        <p class="tagline">温暖每一笔，记录每一天</p>
-        <p class="intro">一款温暖治愈的记账与日记应用，轻松记录收支，也收藏生活里的小美好。</p>
-        <div class="actions">
-          <a class="primary" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk">立即下载</a>
-          <a class="secondary" href="#features">查看功能</a>
-        </div>
-        <p class="tip">如果手机下载较慢，可以长按复制下载链接，或换浏览器重新打开本页。</p>
-      </div>
-      <div class="hero-art" aria-hidden="true">
-        <img class="mascot" src="assets/rongrong-mascot.png" alt="">
-        <img class="phone phone-home" src="assets/screen-home.png" alt="">
-        <img class="phone phone-diary" src="assets/screen-diary.png" alt="">
-      </div>
-    </section>
 
-    <section id="features" class="feature-grid">
-      <article>
-        <div class="feature-icon note"></div>
-        <h2>轻松记账</h2>
-        <p>随手记录，分类、账户、预算和统计都保持清晰。</p>
-      </article>
-      <article>
-        <div class="feature-icon chart"></div>
-        <h2>清晰统计</h2>
-        <p>收支趋势、分类占比、月度结余，一眼看懂。</p>
-      </article>
-      <article>
-        <div class="feature-icon diary"></div>
-        <h2>绒绒日记</h2>
-        <p>记录心情与状态，让账本也能留下生活温度。</p>
-      </article>
-      <article>
-        <div class="feature-icon gift"></div>
-        <h2>重要日子与心愿</h2>
-        <p>生日、纪念日、礼物清单和小目标都能温柔提醒。</p>
-      </article>
-    </section>
 
-    <section id="diary" class="story">
-      <div>
-        <h2>清晰掌握每一笔</h2>
-        <p>收支明细、趋势图表、财务状况，一目了然。</p>
-        <div class="mini-card">
-          <img src="assets/screen-home.png" alt="绒绒记账首页截图">
-        </div>
-      </div>
-      <div>
-        <h2>记录心情，分享美好</h2>
-        <p>写下每一天的心情，也可以生成温暖的分享卡片。</p>
-        <div class="mini-card diary-card">
-          <p>6月22日 星期一</p>
-          <strong>今天很倒霉。</strong>
-          <span>治愈</span>
-        </div>
-      </div>
-    </section>
 
-    <section id="wishes" class="download-strip">
-      <img src="assets/rongrong-icon.png" alt="">
-      <div>
-        <h2>绒绒陪伴，温暖生活的每一天</h2>
-        <p>支持 Android；iOS 版本规划中。数据本地优先，登录后支持云端同步。</p>
-      </div>
-      <img class="qr" src="assets/download-qr.png" alt="绒绒记账下载二维码">
-      <a class="store android" id="download" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk">Android 下载</a>
-      <a class="store muted" href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest">备用线路</a>
-    </section>
 
-    <section class="legal">
-      <a href="privacy.html">隐私政策</a>
-      <a href="agreement.html">用户协议</a>
-      <a href="deletion.html">账号注销与数据删除</a>
-      <a href="mailto:support@xiaoxing.online">联系支持</a>
-    </section>
-  </main>
-</body>
-</html>
+
+
+
+</body></html>
