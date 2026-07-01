@@ -126,10 +126,11 @@ import kotlinx.coroutines.delay
 
 private const val SUPPORT_EMAIL = "support@xiaoxing.online"
 
-private fun openSupportEmail(context: android.content.Context) {
+private fun openSupportEmail(context: android.content.Context, content: String = "") {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
         data = Uri.parse("mailto:$SUPPORT_EMAIL")
         putExtra(Intent.EXTRA_SUBJECT, "绒绒记账用户建议")
+        if (content.isNotBlank()) putExtra(Intent.EXTRA_TEXT, content)
     }
     runCatching { context.startActivity(intent) }
         .onFailure { Toast.makeText(context, "没有找到可用的邮箱 App", Toast.LENGTH_SHORT).show() }
@@ -141,7 +142,7 @@ fun InboxScreen(
     busy: Boolean,
     isLocalMode: Boolean,
     onFeedback: (String) -> Unit,
-    onOpenSupport: () -> Unit,
+    onOpenSupport: (String) -> Unit,
     onDownloadUpdate: (AppVersionInfo) -> Unit
 ) {
     val palette = LocalPlushPalette.current
@@ -216,7 +217,7 @@ fun InboxScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 PlushButton("发送建议", Icons.Default.Send, Modifier.fillMaxWidth(), enabled = !busy && feedback.length >= 5) {
-                    if (isLocalMode) onOpenSupport() else onFeedback(feedback)
+                    if (isLocalMode) onOpenSupport(feedback) else onFeedback(feedback)
                     feedback = ""
                 }
             }
@@ -283,7 +284,7 @@ fun MyScreen(
                 busy = state.isBusy,
                 isLocalMode = state.session?.accessToken == null,
                 onFeedback = viewModel::submitFeedback,
-                onOpenSupport = { openSupportEmail(context) },
+                onOpenSupport = { content -> openSupportEmail(context, content) },
                 onDownloadUpdate = onDownloadUpdate
             )
         }
@@ -323,7 +324,7 @@ private fun MyRoot(
     val profile = state.ledger.profile
     val badge = membershipLabel(profile?.role, profile?.membershipTier)
     val monthCount = state.ledger.transactions.count { java.time.YearMonth.from(it.localDateForProfile()) == java.time.YearMonth.now() }
-    val streakDays = state.ledger.transactions.map { it.localDateForProfile() }.distinct().size.coerceAtMost(99)
+    val ledgerDays = state.ledger.transactions.map { it.localDateForProfile() }.distinct().size
     val context = LocalContext.current
     val dailyQuote = rememberDailyQuote()
     val quotes = rememberQuoteCollection()
@@ -398,7 +399,7 @@ private fun MyRoot(
                 Spacer(Modifier.height(8.dp))
                 Surface(shape = RoundedCornerShape(22.dp), color = Color.White.copy(alpha = 0.9f), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ProfileMetric(Icons.Default.CalendarMonth, "连续记账", "$streakDays 天", palette.rose, Modifier.weight(1f))
+                        ProfileMetric(Icons.Default.CalendarMonth, "累计记账", "$ledgerDays 天", palette.rose, Modifier.weight(1f))
                         Box(Modifier.width(1.dp).height(58.dp).background(palette.border))
                         ProfileMetric(Icons.Default.EditNote, "本月已记录", "$monthCount 笔", palette.moss, Modifier.weight(1f))
                     }

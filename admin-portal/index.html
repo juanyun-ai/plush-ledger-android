@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>绒绒记账管理台</title>
+    <meta name="description" content="绒绒记账反馈、消息、版本和远程配置管理后台。" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RongRong Ledger Admin</p>
+        <h1>绒绒记账管理台</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="sessionLabel" class="session-label">未登录</span>
+        <button id="configBtn" class="ghost" type="button">更换连接</button>
+        <button id="refreshBtn" class="ghost" type="button">刷新</button>
+        <button id="logoutBtn" class="ghost danger" type="button">退出</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="setupPanel" class="panel">
+        <div class="panel-heading">
+          <h2>连接 Supabase</h2>
+          <p>默认已配置为绒绒记账项目。只有迁移项目或换 Supabase 时才需要改这里；不要填写 service role。</p>
+        </div>
+        <form id="setupForm" class="grid-form">
+          <label>
+            Supabase URL
+            <input id="supabaseUrl" name="supabaseUrl" placeholder="https://xxxx.supabase.co" required />
+          </label>
+          <label>
+            Supabase anon key
+            <input id="supabaseAnonKey" name="supabaseAnonKey" placeholder="eyJ..." required />
+          </label>
+          <button type="submit">保存连接</button>
+        </form>
+      </section>
+
+      <section id="loginPanel" class="panel">
+        <div class="panel-heading">
+          <h2>管理员登录</h2>
+          <p>后台已连接绒绒记账 Supabase。使用管理员邮箱密码登录后，可以管理反馈、官方消息、版本更新和远程配置。</p>
+        </div>
+        <div class="module-preview" aria-label="后台模块概览">
+          <span>用户反馈</span>
+          <span>官方消息</span>
+          <span>版本更新</span>
+          <span>远程配置</span>
+          <span>快捷入口</span>
+        </div>
+        <form id="loginForm" class="grid-form">
+          <label>
+            邮箱
+            <input id="email" name="email" type="email" autocomplete="email" required />
+          </label>
+          <label>
+            密码
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button type="submit">登录</button>
+        </form>
+      </section>
+
+      <section id="appPanel" class="hidden">
+        <section class="stats-grid">
+          <article class="stat-card">
+            <span>反馈总数</span>
+            <strong id="feedbackCount">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>新反馈</span>
+            <strong id="newFeedbackCount">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>官方消息</span>
+            <strong id="messageCount">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>版本配置</span>
+            <strong id="versionCount">-</strong>
+          </article>
+        </section>
+
+        <nav class="tabs" aria-label="管理模块">
+          <button class="tab active" data-tab="feedback" type="button">用户反馈</button>
+          <button class="tab" data-tab="messages" type="button">官方消息</button>
+          <button class="tab" data-tab="versions" type="button">版本更新</button>
+          <button class="tab" data-tab="config" type="button">远程配置</button>
+          <button class="tab" data-tab="links" type="button">快捷入口</button>
+        </nav>
+
+        <section id="feedbackTab" class="tab-panel">
+          <div class="panel-heading inline">
+            <div>
+              <h2>用户反馈</h2>
+              <p>来自 App 内“建议或问题”。</p>
+            </div>
+            <input id="feedbackSearch" class="search" placeholder="搜索邮箱、内容或状态" />
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>邮箱</th>
+                  <th>内容</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="feedbackRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="messagesTab" class="tab-panel hidden">
+          <div class="split">
+            <form id="messageForm" class="panel form-panel">
+              <h2>发布消息</h2>
+              <input id="messageId" type="hidden" />
+              <label>标题<input id="messageTitle" required maxlength="80" /></label>
+              <label>正文<textarea id="messageBody" required maxlength="2000"></textarea></label>
+              <label>来源标识，可选<input id="messageSourceKey" maxlength="120" placeholder="manual:notice:20260701" /></label>
+              <button type="submit">保存消息</button>
+              <button id="resetMessageForm" class="ghost" type="button">清空</button>
+            </form>
+            <div class="panel">
+              <h2>消息列表</h2>
+              <div id="messageList" class="stack"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="versionsTab" class="tab-panel hidden">
+          <div class="split">
+            <form id="versionForm" class="panel form-panel">
+              <h2>版本配置</h2>
+              <label>versionCode<input id="versionCode" type="number" min="1" required /></label>
+              <label>versionName<input id="versionName" placeholder="1.0.6" required maxlength="32" /></label>
+              <label>APK URL<input id="apkUrl" type="url" required /></label>
+              <label>备用 APK URL<input id="backupApkUrl" type="url" /></label>
+              <label>SHA-256<input id="sha256" required maxlength="64" /></label>
+              <label>文件大小 Byte<input id="fileSizeBytes" type="number" min="1" required /></label>
+              <label>更新说明<textarea id="releaseNotes" maxlength="3000"></textarea></label>
+              <label class="checkbox"><input id="mandatory" type="checkbox" /> 强制更新</label>
+              <label class="checkbox"><input id="active" type="checkbox" checked /> 启用</label>
+              <button type="submit">保存版本</button>
+            </form>
+            <div class="panel">
+              <h2>已有版本</h2>
+              <div id="versionList" class="stack"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="configTab" class="tab-panel hidden">
+          <div class="split">
+            <form id="configForm" class="panel form-panel">
+              <h2>远程配置</h2>
+              <label>配置键<input id="configKey" placeholder="home_notice" required maxlength="80" /></label>
+              <label>JSON 值<textarea id="configValue" required>{}</textarea></label>
+              <label>说明<input id="configDescription" maxlength="200" /></label>
+              <label class="checkbox"><input id="configActive" type="checkbox" checked /> 启用</label>
+              <button type="submit">保存配置</button>
+            </form>
+            <div class="panel">
+              <h2>配置列表</h2>
+              <p class="muted">当前 App 版本还不会读取这些配置；下一版 Android 接入后才会实时生效。</p>
+              <div id="configList" class="stack"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="linksTab" class="tab-panel hidden">
+          <div class="links-grid" id="linksGrid"></div>
+        </section>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

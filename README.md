@@ -1,18 +1,69 @@
 <div align="center">
-  <img src="app/src/main/res/drawable-nodpi/brand_logo_transparent.png" width="320" alt="绒绒记账 Logo" />
+  <img src="docs/assets/readme/promo-brand.png" width="680" alt="绒绒记账品牌宣传图" />
 
   # 绒绒记账
 
-  **一款本地优先、可云同步的 3D 毛绒风 Android 记账应用**
+  **温暖每一笔，记录每一天。**
 
-  ![Version](https://img.shields.io/badge/version-1.0.1-FFA126?style=flat-square)
-  ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=flat-square)
-  ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=flat-square)
-  ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-EA7C73?style=flat-square)
+  一款本地优先、可云同步的 3D 毛绒风 Android 记账与日记应用。
+
+  ![Version](https://img.shields.io/badge/version-1.0.6-FFA126?style=for-the-badge)
+  ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=for-the-badge)
+  ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=for-the-badge)
+  ![License](https://img.shields.io/badge/license-Noncommercial-EA7C73?style=for-the-badge)
+
+  <br>
+
+  <a href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk"><b>下载 Android APK</b></a>
+  ·
+  <a href="https://juanyun-ai.github.io/plush-ledger-android/"><b>产品网页</b></a>
+  ·
+  <a href="docs/privacy.html"><b>隐私政策</b></a>
 </div>
 
 > [!IMPORTANT]
 > 本项目源码公开用于学习、研究和个人非商业用途。禁止将本项目、修改版本或衍生作品用于商业用途。详见 [LICENSE](LICENSE)。
+
+## 产品预览
+
+<p align="center">
+  <img src="docs/assets/readme/promo-hero.png" width="360" alt="绒绒记账主视觉" />
+  <img src="docs/assets/readme/mascot-colors.png" width="360" alt="绒绒多彩配色" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/readme/screen-home-pink.png" width="210" alt="绒绒记账首页" />
+  <img src="docs/assets/readme/screen-bills.png" width="210" alt="账单页面" />
+  <img src="docs/assets/readme/screen-stats.png" width="210" alt="统计页面" />
+  <img src="docs/assets/readme/screen-profile.png" width="210" alt="我的页面" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/readme/category-traffic.png" width="360" alt="交通子分类选择" />
+</p>
+
+## 项目亮点
+
+- 3D 毛绒风视觉：暖色、圆润、柔软，适合长期日常使用。
+- 本地优先：离线也能记账，登录后再同步到云端。
+- 记账 + 日记 + 重要日子：不只是流水账，也能记录生活里的小事。
+- AI 智能记账：自然语言输入，经用户确认后才写入账本。
+- 隐私优先：不接广告 SDK，不做第三方埋点，不在日志里写账目明细。
+
+## 当前状态
+
+- Android App 是当前完整版本，最新版本为 **1.0.6**。
+- 微信小程序已上线，最新版本为 **1.4.7**；由于个人主体小程序类目和隐私合规限制，小程序版收敛了 AI 智能记账、生活日历、资料上传、手机绑定等入口。
+- 两端共用“本地优先、可选云同步、用户确认后入账”的产品原则，但功能页面并不完全一致；Android 版保留更完整的 AI、日记、生活日历和应用内更新体验。
+- 项目从 2026-06-06 开始制作，前三到五天完成基础记账产品，随后围绕真实使用、设计稿、下载更新、导入导出、云同步、合规和小程序提审持续迭代约三周。
+- 2026-06-24 完成 `xiaoxing.online` 相关备案和产品官网准备；2026-06-28 至 2026-06-29 完成小程序提审整改与上线收敛。
+
+## 官网与下载
+
+- 稳定 HTTPS 页面：[privacy.xiaoxing.online](https://privacy.xiaoxing.online/)
+- 管理后台：[admin.xiaoxing.online](https://admin.xiaoxing.online/)，默认连接绒绒记账 Supabase 项目，登录管理员账号后可管理反馈、官方消息、版本和远程配置。
+- 最新 APK：[rongrong-ledger-latest-debug.apk](https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk)
+- 国内访问长期方案：优先用 Cloudflare Pages 或 Vercel 避开腾讯云接入备案阻塞；如后续需要大陆加速，再考虑腾讯云 EdgeOne 和接入备案。
 
 ## 功能
 
@@ -85,9 +136,53 @@ app/build/outputs/apk/debug/app-debug.apk
 
 在把二级分类发布给已登录用户前，需要先把 [category hierarchy migration](supabase/migrations/20260620034509_category_hierarchy.sql) 应用到 Supabase 项目。`ai-ledger-parse` Edge Function 也已随仓库提供，但只有配置好服务端模型 Secret 后才会被启用；未配置时应用会自动使用离线规则，不会中断记账。
 
+## 维护边界
+
+- 日常维护主要关注四件事：Android APK 发布、Supabase 后端配置、小程序提审版本、产品官网 HTTPS/下载链接。
+- Android 发布必须保持同一个 `applicationId` 和 release 签名；应用内更新依赖 `app_versions` 表中的版本号、下载地址、备用地址、文件大小和 SHA-256。
+- Supabase 的 `service_role`、AI 模型 Key、微信小程序 AppSecret 只能放在服务端 Secrets，不能写入仓库、APK、小程序包或截图。
+- 小程序上架版本要按微信审核要求收敛功能描述；Android README 和官网可以介绍 Android 完整功能，但小程序材料要以当前真实可用范围为准。
+- 官网是静态前端，适合 GitHub Pages、EdgeOne Pages、Cloudflare Pages、Netlify 等静态托管；不需要 Java 后端。
+- 管理后台位于 `admin-portal/`，推荐部署到 `admin.xiaoxing.online`；部署步骤见 [管理后台与 EdgeOne 部署](docs/管理后台与EdgeOne部署.md)。
+
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载由 Android 系统下载服务负责，应用读取真实字节和进度；主线路失败后会自动重试并切换备用线路，所有线路不可用时可交给系统浏览器下载。安装前必须通过 SHA-256 校验，校验失败不会进入安装流程。GitHub Release 与 Supabase Storage 互为主备，发布时按实测网络表现设置主线路。
+
+### v1.0.6
+
+1. 分类和图标更新：买菜、咖啡、早餐、晚餐、飞机、轮渡和生日礼物换成新版毛绒风图标。
+2. 餐饮分类调整为早餐、午餐、晚餐和咖啡；交通新增飞机和轮渡；日常消费并入买菜；人情入口改为生日礼物。
+3. “我的”页把“连续记账”改为“累计记账”，按真实记账日期数展示；货币单位选择恢复国旗显示。
+4. 本地模式反馈邮件会自动带入正文，并给 `xiaoxing.online` 根域名补齐 MX 记录，修复 `support@xiaoxing.online` 的 No MX 退信。
+
+### v1.0.5
+
+1. AI 软件订阅分类图标换成新版毛绒风图标。
+2. 绒绒日记首卡文案、编辑弹窗和社交分享卡片按新设计重新排版。
+3. QQ 登录和绑定图标改为矢量企鹅，避免出现剪贴小方块。
+4. 主题选择页继续优化毛绒双列布局，并新增产品下载页作为下载兜底。
+
+### v1.0.4
+
+1. 预算管理支持剩余预算显示为负数，并展示超出预算比例。
+2. 学习工作新增 AI 软件订阅分类，AI 识别也会优先匹配常见 AI 订阅支出。
+3. 绒绒日记支持近期日记左滑删除，状态可选择不设置，清空按钮显示更稳定。
+4. 日记首页卡片和社交分享卡片重新排版，二维码保持真实可扫。
+
+### v1.0.3
+
+1. AI 记账暂存后会提示并自动关闭弹窗，同时新增清空输入。
+2. 生活日历增加节气、休班角标、周末蓝色日期、今日按钮和法定假期倒计时。
+3. 纪念日拆分为独立专区，历史日记改为弹窗编辑，日记支持暂存和一键清空。
+4. 状态选择和日记分享卡片继续按新设计优化，二维码保持真实可扫。
+
+### v1.0.2
+
+1. AI 记账支持一句话识别多笔账，并可暂存输入草稿。
+2. 生活日历增加节日农历、选中日期、全年重要日子和备注展开。
+3. 用户生日支持阳历/农历互换，日记支持状态、编辑和真实分享二维码。
+4. 云账号前台自动轻量同步，减少多设备等待。
 
 ### v1.0.1
 

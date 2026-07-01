@@ -445,12 +445,12 @@ class LedgerRepository(
         val day5 = month.atDay((today.dayOfMonth - 4).coerceAtLeast(1))
 
         val rows = listOf(
-            demoTransaction(userId, book.id, "expense", 3_200, category["正餐"]?.id, cash.id, "今天 · 12:30", today.atTime(12, 30), now),
+            demoTransaction(userId, book.id, "expense", 3_200, category["午餐"]?.id, cash.id, "今天 · 12:30", today.atTime(12, 30), now),
             demoTransaction(userId, book.id, "expense", 1_850, category["公交地铁"]?.id, cash.id, "今天 · 08:15", today.atTime(8, 15), now),
             demoTransaction(userId, book.id, "expense", 16_800, category["日用百货"]?.id, accounts["支付宝"]?.id ?: cash.id, "昨天 · 20:45", yesterday.atTime(20, 45), now),
             demoTransaction(userId, book.id, "income", 120_000, category["兼职"]?.id ?: category["工资"]?.id, accounts["银行卡"]?.id ?: cash.id, "昨天 · 18:30", yesterday.atTime(18, 30), now),
             demoTransaction(userId, book.id, "expense", 8_700, category["书籍资料"]?.id, cash.id, "买书 · 设计心理学", day3.atTime(10, 30), now),
-            demoTransaction(userId, book.id, "expense", 10_000, category["生活用品"]?.id, accounts["微信"]?.id ?: cash.id, "生活用品 · 超市", day3.atTime(12, 20), now),
+            demoTransaction(userId, book.id, "expense", 10_000, category["买菜"]?.id, accounts["微信"]?.id ?: cash.id, "买菜 · 超市", day3.atTime(12, 20), now),
             demoTransaction(userId, book.id, "expense", 26_000, category["影视会员"]?.id, cash.id, "电影 · 周末放松", day4.atTime(18, 30), now),
             demoTransaction(userId, book.id, "expense", 59_100, category["水电房租"]?.id, accounts["银行卡"]?.id ?: cash.id, "房租 · 月度", day5.atTime(9, 0), now),
             demoTransaction(userId, book.id, "income", 248_000, category["工资"]?.id, accounts["银行卡"]?.id ?: cash.id, "6月工资", day5.atTime(9, 30), now)
@@ -905,34 +905,40 @@ class LedgerRepository(
         val createdAt = now()
         return listOf(
             OfficialMessage(
+                id = "release_1_0_6_builtin",
+                title = "绒绒记账 v1.0.6 更新",
+                body = "1. 分类图标更新：买菜、咖啡、早餐、晚餐、飞机、轮渡和生日礼物换成新版毛绒风图标。\n2. 餐饮分类调整为早餐、午餐、晚餐和咖啡，交通新增飞机和轮渡，日常新增买菜，人情社交新增生日礼物。\n3. 我的页“连续记账”改为“累计记账”，按真实记账日期数展示；货币单位选择恢复国旗显示。\n4. 本地模式反馈会自动带入邮件正文，并补齐 support@xiaoxing.online 的根域名 MX 配置。",
+                createdAt = createdAt
+            ),
+            OfficialMessage(
                 id = "release_1_0_5_builtin",
                 title = "绒绒记账 v1.0.5 更新",
                 body = "1. AI 软件订阅分类图标换成新版毛绒风图标。\n2. 绒绒日记首卡文案、编辑弹窗和社交分享卡片按新设计重新排版。\n3. QQ 登录和绑定图标改为矢量企鹅，避免出现剪贴小方块。\n4. 主题选择页继续优化毛绒双列布局，并新增产品下载页作为下载兜底。",
-                createdAt = createdAt
+                createdAt = createdAt - 1
             ),
             OfficialMessage(
                 id = "release_1_0_4_builtin",
                 title = "绒绒记账 v1.0.4 更新",
                 body = "1. 预算管理支持剩余预算显示为负数，并展示超出预算比例。\n2. 学习工作新增 AI 软件订阅分类，AI 识别也会优先匹配常见 AI 订阅支出。\n3. 绒绒日记支持近期日记左滑删除，状态可选择不设置，清空按钮显示更稳定。\n4. 日记首页卡片和社交分享卡片重新排版，二维码保持真实可扫。",
-                createdAt = createdAt - 1
+                createdAt = createdAt - 2
             ),
             OfficialMessage(
                 id = "release_1_0_3_builtin",
                 title = "绒绒记账 v1.0.3 更新",
                 body = "1. AI 记账暂存后会提示并自动关闭弹窗，同时新增清空输入。\n2. 生活日历增加节气、休班角标、周末蓝色日期、今日按钮和法定假期倒计时。\n3. 纪念日拆分为独立专区，历史日记改为弹窗编辑，日记支持暂存和一键清空。\n4. 状态选择和日记分享卡片继续按新设计优化，二维码保持真实可扫。",
-                createdAt = createdAt - 2
+                createdAt = createdAt - 3
             ),
             OfficialMessage(
                 id = "release_1_0_2_builtin",
                 title = "绒绒记账 v1.0.2 更新",
                 body = "1. AI 记账支持一句话识别多笔账，并可暂存输入草稿。\n2. 生活日历增加节日农历、选中日期、全年重要日子和备注展开。\n3. 用户生日支持阳历/农历互换，日记支持状态、编辑和真实分享二维码。\n4. 云账号前台自动轻量同步，减少多设备等待。",
-                createdAt = createdAt - 3
+                createdAt = createdAt - 4
             ),
             OfficialMessage(
                 id = "welcome",
                 title = "欢迎使用绒绒记账",
                 body = "邮箱账号会同步到云端；本地模式只保存在当前设备。请定期确认同步状态。",
-                createdAt = createdAt - 4
+                createdAt = createdAt - 5
             )
         )
     }

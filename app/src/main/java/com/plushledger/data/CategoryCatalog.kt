@@ -33,9 +33,10 @@ object CategoryCatalog {
         CategorySpec("expense.other", "其他", EXPENSE, "other", "#B9B3AA"),
 
         CategorySpec("expense.food.breakfast", "早餐", EXPENSE, "breakfast", "#F7A54A", "expense.food"),
-        CategorySpec("expense.food.meal", "正餐", EXPENSE, "meal", "#F4B86A", "expense.food"),
+        CategorySpec("expense.food.meal", "午餐", EXPENSE, "lunch", "#F4B86A", "expense.food"),
+        CategorySpec("expense.food.dinner", "晚餐", EXPENSE, "dinner", "#EFA46E", "expense.food"),
         CategorySpec("expense.food.delivery", "外卖", EXPENSE, "delivery", "#F29A74", "expense.food"),
-        CategorySpec("expense.food.tea", "奶茶咖啡", EXPENSE, "tea", "#C98A62", "expense.food"),
+        CategorySpec("expense.food.tea", "咖啡", EXPENSE, "coffee", "#C98A62", "expense.food"),
         CategorySpec("expense.food.snacks", "零食", EXPENSE, "snacks", "#ECA75C", "expense.food"),
         CategorySpec("expense.food.gathering", "聚餐", EXPENSE, "gathering", "#D98972", "expense.food"),
 
@@ -43,6 +44,8 @@ object CategoryCatalog {
         CategorySpec("expense.transport.metro", "公交地铁", EXPENSE, "metro", "#6F9ED6", "expense.transport"),
         CategorySpec("expense.transport.taxi", "打车", EXPENSE, "taxi", "#5F91D0", "expense.transport"),
         CategorySpec("expense.transport.rail", "火车高铁", EXPENSE, "rail", "#86B6E8", "expense.transport"),
+        CategorySpec("expense.transport.airplane", "飞机", EXPENSE, "airplane", "#8CBCEB", "expense.transport"),
+        CategorySpec("expense.transport.ferry", "轮渡", EXPENSE, "ferry", "#6EA9E6", "expense.transport"),
         CategorySpec("expense.transport.bikepass", "单车月卡", EXPENSE, "bike_pass", "#79B9DB", "expense.transport"),
 
         CategorySpec("expense.shopping.daily", "日用百货", EXPENSE, "basket", "#F48FB1", "expense.shopping"),
@@ -50,7 +53,7 @@ object CategoryCatalog {
         CategorySpec("expense.shopping.digital", "数码配件", EXPENSE, "digital", "#9E98D8", "expense.shopping"),
         CategorySpec("expense.shopping.beauty", "美妆个护", EXPENSE, "beauty", "#DD8CB3", "expense.shopping"),
 
-        CategorySpec("expense.daily.household", "生活用品", EXPENSE, "household", "#8CC995", "expense.daily"),
+        CategorySpec("expense.daily.household", "买菜", EXPENSE, "groceries", "#8CC995", "expense.daily"),
         CategorySpec("expense.daily.delivery", "快递物流", EXPENSE, "parcel", "#79B987", "expense.daily"),
         CategorySpec("expense.daily.phone", "话费网络", EXPENSE, "phone", "#6FB189", "expense.daily"),
         CategorySpec("expense.daily.utilities", "水电房租", EXPENSE, "utilities", "#69A98A", "expense.daily"),
@@ -60,7 +63,7 @@ object CategoryCatalog {
         CategorySpec("expense.entertainment.travel", "旅游出行", EXPENSE, "travel", "#8D9DE0", "expense.entertainment"),
         CategorySpec("expense.entertainment.hobby", "兴趣爱好", EXPENSE, "hobby", "#B091E5", "expense.entertainment"),
 
-        CategorySpec("expense.social.redpacket", "人情红包", EXPENSE, "redpacket", "#F19A78", "expense.social"),
+        CategorySpec("expense.social.redpacket", "生日礼物", EXPENSE, "birthday_gift", "#F19A78", "expense.social"),
         CategorySpec("expense.social.gift", "请客送礼", EXPENSE, "gift", "#E98770", "expense.social"),
         CategorySpec("expense.social.date", "恋爱约会", EXPENSE, "date", "#DE837E", "expense.social"),
         CategorySpec("expense.social.activity", "社交活动", EXPENSE, "social_activity", "#E89482", "expense.social"),
@@ -128,6 +131,10 @@ object CategoryCatalog {
     }
 
     fun legacyNamesFor(key: String): Set<String> = when (key) {
+        "expense.food.meal" -> setOf("正餐")
+        "expense.food.tea" -> setOf("奶茶咖啡", "奶茶")
+        "expense.daily.household" -> setOf("日常消费", "生活用品")
+        "expense.social.redpacket" -> setOf("人情", "人情红包")
         "expense.other.unknown" -> setOf("无法归类")
         else -> emptySet()
     }

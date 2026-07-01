@@ -199,9 +199,10 @@ fun CategoryArt(name: String?, size: Dp = 48.dp) {
 private fun categoryArtRes(name: String?): Int = when (name?.trim()) {
     "餐饮", "美食", "饮食", "吃喝", "餐费" -> R.drawable.root_food
     "早餐" -> R.drawable.sub_breakfast
-    "正餐" -> R.drawable.sub_meal
+    "午餐", "正餐" -> R.drawable.sub_meal
+    "晚餐" -> R.drawable.sub_dinner
     "外卖" -> R.drawable.sub_delivery
-    "奶茶咖啡", "奶茶", "咖啡" -> R.drawable.category_milktea
+    "奶茶咖啡", "奶茶", "咖啡" -> R.drawable.sub_coffee
     "零食" -> R.drawable.sub_snacks
     "聚餐" -> R.drawable.sub_gathering
     "交通" -> R.drawable.root_transport
@@ -209,13 +210,16 @@ private fun categoryArtRes(name: String?): Int = when (name?.trim()) {
     "公交地铁" -> R.drawable.sub_metro
     "打车" -> R.drawable.sub_taxi
     "火车高铁" -> R.drawable.sub_rail
+    "飞机" -> R.drawable.sub_airplane
+    "轮渡" -> R.drawable.sub_ferry
     "单车月卡" -> R.drawable.sub_bike_pass
     "购物" -> R.drawable.root_shopping
     "日用百货" -> R.drawable.sub_basket
     "服饰鞋包" -> R.drawable.sub_clothes
     "数码配件" -> R.drawable.sub_digital
     "美妆个护" -> R.drawable.sub_beauty
-    "日常", "日常消费", "日用消费", "生活费" -> R.drawable.category_daily_consume
+    "日常" -> R.drawable.category_daily_consume
+    "日常消费", "日用消费", "生活费", "买菜" -> R.drawable.sub_groceries
     "生活用品" -> R.drawable.sub_household
     "快递物流" -> R.drawable.sub_parcel
     "话费网络" -> R.drawable.sub_phone
@@ -225,8 +229,8 @@ private fun categoryArtRes(name: String?): Int = when (name?.trim()) {
     "影视会员" -> R.drawable.sub_media
     "旅游出行" -> R.drawable.sub_travel
     "兴趣爱好" -> R.drawable.sub_hobby
-    "人情社交", "人情", "人情往来", "社交" -> R.drawable.category_social
-    "人情红包" -> R.drawable.sub_redpacket
+    "人情社交", "人情往来", "社交" -> R.drawable.category_social
+    "人情", "人情红包", "生日礼物" -> R.drawable.sub_birthday_gift
     "请客送礼" -> R.drawable.sub_gift
     "恋爱约会" -> R.drawable.sub_date
     "社交活动" -> R.drawable.sub_social_activity

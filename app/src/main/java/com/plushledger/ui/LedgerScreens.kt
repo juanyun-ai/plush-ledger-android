@@ -63,9 +63,12 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.DirectionsBoat
 import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.LocalGroceryStore
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Movie
@@ -1765,21 +1768,25 @@ private fun rootCategoryArtRes(name: String?): Int? = when (name) {
 
 private fun subcategoryArtRes(name: String?): Int? = when (name) {
     "早餐" -> R.drawable.sub_breakfast
-    "正餐" -> R.drawable.sub_meal
+    "午餐", "正餐" -> R.drawable.sub_meal
+    "晚餐" -> R.drawable.sub_dinner
     "外卖" -> R.drawable.sub_delivery
-    "奶茶咖啡", "奶茶" -> R.drawable.category_milktea
+    "奶茶咖啡", "奶茶", "咖啡" -> R.drawable.sub_coffee
     "零食" -> R.drawable.sub_snacks
     "聚餐" -> R.drawable.sub_gathering
     "通勤" -> R.drawable.sub_commute
     "公交地铁" -> R.drawable.sub_metro
     "打车" -> R.drawable.sub_taxi
     "火车高铁" -> R.drawable.sub_rail
+    "飞机" -> R.drawable.sub_airplane
+    "轮渡" -> R.drawable.sub_ferry
     "单车月卡" -> R.drawable.sub_bike_pass
     "日用百货" -> R.drawable.sub_basket
     "服饰鞋包" -> R.drawable.sub_clothes
     "数码配件" -> R.drawable.sub_digital
     "美妆个护" -> R.drawable.sub_beauty
     "生活用品" -> R.drawable.sub_household
+    "买菜" -> R.drawable.sub_groceries
     "快递物流" -> R.drawable.sub_parcel
     "话费网络" -> R.drawable.sub_phone
     "水电房租" -> R.drawable.sub_utilities
@@ -1787,7 +1794,7 @@ private fun subcategoryArtRes(name: String?): Int? = when (name) {
     "影视会员" -> R.drawable.sub_media
     "旅游出行" -> R.drawable.sub_travel
     "兴趣爱好" -> R.drawable.sub_hobby
-    "人情红包" -> R.drawable.sub_redpacket
+    "人情红包", "人情", "生日礼物" -> R.drawable.sub_birthday_gift
     "请客送礼" -> R.drawable.sub_gift
     "恋爱约会" -> R.drawable.sub_date
     "社交活动" -> R.drawable.sub_social_activity
@@ -1804,8 +1811,7 @@ private fun subcategoryArtRes(name: String?): Int? = when (name) {
     "运动健身" -> R.drawable.sub_fitness
     "临时支出" -> R.drawable.sub_temporary
     "杂项备用" -> R.drawable.sub_miscellaneous
-    "日常消费" -> R.drawable.category_daily_consume
-    "人情" -> R.drawable.category_social
+    "日常消费" -> R.drawable.sub_groceries
     "学习" -> R.drawable.category_study
     "医疗" -> R.drawable.category_medical
     "未分类" -> R.drawable.sub_unknown
@@ -2745,13 +2751,16 @@ private fun CategoryBadge(category: CategoryEntity?, fallback: Color, size: andr
 private fun categoryIcon(name: String?): androidx.compose.ui.graphics.vector.ImageVector = when (name) {
     "餐饮" -> Icons.Default.Fastfood
     "交通" -> Icons.Default.DirectionsBus
+    "飞机" -> Icons.Default.Flight
+    "轮渡" -> Icons.Default.DirectionsBoat
+    "买菜" -> Icons.Default.LocalGroceryStore
     "购物" -> Icons.Default.ShoppingBag
     "住房" -> Icons.Default.Home
     "娱乐" -> Icons.Default.Movie
     "医疗" -> Icons.Default.LocalHospital
     "学习" -> Icons.Default.MenuBook
     "工资", "兼职" -> Icons.Default.Work
-    "礼金", "人情" -> Icons.Default.Redeem
+    "礼金", "人情", "生日礼物" -> Icons.Default.Redeem
     "理财" -> Icons.Default.Payments
     else -> Icons.Default.MoreHoriz
 }

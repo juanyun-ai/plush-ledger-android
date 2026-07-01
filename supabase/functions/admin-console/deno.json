@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "serve": "supabase functions serve admin-console --env-file ../../.env.local"
+  }
+}

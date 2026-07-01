@@ -192,26 +192,37 @@ fun ReminderDialog(enabled: Boolean, onDismiss: () -> Unit, onChoose: (Boolean) 
 @Composable
 fun CurrencyDialog(current: String, onDismiss: () -> Unit, onChoose: (String) -> Unit) {
     val palette = LocalPlushPalette.current
-    val options = listOf("人民币  ¥", "美元  $", "欧元  €", "日元  ¥", "英镑  £", "新加坡币  S$")
+    val options = listOf(
+        CurrencyOption("🇨🇳", "人民币  ¥"),
+        CurrencyOption("🇺🇸", "美元  $"),
+        CurrencyOption("🇪🇺", "欧元  €"),
+        CurrencyOption("🇯🇵", "日元  ¥"),
+        CurrencyOption("🇬🇧", "英镑  £"),
+        CurrencyOption("🇸🇬", "新加坡币  S$")
+    )
     PlushModalFrame("货币单位", onDismiss, showClose = true) {
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 470.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(options) { option ->
+                val selected = current == option.label
                 Surface(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { onChoose(option) },
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { onChoose(option.label) },
                     shape = RoundedCornerShape(20.dp),
-                    color = if (current == option) Color(0xFFFFF1DD) else Color.White,
-                    border = BorderStroke(1.dp, if (current == option) palette.rose else palette.border)
+                    color = if (selected) Color(0xFFFFF1DD) else Color.White,
+                    border = BorderStroke(1.dp, if (selected) palette.rose else palette.border)
                 ) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (current == option) Icons.Default.CheckCircle else Icons.Default.CurrencyExchange, null, tint = if (current == option) palette.rose else palette.muted)
+                        Text(option.flag, fontSize = 24.sp)
                         Spacer(Modifier.width(12.dp))
-                        Text(option, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold)
+                        Text(option.label, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Bold)
+                        Icon(if (selected) Icons.Default.CheckCircle else Icons.Default.CurrencyExchange, null, tint = if (selected) palette.rose else palette.muted)
                     }
                 }
             }
         }
     }
 }
+
+private data class CurrencyOption(val flag: String, val label: String)
 
 @Composable
 fun DownloadLineDialog(current: String, onDismiss: () -> Unit, onChoose: (String) -> Unit) {
