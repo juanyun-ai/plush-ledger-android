@@ -13,3 +13,4 @@ keystore.properties
 secrets.properties
 supabase/.temp/
 .wrangler/
+edgeone-packages/
