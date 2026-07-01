@@ -12,3 +12,4 @@ captures/
 keystore.properties
 secrets.properties
 supabase/.temp/
+.wrangler/
