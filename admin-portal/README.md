@@ -4,8 +4,9 @@
 
 ## 能做什么
 
-- 查看用户在 App 内提交的反馈建议。
+- 查看用户在 App 和小程序内提交的反馈建议。
 - 修改反馈状态：新反馈、处理中、已处理、忽略。
+- 查看真实运营总览：App 账号、小程序用户、云端账目、小程序快照、反馈状态和粗留存。
 - 发布、编辑、删除官方消息。
 - 创建或更新 Android 版本更新配置。
 - 管理预留的远程配置项，供后续 App 版本读取。
@@ -15,8 +16,9 @@
 
 当前 Supabase 侧已经完成：
 
-- `app_config` 表已创建。
-- `admin-console` Edge Function 已部署并为 ACTIVE，当前版本为 v3。
+- `app_config` 和 `mini_feedback` 表已创建。
+- `admin-console` Edge Function 已部署并为 ACTIVE，当前版本为 v6。
+- `wechat-mini-ledger` Edge Function 已部署并为 ACTIVE，当前版本为 v6，支持小程序反馈提交和远程官方消息。
 - 未登录访问会返回 401，非允许浏览器来源会返回 403。
 
 EdgeOne Pages 侧：
@@ -37,7 +39,8 @@ EdgeOne Pages 侧：
 
 ## 安全边界
 
-- 前端只使用 Supabase anon key 和用户登录 token。
+- 前端只使用 Supabase publishable/anon key 和用户登录 token。
 - `SUPABASE_SERVICE_ROLE_KEY` 只放在 Supabase Edge Function Secrets。
 - 管理函数会校验当前登录用户是否为管理员。
 - 远程配置表 `app_config` 只适合放非敏感公开配置，不要放密钥。
+- 小程序反馈走 `mini_feedback` 表，用户账本快照仍保存在 `mini_ledger_snapshots`，两类数据不要混用。

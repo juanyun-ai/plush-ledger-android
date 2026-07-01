@@ -10,7 +10,7 @@ const state = {
   settings: loadSettings(),
   session: loadJson(SESSION_KEY, null),
   dashboard: null,
-  activeTab: "feedback",
+  activeTab: "overview",
 };
 
 const els = {
@@ -29,6 +29,14 @@ const els = {
   messageForm: byId("messageForm"),
   versionForm: byId("versionForm"),
   configForm: byId("configForm"),
+  kpiGrid: byId("kpiGrid"),
+  supportNotice: byId("supportNotice"),
+  refreshMeta: byId("refreshMeta"),
+  signupChart: byId("signupChart"),
+  activeChart: byId("activeChart"),
+  transactionChart: byId("transactionChart"),
+  feedbackStatusChart: byId("feedbackStatusChart"),
+  retentionRows: byId("retentionRows"),
 };
 
 const links = [
@@ -155,25 +163,60 @@ async function loadDashboard() {
 function renderDashboard() {
   const data = state.dashboard || {};
   const feedback = data.feedback || [];
-  byId("feedbackCount").textContent = feedback.length;
-  byId("newFeedbackCount").textContent = feedback.filter((item) => item.status === "new").length;
-  byId("messageCount").textContent = (data.messages || []).length;
-  byId("versionCount").textContent = (data.versions || []).length;
+  renderOverview();
   renderFeedback();
   renderMessages();
   renderVersions();
   renderConfig();
 }
 
+function renderOverview() {
+  const analytics = state.dashboard?.analytics || {};
+  const summary = analytics.summary || {};
+  const support = analytics.support_email || {};
+  els.refreshMeta.textContent = analytics.refreshed_at
+    ? `上次刷新：${formatTime(analytics.refreshed_at)}。刷新按钮会重新读取 Supabase 数据库，不会读取邮箱收件箱。`
+    : "等待刷新数据。";
+  els.supportNotice.innerHTML = `
+    <strong>support 邮箱说明</strong>
+    <span>${escapeHtml(support.address || "support@xiaoxing.online")} 当前走 ${escapeHtml(support.source || "邮箱服务")}，没有接入 feedback 表。QQ 邮件发送成功只代表邮件进邮箱，不代表进入后台反馈列表。</span>
+  `;
+
+  const cards = [
+    ["已知用户", summary.total_known_users, "App 档案 + 小程序用户，可能有重复"],
+    ["App 账号", summary.app_profiles, `${summary.auth_users || 0} 个 Auth 用户`],
+    ["小程序用户", summary.mini_users, "mini_users 表"],
+    ["App 近 7 日活跃", summary.app_active_7d, "按账目更新时间估算"],
+    ["小程序近 7 日活跃", summary.mini_active_7d, "按 session 使用时间估算"],
+    ["云端账目", summary.transactions, `支出 ${formatMoney(summary.expense_minor)} / 收入 ${formatMoney(summary.income_minor)}`],
+    ["新反馈", summary.feedback_new, `${summary.feedback_total || 0} 条反馈 · App ${summary.app_feedback_total || 0} / 小程序 ${summary.mini_feedback_total || 0}`],
+    ["最新版本", summary.latest_version_name || "-", `code ${summary.latest_version_code || "-"} · ${summary.latest_version_size_mb || 0}MB`],
+  ];
+  els.kpiGrid.innerHTML = cards.map(([label, value, desc]) => `
+    <article class="kpi-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value ?? "-")}</strong>
+      <small>${escapeHtml(desc || "")}</small>
+    </article>
+  `).join("");
+
+  renderStackedBars(els.signupChart, analytics.charts?.signups_by_day || [], ["App", "小程序"]);
+  renderStackedBars(els.activeChart, analytics.charts?.active_by_day || [], ["App 账目", "小程序"]);
+  renderSingleBars(els.transactionChart, analytics.charts?.transactions_by_day || []);
+  renderStatusBars(els.feedbackStatusChart, analytics.charts?.feedback_by_status || []);
+  renderRetention(analytics.charts?.retention_cohorts || []);
+}
+
 function renderFeedback() {
   const keyword = els.feedbackSearch.value.trim().toLowerCase();
   const rows = (state.dashboard?.feedback || []).filter((item) => {
-    const haystack = `${item.email || ""} ${item.content || ""} ${item.status || ""}`.toLowerCase();
+    const haystack = `${item.source_label || ""} ${item.email || ""} ${item.content || ""} ${item.status || ""}`.toLowerCase();
     return !keyword || haystack.includes(keyword);
   });
   els.feedbackRows.innerHTML = rows.map((item) => `
     <tr>
       <td>${formatTime(item.created_at)}</td>
+      <td><span class="source-tag">${escapeHtml(item.source_label || "App")}</span></td>
       <td>${escapeHtml(item.email || "-")}</td>
       <td class="content-cell">${escapeHtml(item.content || "")}</td>
       <td><span class="status">${statusLabel(item.status)}</span></td>
@@ -183,7 +226,7 @@ function renderFeedback() {
         </select>
       </td>
     </tr>
-  `).join("") || `<tr><td colspan="5">暂无反馈</td></tr>`;
+  `).join("") || `<tr><td colspan="6">暂无反馈</td></tr>`;
   document.querySelectorAll("[data-feedback-status]").forEach((select) => {
     select.addEventListener("change", async () => {
       await adminAction("feedback.updateStatus", { id: select.dataset.feedbackStatus, status: select.value });
@@ -374,6 +417,52 @@ function renderLinks() {
   `).join("");
 }
 
+function renderStackedBars(target, rows, fields) {
+  const max = Math.max(1, ...rows.map((row) => fields.reduce((sum, field) => sum + Number(row[field] || 0), 0)));
+  target.innerHTML = rows.map((row) => {
+    const total = fields.reduce((sum, field) => sum + Number(row[field] || 0), 0);
+    const segments = fields.map((field, index) => {
+      const value = Number(row[field] || 0);
+      return `<span class="bar-segment series-${index}" style="height:${Math.max(4, value / max * 100)}%" title="${escapeHtml(field)}：${value}"></span>`;
+    }).join("");
+    return `<div class="bar-column"><div class="bar-stack">${segments}</div><small>${escapeHtml(row.date)}</small><b>${total}</b></div>`;
+  }).join("") || `<p class="muted">暂无数据</p>`;
+}
+
+function renderSingleBars(target, rows) {
+  const max = Math.max(1, ...rows.map((row) => Number(row.value || 0)));
+  target.innerHTML = rows.map((row) => {
+    const value = Number(row.value || 0);
+    return `<div class="bar-column"><div class="bar-stack"><span class="bar-segment series-0" style="height:${Math.max(4, value / max * 100)}%" title="${value}"></span></div><small>${escapeHtml(row.date)}</small><b>${value}</b></div>`;
+  }).join("") || `<p class="muted">暂无数据</p>`;
+}
+
+function renderStatusBars(target, rows) {
+  const max = Math.max(1, ...rows.map((row) => Number(row.value || 0)));
+  target.innerHTML = rows.map((row) => {
+    const value = Number(row.value || 0);
+    return `
+      <div class="status-row">
+        <span>${statusLabel(row.status)}</span>
+        <div class="status-meter"><i style="width:${value / max * 100}%"></i></div>
+        <strong>${value}</strong>
+      </div>
+    `;
+  }).join("") || `<p class="muted">暂无数据</p>`;
+}
+
+function renderRetention(rows) {
+  els.retentionRows.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.channel)}</td>
+      <td>${escapeHtml(row.cohort)}</td>
+      <td>${Number(row.users || 0)}</td>
+      <td>${Number(row.retained_7d || 0)} / ${Number(row.retained_7d_rate || 0)}%</td>
+      <td>${Number(row.active_7d || 0)} / ${Number(row.active_7d_rate || 0)}%</td>
+    </tr>
+  `).join("") || `<tr><td colspan="5">暂无留存数据</td></tr>`;
+}
+
 function switchTab(tab) {
   state.activeTab = tab;
   document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("active", button.dataset.tab === tab));
@@ -512,6 +601,14 @@ function formatTime(value) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(number));
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0) / 100);
 }
 
 function statusLabel(status) {

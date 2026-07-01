@@ -24,6 +24,8 @@ Deno.serve(async (req) => {
     if (action === "login") return await login(body);
     if (action === "push") return await pushSnapshot(req, body);
     if (action === "pull") return await pullSnapshot(req);
+    if (action === "messages.list") return await listMessages();
+    if (action === "feedback.submit") return await submitFeedback(req, body);
     return json({ error: "未知操作" }, 400);
   } catch (error) {
     return json({ error: friendlyError(error) }, 500);
@@ -92,6 +94,41 @@ async function pullSnapshot(req: Request): Promise<Response> {
   return json({ ok: true, ledger: snapshot?.payload ?? null, updatedAt: snapshot?.updated_at ?? null });
 }
 
+async function listMessages(): Promise<Response> {
+  const rows = await rest(
+    "GET",
+    "/rest/v1/official_messages?select=id,title,body,source_key,created_at,updated_at&order=created_at.desc&limit=50",
+  );
+  return json({ ok: true, messages: rows });
+}
+
+async function submitFeedback(req: Request, body: Json): Promise<Response> {
+  assertConfigured();
+  const content = stringValue(body.content, 500);
+  const contact = stringValue(body.contact, 80) || null;
+  const category = categoryValue(body.category);
+  const page = stringValue(body.page, 120) || null;
+  const appVersion = stringValue(body.appVersion, 32) || null;
+  const clientInfo = body.client && typeof body.client === "object" ? body.client : {};
+  if (content.length < 5) return json({ error: "反馈内容至少 5 个字" }, 400);
+
+  const session = await optionalMiniSession(req);
+  const now = Date.now();
+  await rest("POST", "/rest/v1/mini_feedback", [{
+    mini_user_id: session?.user_id ?? null,
+    contact,
+    content,
+    category,
+    source: "mini_program",
+    page,
+    app_version: appVersion,
+    client_info: clientInfo,
+    created_at: now,
+    updated_at: now,
+  }], { Prefer: "return=minimal" });
+  return json({ ok: true, createdAt: now });
+}
+
 async function codeToSession(code: string): Promise<Json> {
   const url = new URL("https://api.weixin.qq.com/sns/jscode2session");
   url.searchParams.set("appid", wechatAppId);
@@ -126,6 +163,17 @@ async function requireMiniSession(req: Request): Promise<Json> {
     { Prefer: "return=minimal" },
   );
   return session;
+}
+
+async function optionalMiniSession(req: Request): Promise<Json | null> {
+  const auth = req.headers.get("authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) return null;
+  try {
+    return await requireMiniSession(req);
+  } catch {
+    return null;
+  }
 }
 
 async function loadSnapshot(userId: string): Promise<Json | null> {
@@ -175,6 +223,15 @@ function json(payload: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, "content-type": "application/json; charset=utf-8" },
   });
+}
+
+function stringValue(value: unknown, maxLength: number): string {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function categoryValue(value: unknown): string {
+  const raw = stringValue(value, 24);
+  return ["bug", "suggestion", "data", "other"].includes(raw) ? raw : "suggestion";
 }
 
 function randomToken(): string {
