@@ -14,7 +14,7 @@
 
   <br>
 
-  <a href="https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk"><b>下载 Android APK</b></a>
+  <a href="https://github.com/juanyun-ai/plush-ledger-android/releases/download/v1.0.6/rongrong-ledger-1.0.6-debug.apk"><b>下载 Android APK</b></a>
   ·
   <a href="https://juanyun-ai.github.io/plush-ledger-android/"><b>产品网页</b></a>
   ·
@@ -62,7 +62,7 @@
 
 - 稳定 HTTPS 页面：[privacy.xiaoxing.online](https://privacy.xiaoxing.online/)
 - 管理后台：[admin.xiaoxing.online](https://admin.xiaoxing.online/)，默认连接绒绒记账 Supabase 项目，登录管理员账号后可管理反馈、官方消息、版本和远程配置。
-- 最新 APK：[rongrong-ledger-latest-debug.apk](https://github.com/juanyun-ai/plush-ledger-android/releases/latest/download/rongrong-ledger-latest-debug.apk)
+- 最新 APK：[rongrong-ledger-1.0.6-debug.apk](https://github.com/juanyun-ai/plush-ledger-android/releases/download/v1.0.6/rongrong-ledger-1.0.6-debug.apk)
 - 国内访问长期方案：优先用 Cloudflare Pages 或 Vercel 避开腾讯云接入备案阻塞；如后续需要大陆加速，再考虑腾讯云 EdgeOne 和接入备案。
 
 ## 功能
