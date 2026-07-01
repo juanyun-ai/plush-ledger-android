@@ -113,8 +113,8 @@ async function login(email, password) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throwToast(data.error_description || data.msg || "登录失败");
-  state.session = data;
-  saveJson(SESSION_KEY, data);
+  state.session = normalizeSession(data);
+  saveJson(SESSION_KEY, state.session);
   toast("登录成功");
   renderShell();
   await loadDashboard();
@@ -382,7 +382,22 @@ function switchTab(tab) {
 }
 
 async function adminAction(action, payload) {
-  const response = await fetch(`${state.settings.supabaseUrl}/functions/v1/admin-console`, {
+  await ensureFreshSession();
+  let response = await adminRequest(action, payload);
+  if (response.status === 401) {
+    await ensureFreshSession(true);
+    response = await adminRequest(action, payload);
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) {
+    if (response.status === 401) expireSession();
+    throw new Error(data.error || `请求失败 ${response.status}`);
+  }
+  return data;
+}
+
+async function adminRequest(action, payload) {
+  return fetch(`${state.settings.supabaseUrl}/functions/v1/admin-console`, {
     method: "POST",
     headers: {
       ...baseHeaders(),
@@ -390,9 +405,49 @@ async function adminAction(action, payload) {
     },
     body: JSON.stringify({ action, ...payload }),
   });
+}
+
+async function ensureFreshSession(force = false) {
+  if (!state.session?.access_token) throw new Error("请先登录");
+  if (!force && !shouldRefreshSession()) return;
+  if (!state.session.refresh_token) {
+    expireSession();
+    throw new Error("登录已过期，请重新登录");
+  }
+
+  const response = await fetch(`${state.settings.supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: baseHeaders(),
+    body: JSON.stringify({ refresh_token: state.session.refresh_token }),
+  });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.error) throw new Error(data.error || `请求失败 ${response.status}`);
-  return data;
+  if (!response.ok) {
+    expireSession();
+    throw new Error(data.error_description || data.msg || "登录已过期，请重新登录");
+  }
+  state.session = normalizeSession({ ...state.session, ...data });
+  saveJson(SESSION_KEY, state.session);
+  renderShell();
+}
+
+function shouldRefreshSession() {
+  const expiresAt = Number(state.session?.expires_at || 0);
+  if (!expiresAt) return false;
+  return expiresAt * 1000 <= Date.now() + 60_000;
+}
+
+function normalizeSession(session) {
+  const expiresIn = Number(session.expires_in || 0);
+  const expiresAt = Number(session.expires_at || 0) ||
+    (expiresIn > 0 ? Math.floor(Date.now() / 1000) + expiresIn : 0);
+  return { ...session, expires_at: expiresAt };
+}
+
+function expireSession() {
+  state.session = null;
+  state.dashboard = null;
+  localStorage.removeItem(SESSION_KEY);
+  renderShell();
 }
 
 function baseHeaders() {
