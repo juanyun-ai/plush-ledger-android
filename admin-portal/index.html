@@ -47,6 +47,7 @@
         </div>
         <div class="module-preview" aria-label="后台模块概览">
           <span>运营总览</span>
+          <span>用户明细</span>
           <span>用户反馈</span>
           <span>官方消息</span>
           <span>版本更新</span>
@@ -69,6 +70,7 @@
       <section id="appPanel" class="hidden">
         <nav class="tabs" aria-label="管理模块">
           <button class="tab active" data-tab="overview" type="button">运营总览</button>
+          <button class="tab" data-tab="users" type="button">用户明细</button>
           <button class="tab" data-tab="feedback" type="button">用户反馈</button>
           <button class="tab" data-tab="messages" type="button">官方消息</button>
           <button class="tab" data-tab="versions" type="button">版本更新</button>
@@ -82,7 +84,7 @@
               <h2>运营总览</h2>
               <p id="refreshMeta">等待刷新数据。</p>
             </div>
-            <span class="source-pill">数据源：Supabase + Cloudflare Pages</span>
+            <span class="source-pill">数据源：Supabase 真实表</span>
           </div>
           <div id="supportNotice" class="notice"></div>
           <section id="kpiGrid" class="kpi-grid"></section>
@@ -93,14 +95,14 @@
               <div id="signupChart" class="bar-chart"></div>
             </article>
             <article class="chart-panel">
-              <div class="item-title">活跃趋势</div>
-              <p class="muted">App 以账目更新时间估算，小程序以 session 使用时间估算。</p>
+              <div class="item-title">最近活动分布</div>
+              <p class="muted">App 按最近登录，小程序按最近打开统计；这是“最后一次活动”的分布，不伪装成完整 DAU 曲线。</p>
               <div id="activeChart" class="bar-chart"></div>
             </article>
             <article class="chart-panel">
               <div class="item-title">每日记账量</div>
-              <p class="muted">只统计云端已同步账目。</p>
-              <div id="transactionChart" class="bar-chart single"></div>
+              <p class="muted">App 来自 transactions， 小程序来自账本快照 transactions[].date。</p>
+              <div id="transactionChart" class="bar-chart"></div>
             </article>
             <article class="chart-panel">
               <div class="item-title">反馈处理状态</div>
@@ -111,25 +113,53 @@
           <section class="panel subpanel">
             <div class="panel-heading inline">
               <div>
-                <h2>粗留存</h2>
-                <p>当前还没有完整事件埋点，所以先用注册/创建时间与最近登录、账目、快照活跃估算。</p>
+                <h2>今日真实行为</h2>
+                <p>按北京时间自然日统计，全部来自现有数据库字段；没有证据的数据不展示为留存率。</p>
               </div>
             </div>
             <div class="table-wrap">
               <table class="compact-table">
                 <thead>
                   <tr>
-                    <th>渠道</th>
-                    <th>注册周</th>
-                    <th>用户</th>
-                    <th>7 日后仍活跃</th>
-                    <th>近 7 日活跃</th>
+                    <th>指标</th>
+                    <th>数值</th>
+                    <th>证据字段</th>
                   </tr>
                 </thead>
-                <tbody id="retentionRows"></tbody>
+                <tbody id="activityRows"></tbody>
               </table>
             </div>
           </section>
+        </section>
+
+        <section id="usersTab" class="tab-panel hidden">
+          <div class="panel-heading inline">
+            <div>
+              <h2>用户明细</h2>
+              <p>App 用户来自 Supabase Auth，小程序用户来自 mini_users；两个渠道分开显示，不做可能重复的合并。</p>
+            </div>
+            <input id="userSearch" class="search" placeholder="搜索用户名、邮箱、来源或 ID" />
+          </div>
+          <div class="table-wrap">
+            <table class="user-table">
+              <thead>
+                <tr>
+                  <th>来源</th>
+                  <th>用户名</th>
+                  <th>邮箱/联系</th>
+                  <th>注册时间</th>
+                  <th>最后登录/打开</th>
+                  <th>今天登录</th>
+                  <th>账目</th>
+                  <th>今天记账</th>
+                  <th>今天同步</th>
+                  <th>反馈</th>
+                  <th>证据</th>
+                </tr>
+              </thead>
+              <tbody id="userRows"></tbody>
+            </table>
+          </div>
         </section>
 
         <section id="feedbackTab" class="tab-panel hidden">
@@ -140,7 +170,7 @@
             </div>
             <input id="feedbackSearch" class="search" placeholder="搜索邮箱、内容或状态" />
           </div>
-          <div class="notice subtle">如果用户是发邮件到 support@xiaoxing.online，需要去邮箱查看；要自动进入这里，需要接入邮箱 IMAP 或邮件转发 Webhook。</div>
+          <div class="notice subtle">如果用户是发邮件到 support@xiaoxing.online，需要先去阿里云邮箱查看；当前域名 MX 仍在阿里云，普通自动转发只能转到另一个邮箱，不能直接写入数据库。</div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -223,6 +253,6 @@
     </main>
 
     <div id="toast" class="toast hidden"></div>
-    <script type="module" src="app.js?v=20260702-analytics"></script>
+    <script type="module" src="app.js?v=20260702-truth"></script>
   </body>
 </html>

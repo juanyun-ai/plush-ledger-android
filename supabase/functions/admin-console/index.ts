@@ -11,6 +11,7 @@ const defaultAllowedOrigins = new Set([
 ]);
 const allowedStatuses = new Set(["new", "triaged", "done", "ignored"]);
 const dayMs = 86_400_000;
+const chinaOffsetMs = 8 * 60 * 60 * 1000;
 
 Deno.serve(async (request) => {
   const corsHeaders = buildCorsHeaders(request);
@@ -89,6 +90,7 @@ async function dashboard(admin: ReturnType<typeof createClient>, userId: string)
   return {
     admin: profile.data ?? null,
     analytics,
+    users: analytics.users,
     feedback: normalizeFeedback(appFeedback, miniFeedback),
     messages,
     versions,
@@ -112,23 +114,33 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>) {
     versions,
   ] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    select(admin, "profiles", "id,display_name,email,membership_tier,created_at,updated_at", "created_at", false, 1000),
-    select(admin, "mini_users", "id,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "mini_users", "id,nickname,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_sessions", "user_id,created_at,last_used_at", "last_used_at", false, 1000),
-    select(admin, "mini_ledger_snapshots", "user_id,created_at,updated_at", "updated_at", false, 1000),
+    select(admin, "mini_ledger_snapshots", "user_id,payload,created_at,updated_at", "updated_at", false, 1000),
     select(admin, "transactions", "id,user_id,type,amount_minor,occurred_at,created_at,updated_at,deleted_at", "created_at", false, 2000),
-    select(admin, "feedback", "id,status,created_at,updated_at", "created_at", false, 1000),
-    select(admin, "mini_feedback", "id,status,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "feedback", "id,user_id,status,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "mini_feedback", "id,mini_user_id,status,created_at,updated_at", "created_at", false, 1000),
     select(admin, "app_versions", "version_code,version_name,apk_url,file_size_bytes,active,published_at,updated_at", "version_code", false, 20),
   ]);
   if (authUsersResult.error) throw new Error(`Unable to load auth users: ${authUsersResult.error.message}`);
 
   const authUsers = authUsersResult.data.users ?? [];
+  const todayStart = startOfChinaDay(now);
+  const todayKey = dateKeyChina(now);
   const liveTransactions = transactions.filter((row: Json) => !row.deleted_at);
-  const activeAppUsers7 = countDistinct(liveTransactions.filter((row: Json) => numberValue(row.updated_at) >= since7), "user_id");
-  const activeAppUsers30 = countDistinct(liveTransactions.filter((row: Json) => numberValue(row.updated_at) >= since30), "user_id");
+  const appUsersTodayLogin = authUsers.filter((user) => dateMs(user.last_sign_in_at) >= todayStart).length;
+  const activeAppUsers7 = authUsers.filter((user) => dateMs(user.last_sign_in_at) >= since7).length;
+  const activeAppUsers30 = authUsers.filter((user) => dateMs(user.last_sign_in_at) >= since30).length;
+  const appTodayRecords = liveTransactions.filter((row: Json) => numberValue(row.occurred_at) >= todayStart);
+  const appTodaySyncRecords = liveTransactions.filter((row: Json) => numberValue(row.updated_at) >= todayStart);
+  const appTodayRecordUsers = countDistinct(appTodayRecords, "user_id");
   const activeMiniUsers7 = countDistinct(miniSessions.filter((row: Json) => numberValue(row.last_used_at) >= since7), "user_id");
   const activeMiniUsers30 = countDistinct(miniSessions.filter((row: Json) => numberValue(row.last_used_at) >= since30), "user_id");
+  const miniUsersTodayLogin = countDistinct(miniSessions.filter((row: Json) => numberValue(row.last_used_at) >= todayStart), "user_id");
+  const miniTodayRecords = miniTransactionsFromSnapshots(snapshots).filter((item) => item.date === todayKey);
+  const miniTodaySyncRecords = miniTransactionsFromSnapshots(snapshots).filter((item) => item.updated_at >= todayStart);
+  const miniTodayRecordUsers = countDistinct(miniTodayRecords, "user_id");
   const expenseMinor = liveTransactions
     .filter((row: Json) => row.type === "expense")
     .reduce((sum: number, row: Json) => sum + numberValue(row.amount_minor), 0);
@@ -145,13 +157,23 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>) {
       address: "support@xiaoxing.online",
       source: "阿里云邮箱 MX",
       connected_to_feedback: false,
-      note: "邮件会进入邮箱，不会自动写入 Supabase feedback 表；App 内反馈才会出现在这里。",
+      note: "当前 MX 指向阿里云邮箱，后台只自动读取 App feedback 和小程序 mini_feedback；邮件自动入库需要邮箱路由或邮件服务把原邮件推送到数据库入口。",
     },
     summary: {
       auth_users: authUsers.length,
       app_profiles: profiles.length,
       mini_users: miniUsers.length,
-      total_known_users: profiles.length + miniUsers.length,
+      app_users: authUsers.length,
+      total_known_users: authUsers.length + miniUsers.length,
+      today_key: todayKey,
+      app_today_logins: appUsersTodayLogin,
+      mini_today_logins: miniUsersTodayLogin,
+      app_today_records: appTodayRecords.length,
+      app_today_record_users: appTodayRecordUsers,
+      app_today_sync_records: appTodaySyncRecords.length,
+      mini_today_records: miniTodayRecords.length,
+      mini_today_record_users: miniTodayRecordUsers,
+      mini_today_sync_records: miniTodaySyncRecords.length,
       app_active_7d: activeAppUsers7,
       app_active_30d: activeAppUsers30,
       mini_active_7d: activeMiniUsers7,
@@ -170,22 +192,36 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>) {
     },
     charts: {
       signups_by_day: mergeSeries([
-        ["App", aggregateByDay(profiles, "created_at", 14)],
+        ["App", aggregateAuthByDay(authUsers, "created_at", 14)],
         ["小程序", aggregateByDay(miniUsers, "created_at", 14)],
       ]),
       active_by_day: mergeSeries([
-        ["App 账目", aggregateByDay(liveTransactions, "updated_at", 14, "user_id")],
+        ["App 登录", aggregateAuthByDay(authUsers, "last_sign_in_at", 14)],
         ["小程序", aggregateByDay(miniSessions, "last_used_at", 14, "user_id")],
       ]),
-      transactions_by_day: aggregateByDay(liveTransactions, "occurred_at", 14),
+      transactions_by_day: mergeSeries([
+        ["App", aggregateByDay(liveTransactions, "occurred_at", 14)],
+        ["小程序", aggregateMiniTransactionsByDay(snapshots, 14)],
+      ]),
       feedback_by_status: statusBuckets(feedbackRows),
-      retention_cohorts: retentionCohorts(authUsers, profiles, miniUsers, miniSessions, snapshots, now),
     },
+    activity: buildTodayActivity({
+      todayKey,
+      appUsersTodayLogin,
+      miniUsersTodayLogin,
+      appTodayRecords: appTodayRecords.length,
+      appTodayRecordUsers,
+      appTodaySyncRecords: appTodaySyncRecords.length,
+      miniTodayRecords: miniTodayRecords.length,
+      miniTodayRecordUsers,
+      miniTodaySyncRecords: miniTodaySyncRecords.length,
+    }),
+    users: buildUserRows(authUsers, profiles, miniUsers, miniSessions, snapshots, liveTransactions, appFeedbackRows, miniFeedbackRows, todayStart, todayKey),
   };
 }
 
 function aggregateByDay(rows: Json[], field: string, days: number, distinctField?: string) {
-  const start = startOfDay(Date.now() - (days - 1) * dayMs);
+  const start = startOfChinaDay(Date.now() - (days - 1) * dayMs);
   return Array.from({ length: days }, (_, index) => {
     const day = start + index * dayMs;
     const end = day + dayMs;
@@ -194,8 +230,26 @@ function aggregateByDay(rows: Json[], field: string, days: number, distinctField
       return value >= day && value < end;
     });
     return {
-      date: dayKey(day),
+      date: monthDayKeyChina(day),
       value: distinctField ? countDistinct(matches, distinctField) : matches.length,
+    };
+  });
+}
+
+function aggregateAuthByDay(users: unknown[], field: string, days: number) {
+  const rows = users.map((user) => ({ value_at: dateMs((user as Json)[field]) })).filter((row) => row.value_at > 0);
+  return aggregateByDay(rows, "value_at", days);
+}
+
+function aggregateMiniTransactionsByDay(snapshots: Json[], days: number) {
+  const start = startOfChinaDay(Date.now() - (days - 1) * dayMs);
+  const rows = miniTransactionsFromSnapshots(snapshots);
+  return Array.from({ length: days }, (_, index) => {
+    const day = start + index * dayMs;
+    const date = dateKeyChina(day);
+    return {
+      date: monthDayKeyChina(day),
+      value: rows.filter((row) => row.date === date).length,
     };
   });
 }
@@ -209,65 +263,196 @@ function mergeSeries(series: Array<[string, Array<{ date: string; value: number 
   });
 }
 
-function retentionCohorts(
-  authUsers: Array<{ id: string; created_at?: string; last_sign_in_at?: string | null }>,
+function buildTodayActivity(values: Record<string, number | string>) {
+  return [
+    ["统计日期", values.todayKey, "Asia/Shanghai 自然日"],
+    ["App 今日登录用户", values.appUsersTodayLogin, "auth.users.last_sign_in_at"],
+    ["小程序今日打开用户", values.miniUsersTodayLogin, "mini_sessions.last_used_at"],
+    ["App 今日记账条数", values.appTodayRecords, "transactions.occurred_at"],
+    ["App 今日记账用户", values.appTodayRecordUsers, "transactions.user_id"],
+    ["App 今日同步账目", values.appTodaySyncRecords, "transactions.updated_at"],
+    ["小程序今日记账条数", values.miniTodayRecords, "快照 transactions[].date"],
+    ["小程序今日记账用户", values.miniTodayRecordUsers, "快照 user_id"],
+    ["小程序今日同步账目", values.miniTodaySyncRecords, "快照 transactions[].updatedAt"],
+  ].map(([label, value, evidence]) => ({ label, value, evidence }));
+}
+
+function buildUserRows(
+  authUsers: Array<any>,
   profiles: Json[],
   miniUsers: Json[],
   miniSessions: Json[],
   snapshots: Json[],
-  now: number,
+  liveTransactions: Json[],
+  appFeedbackRows: Json[],
+  miniFeedbackRows: Json[],
+  todayStart: number,
+  todayKey: string,
 ) {
-  const appLastActivity = new Map<string, number>();
-  for (const profile of profiles) appLastActivity.set(String(profile.id), numberValue(profile.updated_at));
-  for (const user of authUsers) {
-    const lastSignIn = user.last_sign_in_at ? Date.parse(user.last_sign_in_at) : 0;
-    appLastActivity.set(user.id, Math.max(appLastActivity.get(user.id) ?? 0, lastSignIn));
-  }
+  const profilesById = mapBy(profiles, "id");
+  const appTxStats = summarizeAppTransactions(liveTransactions, todayStart);
+  const appFeedbackStats = summarizeFeedback(appFeedbackRows, "user_id");
+  const miniSessionStats = summarizeMiniSessions(miniSessions, todayStart);
+  const miniTxStats = summarizeMiniTransactions(snapshots, todayStart, todayKey);
+  const miniFeedbackStats = summarizeFeedback(miniFeedbackRows, "mini_user_id");
 
-  const miniLastActivity = new Map<string, number>();
-  for (const session of miniSessions) {
-    const id = String(session.user_id);
-    miniLastActivity.set(id, Math.max(miniLastActivity.get(id) ?? 0, numberValue(session.last_used_at)));
-  }
-  for (const snapshot of snapshots) {
-    const id = String(snapshot.user_id);
-    miniLastActivity.set(id, Math.max(miniLastActivity.get(id) ?? 0, numberValue(snapshot.updated_at)));
-  }
-
-  return [
-    ...buildRetentionRows("App", authUsers.map((user) => ({
-      id: user.id,
-      created_at: user.created_at ? Date.parse(user.created_at) : 0,
-      last_active_at: appLastActivity.get(user.id) ?? 0,
-    })), now),
-    ...buildRetentionRows("小程序", miniUsers.map((user: Json) => ({
-      id: String(user.id),
-      created_at: numberValue(user.created_at),
-      last_active_at: miniLastActivity.get(String(user.id)) ?? numberValue(user.updated_at),
-    })), now),
-  ].slice(0, 10);
-}
-
-function buildRetentionRows(channel: string, users: Array<{ id: string; created_at: number; last_active_at: number }>, now: number) {
-  const groups = new Map<string, Array<{ id: string; created_at: number; last_active_at: number }>>();
-  for (const user of users) {
-    if (!user.created_at) continue;
-    const label = weekKey(user.created_at);
-    groups.set(label, [...(groups.get(label) ?? []), user]);
-  }
-  return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0])).map(([cohort, members]) => {
-    const retained7 = members.filter((user) => user.last_active_at >= user.created_at + 7 * dayMs).length;
-    const activeNow = members.filter((user) => user.last_active_at >= now - 7 * dayMs).length;
+  const appRows = authUsers.map((user) => {
+    const profile = profilesById.get(user.id) ?? {};
+    const metadata = user.user_metadata ?? {};
+    const tx = appTxStats.get(user.id) ?? emptyUserStats();
+    const feedback = appFeedbackStats.get(user.id) ?? emptyFeedbackStats();
+    const registeredAt = numberValue(profile.created_at) || dateMs(user.created_at);
+    const lastLoginAt = dateMs(user.last_sign_in_at);
     return {
-      channel,
-      cohort,
-      users: members.length,
-      retained_7d: retained7,
-      retained_7d_rate: members.length ? Math.round(retained7 / members.length * 100) : 0,
-      active_7d: activeNow,
-      active_7d_rate: members.length ? Math.round(activeNow / members.length * 100) : 0,
+      source: "App",
+      user_id: user.id,
+      display_name: stringValue(profile.display_name, 80) || stringValue(metadata.display_name, 80) || stringValue(user.email, 120) || shortId(user.id),
+      email: stringValue(user.email, 160) || stringValue(profile.email, 160),
+      contact: stringValue(profile.phone, 80),
+      registered_at: registeredAt,
+      last_login_at: lastLoginAt,
+      today_logged_in: lastLoginAt >= todayStart,
+      total_records: tx.total_records,
+      today_records: tx.today_records,
+      today_sync_records: tx.today_sync_records,
+      last_record_at: tx.last_record_at,
+      last_sync_at: tx.last_sync_at,
+      feedback_count: feedback.feedback_count,
+      last_feedback_at: feedback.last_feedback_at,
+      role: stringValue(profile.role, 32) || "user",
+      membership_tier: stringValue(profile.membership_tier, 32) || "free",
+      evidence: "Auth 登录 + transactions 云端表",
     };
   });
+
+  const miniRows = miniUsers.map((user: Json) => {
+    const id = String(user.id);
+    const sessions = miniSessionStats.get(id) ?? emptySessionStats();
+    const tx = miniTxStats.get(id) ?? emptyUserStats();
+    const feedback = miniFeedbackStats.get(id) ?? emptyFeedbackStats();
+    return {
+      source: "小程序",
+      user_id: id,
+      display_name: stringValue(user.nickname, 80) || `小程序用户 ${shortId(id)}`,
+      email: "",
+      contact: "",
+      registered_at: numberValue(user.created_at),
+      last_login_at: sessions.last_login_at,
+      today_logged_in: sessions.today_logged_in,
+      total_records: tx.total_records,
+      today_records: tx.today_records,
+      today_sync_records: tx.today_sync_records,
+      last_record_at: tx.last_record_at,
+      last_sync_at: tx.last_sync_at,
+      feedback_count: feedback.feedback_count,
+      last_feedback_at: feedback.last_feedback_at,
+      role: "mini_user",
+      membership_tier: "",
+      evidence: "mini_sessions + mini_ledger_snapshots",
+    };
+  });
+
+  return [...appRows, ...miniRows].sort((a, b) => {
+    const aTime = Math.max(numberValue(a.last_login_at), numberValue(a.last_sync_at), numberValue(a.last_record_at), numberValue(a.registered_at));
+    const bTime = Math.max(numberValue(b.last_login_at), numberValue(b.last_sync_at), numberValue(b.last_record_at), numberValue(b.registered_at));
+    return bTime - aTime;
+  });
+}
+
+function summarizeAppTransactions(rows: Json[], todayStart: number) {
+  const stats = new Map<string, ReturnType<typeof emptyUserStats>>();
+  for (const row of rows) {
+    const id = String(row.user_id ?? "");
+    if (!id) continue;
+    const stat = stats.get(id) ?? emptyUserStats();
+    stat.total_records += 1;
+    if (numberValue(row.occurred_at) >= todayStart) stat.today_records += 1;
+    if (numberValue(row.updated_at) >= todayStart) stat.today_sync_records += 1;
+    stat.last_record_at = Math.max(stat.last_record_at, numberValue(row.occurred_at));
+    stat.last_sync_at = Math.max(stat.last_sync_at, numberValue(row.updated_at));
+    stats.set(id, stat);
+  }
+  return stats;
+}
+
+function summarizeMiniTransactions(snapshots: Json[], todayStart: number, todayKey: string) {
+  const stats = new Map<string, ReturnType<typeof emptyUserStats>>();
+  for (const row of miniTransactionsFromSnapshots(snapshots)) {
+    const id = row.user_id;
+    if (!id) continue;
+    const stat = stats.get(id) ?? emptyUserStats();
+    stat.total_records += 1;
+    if (row.date === todayKey) stat.today_records += 1;
+    if (row.updated_at >= todayStart) stat.today_sync_records += 1;
+    stat.last_record_at = Math.max(stat.last_record_at, row.record_at);
+    stat.last_sync_at = Math.max(stat.last_sync_at, row.updated_at);
+    stats.set(id, stat);
+  }
+  return stats;
+}
+
+function miniTransactionsFromSnapshots(snapshots: Json[]) {
+  const rows: Array<{ user_id: string; date: string; record_at: number; updated_at: number }> = [];
+  for (const snapshot of snapshots) {
+    const userId = String(snapshot.user_id ?? "");
+    const payload = snapshot.payload && typeof snapshot.payload === "object" ? snapshot.payload as Json : {};
+    const transactions = Array.isArray(payload.transactions) ? payload.transactions : [];
+    for (const raw of transactions) {
+      if (!raw || typeof raw !== "object") continue;
+      const tx = raw as Json;
+      const date = stringValue(tx.date, 10);
+      rows.push({
+        user_id: userId,
+        date,
+        record_at: date ? Date.parse(`${date}T00:00:00+08:00`) : numberValue(tx.createdAt),
+        updated_at: numberValue(tx.updatedAt) || numberValue(tx.createdAt) || numberValue(snapshot.updated_at),
+      });
+    }
+  }
+  return rows;
+}
+
+function summarizeMiniSessions(rows: Json[], todayStart: number) {
+  const stats = new Map<string, ReturnType<typeof emptySessionStats>>();
+  for (const row of rows) {
+    const id = String(row.user_id ?? "");
+    if (!id) continue;
+    const stat = stats.get(id) ?? emptySessionStats();
+    const lastUsed = numberValue(row.last_used_at);
+    stat.last_login_at = Math.max(stat.last_login_at, lastUsed);
+    stat.today_logged_in = stat.today_logged_in || lastUsed >= todayStart;
+    stats.set(id, stat);
+  }
+  return stats;
+}
+
+function summarizeFeedback(rows: Json[], field: string) {
+  const stats = new Map<string, ReturnType<typeof emptyFeedbackStats>>();
+  for (const row of rows) {
+    const id = String(row[field] ?? "");
+    if (!id) continue;
+    const stat = stats.get(id) ?? emptyFeedbackStats();
+    stat.feedback_count += 1;
+    stat.last_feedback_at = Math.max(stat.last_feedback_at, numberValue(row.created_at));
+    stats.set(id, stat);
+  }
+  return stats;
+}
+
+function emptyUserStats() {
+  return { total_records: 0, today_records: 0, today_sync_records: 0, last_record_at: 0, last_sync_at: 0 };
+}
+
+function emptySessionStats() {
+  return { last_login_at: 0, today_logged_in: false };
+}
+
+function emptyFeedbackStats() {
+  return { feedback_count: 0, last_feedback_at: 0 };
+}
+
+function mapBy(rows: Json[], field: string) {
+  return new Map(rows.map((row) => [String(row[field] ?? ""), row]).filter(([key]) => key));
 }
 
 function statusBuckets(rows: Json[]) {
@@ -281,26 +466,31 @@ function countDistinct(rows: Json[], field: string): number {
   return new Set(rows.map((row) => String(row[field] ?? "")).filter(Boolean)).size;
 }
 
-function startOfDay(value: number): number {
-  const date = new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
+function startOfChinaDay(value: number): number {
+  return Math.floor((value + chinaOffsetMs) / dayMs) * dayMs - chinaOffsetMs;
 }
 
-function dayKey(value: number): string {
-  return new Date(value).toISOString().slice(5, 10);
+function dateKeyChina(value: number): string {
+  return new Date(value + chinaOffsetMs).toISOString().slice(0, 10);
 }
 
-function weekKey(value: number): string {
-  const date = new Date(startOfDay(value));
-  const day = date.getDay() || 7;
-  date.setDate(date.getDate() - day + 1);
-  return date.toISOString().slice(0, 10);
+function monthDayKeyChina(value: number): string {
+  return new Date(value + chinaOffsetMs).toISOString().slice(5, 10);
 }
 
 function numberValue(value: unknown): number {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function dateMs(value: unknown): number {
+  if (!value) return 0;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function shortId(value: string): string {
+  return value ? value.slice(0, 8) : "-";
 }
 
 async function select(

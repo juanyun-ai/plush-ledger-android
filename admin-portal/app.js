@@ -26,6 +26,8 @@ const els = {
   toast: byId("toast"),
   feedbackRows: byId("feedbackRows"),
   feedbackSearch: byId("feedbackSearch"),
+  userRows: byId("userRows"),
+  userSearch: byId("userSearch"),
   messageForm: byId("messageForm"),
   versionForm: byId("versionForm"),
   configForm: byId("configForm"),
@@ -36,7 +38,7 @@ const els = {
   activeChart: byId("activeChart"),
   transactionChart: byId("transactionChart"),
   feedbackStatusChart: byId("feedbackStatusChart"),
-  retentionRows: byId("retentionRows"),
+  activityRows: byId("activityRows"),
 };
 
 const links = [
@@ -90,6 +92,7 @@ function bindEvents() {
   els.logoutBtn.addEventListener("click", logout);
   els.configBtn.addEventListener("click", resetConnection);
   els.feedbackSearch.addEventListener("input", renderFeedback);
+  els.userSearch.addEventListener("input", renderUsers);
 
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
@@ -164,6 +167,7 @@ function renderDashboard() {
   const data = state.dashboard || {};
   const feedback = data.feedback || [];
   renderOverview();
+  renderUsers();
   renderFeedback();
   renderMessages();
   renderVersions();
@@ -175,22 +179,22 @@ function renderOverview() {
   const summary = analytics.summary || {};
   const support = analytics.support_email || {};
   els.refreshMeta.textContent = analytics.refreshed_at
-    ? `上次刷新：${formatTime(analytics.refreshed_at)}。刷新按钮会重新读取 Supabase 数据库，不会读取邮箱收件箱。`
+    ? `上次刷新：${formatTime(analytics.refreshed_at)}。刷新按钮会重新读取 Supabase 数据库；今天按北京时间 ${summary.today_key || "-"} 统计。`
     : "等待刷新数据。";
   els.supportNotice.innerHTML = `
-    <strong>support 邮箱说明</strong>
-    <span>${escapeHtml(support.address || "support@xiaoxing.online")} 当前走 ${escapeHtml(support.source || "邮箱服务")}，没有接入 feedback 表。QQ 邮件发送成功只代表邮件进邮箱，不代表进入后台反馈列表。</span>
+    <strong>反馈来源说明</strong>
+    <span>后台已同步 App feedback 和小程序 mini_feedback。${escapeHtml(support.address || "support@xiaoxing.online")} 当前走 ${escapeHtml(support.source || "邮箱服务")}，邮件不会自动进数据库；这不是刷新问题。</span>
   `;
 
   const cards = [
-    ["已知用户", summary.total_known_users, "App 档案 + 小程序用户，可能有重复"],
-    ["App 账号", summary.app_profiles, `${summary.auth_users || 0} 个 Auth 用户`],
-    ["小程序用户", summary.mini_users, "mini_users 表"],
-    ["App 近 7 日活跃", summary.app_active_7d, "按账目更新时间估算"],
-    ["小程序近 7 日活跃", summary.mini_active_7d, "按 session 使用时间估算"],
-    ["云端账目", summary.transactions, `支出 ${formatMoney(summary.expense_minor)} / 收入 ${formatMoney(summary.income_minor)}`],
+    ["App 用户", summary.app_users, `${summary.app_profiles || 0} 个已建档案`],
+    ["小程序用户", summary.mini_users, "mini_users 表，不与 App 合并"],
+    ["今日 App 登录", summary.app_today_logins, "auth.users.last_sign_in_at"],
+    ["今日小程序打开", summary.mini_today_logins, "mini_sessions.last_used_at"],
+    ["今日 App 记账", summary.app_today_records, `${summary.app_today_record_users || 0} 个用户`],
+    ["今日小程序记账", summary.mini_today_records, `${summary.mini_today_record_users || 0} 个用户`],
+    ["云端 App 账目", summary.transactions, `支出 ${formatMoney(summary.expense_minor)} / 收入 ${formatMoney(summary.income_minor)}`],
     ["新反馈", summary.feedback_new, `${summary.feedback_total || 0} 条反馈 · App ${summary.app_feedback_total || 0} / 小程序 ${summary.mini_feedback_total || 0}`],
-    ["最新版本", summary.latest_version_name || "-", `code ${summary.latest_version_code || "-"} · ${summary.latest_version_size_mb || 0}MB`],
   ];
   els.kpiGrid.innerHTML = cards.map(([label, value, desc]) => `
     <article class="kpi-card">
@@ -201,10 +205,36 @@ function renderOverview() {
   `).join("");
 
   renderStackedBars(els.signupChart, analytics.charts?.signups_by_day || [], ["App", "小程序"]);
-  renderStackedBars(els.activeChart, analytics.charts?.active_by_day || [], ["App 账目", "小程序"]);
-  renderSingleBars(els.transactionChart, analytics.charts?.transactions_by_day || []);
+  renderStackedBars(els.activeChart, analytics.charts?.active_by_day || [], ["App 登录", "小程序"]);
+  renderStackedBars(els.transactionChart, analytics.charts?.transactions_by_day || [], ["App", "小程序"]);
   renderStatusBars(els.feedbackStatusChart, analytics.charts?.feedback_by_status || []);
-  renderRetention(analytics.charts?.retention_cohorts || []);
+  renderActivity(analytics.activity || []);
+}
+
+function renderUsers() {
+  const keyword = els.userSearch.value.trim().toLowerCase();
+  const rows = (state.dashboard?.users || []).filter((item) => {
+    const haystack = `${item.source || ""} ${item.user_id || ""} ${item.display_name || ""} ${item.email || ""} ${item.contact || ""} ${item.role || ""}`.toLowerCase();
+    return !keyword || haystack.includes(keyword);
+  });
+  els.userRows.innerHTML = rows.map((item) => `
+    <tr>
+      <td><span class="source-tag">${escapeHtml(item.source || "-")}</span></td>
+      <td>
+        <strong>${escapeHtml(item.display_name || "-")}</strong>
+        <div class="item-meta">${escapeHtml(shortId(item.user_id || ""))}</div>
+      </td>
+      <td>${escapeHtml(item.email || item.contact || "-")}</td>
+      <td>${formatTime(item.registered_at)}</td>
+      <td>${formatTime(item.last_login_at)}</td>
+      <td>${formatBool(item.today_logged_in)}</td>
+      <td>${Number(item.total_records || 0)}</td>
+      <td>${Number(item.today_records || 0)}</td>
+      <td>${Number(item.today_sync_records || 0)}</td>
+      <td>${Number(item.feedback_count || 0)}</td>
+      <td class="content-cell">${escapeHtml(item.evidence || "")}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="11">暂无用户</td></tr>`;
 }
 
 function renderFeedback() {
@@ -451,16 +481,14 @@ function renderStatusBars(target, rows) {
   }).join("") || `<p class="muted">暂无数据</p>`;
 }
 
-function renderRetention(rows) {
-  els.retentionRows.innerHTML = rows.map((row) => `
+function renderActivity(rows) {
+  els.activityRows.innerHTML = rows.map((row) => `
     <tr>
-      <td>${escapeHtml(row.channel)}</td>
-      <td>${escapeHtml(row.cohort)}</td>
-      <td>${Number(row.users || 0)}</td>
-      <td>${Number(row.retained_7d || 0)} / ${Number(row.retained_7d_rate || 0)}%</td>
-      <td>${Number(row.active_7d || 0)} / ${Number(row.active_7d_rate || 0)}%</td>
+      <td>${escapeHtml(row.label)}</td>
+      <td><strong>${escapeHtml(row.value ?? "-")}</strong></td>
+      <td>${escapeHtml(row.evidence || "")}</td>
     </tr>
-  `).join("") || `<tr><td colspan="5">暂无留存数据</td></tr>`;
+  `).join("") || `<tr><td colspan="3">暂无今日行为数据</td></tr>`;
 }
 
 function switchTab(tab) {
@@ -609,6 +637,15 @@ function formatMoney(value) {
     currency: "CNY",
     maximumFractionDigits: 2,
   }).format(Number(value || 0) / 100);
+}
+
+function formatBool(value) {
+  return value ? "是" : "否";
+}
+
+function shortId(value) {
+  const text = String(value || "");
+  return text ? text.slice(0, 8) : "-";
 }
 
 function statusLabel(status) {
