@@ -305,6 +305,16 @@ class LedgerRepository(
     suspend fun latestAppVersion(): AppVersionInfo? =
         if (supabaseClient.isConfigured) supabaseClient.fetchLatestAppVersion() else null
 
+    suspend fun recordAppActivity(eventType: String = "app_open") {
+        val session = sessionStore.currentSession() ?: return
+        if (session.accessToken.isNullOrBlank()) return
+        runCatching {
+            withFreshAccessToken { token ->
+                supabaseClient.recordAppActivity(token, session.userId, eventType)
+            }
+        }
+    }
+
     private suspend fun <T> withFreshAccessToken(block: suspend (String) -> T): T {
         val session = sessionStore.currentSession() ?: error("登录状态已失效，请重新登录")
         val token = session.accessToken ?: error("本地模式不需要云端凭证")
@@ -585,6 +595,7 @@ class LedgerRepository(
         results += syncTable("categories", categories, token, { it.id }, { it.kind in setOf("expense", "income") }).also { if (it.syncedIds.isNotEmpty()) dao.markCategoriesSynced(it.syncedIds) }
         results += syncTable("transactions", dao.dirtyTransactions(userId), token, { it.id }, { it.amountMinor > 0 && it.type in setOf("expense", "income", "transfer") }).also { if (it.syncedIds.isNotEmpty()) dao.markTransactionsSynced(it.syncedIds) }
         results += syncTable("budgets", dao.dirtyBudgets(userId), token, { it.id }, { it.limitMinor > 0 && it.month.matches(Regex("^\\d{4}-\\d{2}$")) }).also { if (it.syncedIds.isNotEmpty()) dao.markBudgetsSynced(it.syncedIds) }
+        runCatching { supabaseClient.updateProfileClientInfo(token, userId) }
         restoreFromCloud(token)
         val skipped = results.sumOf { it.skippedCount }
         return if (skipped == 0) "同步完成" else "同步完成，$skipped 条旧版异常记录仅保留在本机"

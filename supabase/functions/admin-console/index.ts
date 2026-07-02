@@ -25,7 +25,7 @@ Deno.serve(async (request) => {
     const { admin, user } = await requireAdmin(request, env);
     const action = stringValue(body.action, 80);
 
-    if (action === "dashboard") return json(await dashboard(admin, user.id), 200, corsHeaders);
+    if (action === "dashboard") return json(await dashboard(admin, user.id, body), 200, corsHeaders);
     if (action === "feedback.updateStatus") return json(await updateFeedbackStatus(admin, body), 200, corsHeaders);
     if (action === "message.upsert") return json(await upsertMessage(admin, body), 200, corsHeaders);
     if (action === "message.delete") return json(await deleteById(admin, "official_messages", body), 200, corsHeaders);
@@ -77,7 +77,7 @@ async function requireAdmin(request: Request, env: ReturnType<typeof readEnv>) {
   return { admin, user: data.user, profile };
 }
 
-async function dashboard(admin: ReturnType<typeof createClient>, userId: string) {
+async function dashboard(admin: ReturnType<typeof createClient>, userId: string, body: Json) {
   const [appFeedback, miniFeedback, messages, versions, config, profile, analytics] = await Promise.all([
     select(admin, "feedback", "id,user_id,email,content,status,source,page,app_version,created_at,updated_at", "created_at", false, 200),
     select(admin, "mini_feedback", "id,mini_user_id,contact,content,category,status,source,page,app_version,created_at,updated_at", "created_at", false, 200),
@@ -85,7 +85,7 @@ async function dashboard(admin: ReturnType<typeof createClient>, userId: string)
     select(admin, "app_versions", "id,platform,version_code,version_name,apk_url,backup_apk_url,sha256,file_size_bytes,release_notes,is_mandatory,active,published_at,created_at,updated_at", "version_code", false, 60),
     select(admin, "app_config", "key,value,description,active,updated_at", "updated_at", false, 100),
     admin.from("profiles").select("id,display_name,email,role,membership_tier").eq("id", userId).maybeSingle(),
-    loadAnalytics(admin),
+    loadAnalytics(admin, body),
   ]);
   return {
     admin: profile.data ?? null,
@@ -98,26 +98,31 @@ async function dashboard(admin: ReturnType<typeof createClient>, userId: string)
   };
 }
 
-async function loadAnalytics(admin: ReturnType<typeof createClient>) {
+async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json = {}) {
   const now = Date.now();
-  const since30 = now - 30 * dayMs;
-  const since7 = now - 7 * dayMs;
+  const selectedDate = requestedDateKey(body.date, now);
+  const selectedStart = dayStartFromKey(selectedDate);
+  const selectedEnd = selectedStart + dayMs;
+  const since30 = selectedEnd - 30 * dayMs;
+  const since7 = selectedEnd - 7 * dayMs;
   const [
     authUsersResult,
     profiles,
     miniUsers,
     miniSessions,
     snapshots,
+    appActivityEvents,
     transactions,
     appFeedbackRows,
     miniFeedbackRows,
     versions,
   ] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,created_at,updated_at", "created_at", false, 1000),
-    select(admin, "mini_users", "id,nickname,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,age,birth_date,gender,city,device_brand,device_model,device_platform,device_last_seen_at,app_version,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "mini_users", "id,nickname,gender,birth_date,city,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_sessions", "user_id,created_at,last_used_at", "last_used_at", false, 1000),
     select(admin, "mini_ledger_snapshots", "user_id,payload,created_at,updated_at", "updated_at", false, 1000),
+    select(admin, "app_activity_events", "id,user_id,event_type,device_brand,device_model,device_platform,app_version,occurred_at,created_at", "occurred_at", false, 5000),
     select(admin, "transactions", "id,user_id,type,amount_minor,occurred_at,created_at,updated_at,deleted_at", "created_at", false, 2000),
     select(admin, "feedback", "id,user_id,status,source,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_feedback", "id,mini_user_id,status,created_at,updated_at", "created_at", false, 1000),
@@ -126,21 +131,29 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>) {
   if (authUsersResult.error) throw new Error(`Unable to load auth users: ${authUsersResult.error.message}`);
 
   const authUsers = authUsersResult.data.users ?? [];
-  const todayStart = startOfChinaDay(now);
   const todayKey = dateKeyChina(now);
   const liveTransactions = transactions.filter((row: Json) => !row.deleted_at);
-  const appUsersTodayLogin = authUsers.filter((user) => dateMs(user.last_sign_in_at) >= todayStart).length;
-  const activeAppUsers7 = authUsers.filter((user) => dateMs(user.last_sign_in_at) >= since7).length;
-  const activeAppUsers30 = authUsers.filter((user) => dateMs(user.last_sign_in_at) >= since30).length;
-  const appTodayRecords = liveTransactions.filter((row: Json) => numberValue(row.occurred_at) >= todayStart);
-  const appTodaySyncRecords = liveTransactions.filter((row: Json) => numberValue(row.updated_at) >= todayStart);
-  const appTodayRecordUsers = countDistinct(appTodayRecords, "user_id");
-  const activeMiniUsers7 = countDistinct(miniSessions.filter((row: Json) => numberValue(row.last_used_at) >= since7), "user_id");
-  const activeMiniUsers30 = countDistinct(miniSessions.filter((row: Json) => numberValue(row.last_used_at) >= since30), "user_id");
-  const miniUsersTodayLogin = countDistinct(miniSessions.filter((row: Json) => numberValue(row.last_used_at) >= todayStart), "user_id");
-  const miniTodayRecords = miniTransactionsFromSnapshots(snapshots).filter((item) => item.date === todayKey);
-  const miniTodaySyncRecords = miniTransactionsFromSnapshots(snapshots).filter((item) => item.updated_at >= todayStart);
-  const miniTodayRecordUsers = countDistinct(miniTodayRecords, "user_id");
+  const appActivity = buildAppActivityEvents(authUsers, profiles, appActivityEvents);
+  const miniActivity = buildMiniActivityEvents(miniUsers, miniSessions, snapshots);
+  const appDayActivity = appActivity.filter((row) => inRange(row.occurred_at, selectedStart, selectedEnd));
+  const miniDayActivity = miniActivity.filter((row) => inRange(row.occurred_at, selectedStart, selectedEnd));
+  const appUsersDayLogin = authUsers.filter((user) => inRange(dateMs(user.last_sign_in_at), selectedStart, selectedEnd)).length;
+  const appUsersDayDeviceSeen = countDistinct(
+    profiles.filter((row: Json) => inRange(numberValue(row.device_last_seen_at), selectedStart, selectedEnd)),
+    "id",
+  );
+  const appDayOpenEvents = appActivityEvents.filter((row: Json) => inRange(numberValue(row.occurred_at), selectedStart, selectedEnd));
+  const activeAppUsers7 = countDistinct(appActivity.filter((row) => row.occurred_at >= since7 && row.occurred_at < selectedEnd), "user_id");
+  const activeAppUsers30 = countDistinct(appActivity.filter((row) => row.occurred_at >= since30 && row.occurred_at < selectedEnd), "user_id");
+  const activeMiniUsers7 = countDistinct(miniActivity.filter((row) => row.occurred_at >= since7 && row.occurred_at < selectedEnd), "user_id");
+  const activeMiniUsers30 = countDistinct(miniActivity.filter((row) => row.occurred_at >= since30 && row.occurred_at < selectedEnd), "user_id");
+  const appDayRecords = liveTransactions.filter((row: Json) => inRange(numberValue(row.occurred_at), selectedStart, selectedEnd));
+  const appDaySyncRecords = liveTransactions.filter((row: Json) => inRange(numberValue(row.updated_at), selectedStart, selectedEnd));
+  const appDayRecordUsers = countDistinct(appDayRecords, "user_id");
+  const miniTransactions = miniTransactionsFromSnapshots(snapshots);
+  const miniDayRecords = miniTransactions.filter((item) => item.date === selectedDate);
+  const miniDaySyncRecords = miniTransactions.filter((item) => inRange(item.updated_at, selectedStart, selectedEnd));
+  const miniDayRecordUsers = countDistinct(miniDayRecords, "user_id");
   const expenseMinor = liveTransactions
     .filter((row: Json) => row.type === "expense")
     .reduce((sum: number, row: Json) => sum + numberValue(row.amount_minor), 0);
@@ -166,14 +179,23 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>) {
       app_users: authUsers.length,
       total_known_users: authUsers.length + miniUsers.length,
       today_key: todayKey,
-      app_today_logins: appUsersTodayLogin,
-      mini_today_logins: miniUsersTodayLogin,
-      app_today_records: appTodayRecords.length,
-      app_today_record_users: appTodayRecordUsers,
-      app_today_sync_records: appTodaySyncRecords.length,
-      mini_today_records: miniTodayRecords.length,
-      mini_today_record_users: miniTodayRecordUsers,
-      mini_today_sync_records: miniTodaySyncRecords.length,
+      selected_date: selectedDate,
+      selected_is_today: selectedDate === todayKey,
+      app_day_active_users: countDistinct(appDayActivity, "user_id"),
+      app_day_open_events: appDayOpenEvents.length,
+      app_day_auth_logins: appUsersDayLogin,
+      app_day_device_seen_users: appUsersDayDeviceSeen,
+      mini_day_active_users: countDistinct(miniDayActivity, "user_id"),
+      mini_day_session_users: countDistinct(
+        miniSessions.filter((row: Json) => inRange(numberValue(row.last_used_at), selectedStart, selectedEnd)),
+        "user_id",
+      ),
+      app_day_records: appDayRecords.length,
+      app_day_record_users: appDayRecordUsers,
+      app_day_sync_records: appDaySyncRecords.length,
+      mini_day_records: miniDayRecords.length,
+      mini_day_record_users: miniDayRecordUsers,
+      mini_day_sync_records: miniDaySyncRecords.length,
       app_active_7d: activeAppUsers7,
       app_active_30d: activeAppUsers30,
       mini_active_7d: activeMiniUsers7,
@@ -192,36 +214,52 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>) {
     },
     charts: {
       signups_by_day: mergeSeries([
-        ["App", aggregateAuthByDay(authUsers, "created_at", 14)],
-        ["小程序", aggregateByDay(miniUsers, "created_at", 14)],
+        ["App", aggregateAuthByDay(authUsers, "created_at", 14, selectedStart)],
+        ["小程序", aggregateByDay(miniUsers, "created_at", 14, selectedStart)],
       ]),
       active_by_day: mergeSeries([
-        ["App 登录", aggregateAuthByDay(authUsers, "last_sign_in_at", 14)],
-        ["小程序", aggregateByDay(miniSessions, "last_used_at", 14, "user_id")],
+        ["App 可证活跃", aggregateEventObjectsByDay(appActivity, 14, selectedStart, "user_id")],
+        ["小程序可证活跃", aggregateEventObjectsByDay(miniActivity, 14, selectedStart, "user_id")],
       ]),
       transactions_by_day: mergeSeries([
-        ["App", aggregateByDay(liveTransactions, "occurred_at", 14)],
-        ["小程序", aggregateMiniTransactionsByDay(snapshots, 14)],
+        ["App", aggregateByDay(liveTransactions, "occurred_at", 14, selectedStart)],
+        ["小程序", aggregateMiniTransactionsByDay(snapshots, 14, selectedStart)],
       ]),
       feedback_by_status: statusBuckets(feedbackRows),
     },
     activity: buildTodayActivity({
-      todayKey,
-      appUsersTodayLogin,
-      miniUsersTodayLogin,
-      appTodayRecords: appTodayRecords.length,
-      appTodayRecordUsers,
-      appTodaySyncRecords: appTodaySyncRecords.length,
-      miniTodayRecords: miniTodayRecords.length,
-      miniTodayRecordUsers,
-      miniTodaySyncRecords: miniTodaySyncRecords.length,
+      selectedDate,
+      appActiveUsers: countDistinct(appDayActivity, "user_id"),
+      appOpenEvents: appDayOpenEvents.length,
+      appAuthLogins: appUsersDayLogin,
+      appDeviceSeenUsers: appUsersDayDeviceSeen,
+      miniActiveUsers: countDistinct(miniDayActivity, "user_id"),
+      miniSessionUsers: countDistinct(miniSessions.filter((row: Json) => inRange(numberValue(row.last_used_at), selectedStart, selectedEnd)), "user_id"),
+      appDayRecords: appDayRecords.length,
+      appDayRecordUsers,
+      appDaySyncRecords: appDaySyncRecords.length,
+      miniDayRecords: miniDayRecords.length,
+      miniDayRecordUsers,
+      miniDaySyncRecords: miniDaySyncRecords.length,
     }),
-    users: buildUserRows(authUsers, profiles, miniUsers, miniSessions, snapshots, liveTransactions, appFeedbackRows, miniFeedbackRows, todayStart, todayKey),
+    users: buildUserRows(
+      authUsers,
+      profiles,
+      miniUsers,
+      miniSessions,
+      snapshots,
+      appActivityEvents,
+      liveTransactions,
+      appFeedbackRows,
+      miniFeedbackRows,
+      selectedStart,
+      selectedDate,
+    ),
   };
 }
 
-function aggregateByDay(rows: Json[], field: string, days: number, distinctField?: string) {
-  const start = startOfChinaDay(Date.now() - (days - 1) * dayMs);
+function aggregateByDay(rows: Json[], field: string, days: number, endDayStart: number, distinctField?: string) {
+  const start = endDayStart - (days - 1) * dayMs;
   return Array.from({ length: days }, (_, index) => {
     const day = start + index * dayMs;
     const end = day + dayMs;
@@ -236,13 +274,13 @@ function aggregateByDay(rows: Json[], field: string, days: number, distinctField
   });
 }
 
-function aggregateAuthByDay(users: unknown[], field: string, days: number) {
+function aggregateAuthByDay(users: unknown[], field: string, days: number, endDayStart: number) {
   const rows = users.map((user) => ({ value_at: dateMs((user as Json)[field]) })).filter((row) => row.value_at > 0);
-  return aggregateByDay(rows, "value_at", days);
+  return aggregateByDay(rows, "value_at", days, endDayStart);
 }
 
-function aggregateMiniTransactionsByDay(snapshots: Json[], days: number) {
-  const start = startOfChinaDay(Date.now() - (days - 1) * dayMs);
+function aggregateMiniTransactionsByDay(snapshots: Json[], days: number, endDayStart: number) {
+  const start = endDayStart - (days - 1) * dayMs;
   const rows = miniTransactionsFromSnapshots(snapshots);
   return Array.from({ length: days }, (_, index) => {
     const day = start + index * dayMs;
@@ -250,6 +288,24 @@ function aggregateMiniTransactionsByDay(snapshots: Json[], days: number) {
     return {
       date: monthDayKeyChina(day),
       value: rows.filter((row) => row.date === date).length,
+    };
+  });
+}
+
+function aggregateEventObjectsByDay(
+  rows: Array<{ user_id: string; occurred_at: number }>,
+  days: number,
+  endDayStart: number,
+  distinctField?: "user_id",
+) {
+  const start = endDayStart - (days - 1) * dayMs;
+  return Array.from({ length: days }, (_, index) => {
+    const day = start + index * dayMs;
+    const end = day + dayMs;
+    const matches = rows.filter((row) => inRange(row.occurred_at, day, end));
+    return {
+      date: monthDayKeyChina(day),
+      value: distinctField ? new Set(matches.map((row) => row[distinctField]).filter(Boolean)).size : matches.length,
     };
   });
 }
@@ -265,16 +321,59 @@ function mergeSeries(series: Array<[string, Array<{ date: string; value: number 
 
 function buildTodayActivity(values: Record<string, number | string>) {
   return [
-    ["统计日期", values.todayKey, "Asia/Shanghai 自然日"],
-    ["App 今日登录用户", values.appUsersTodayLogin, "auth.users.last_sign_in_at"],
-    ["小程序今日打开用户", values.miniUsersTodayLogin, "mini_sessions.last_used_at"],
-    ["App 今日记账条数", values.appTodayRecords, "transactions.occurred_at"],
-    ["App 今日记账用户", values.appTodayRecordUsers, "transactions.user_id"],
-    ["App 今日同步账目", values.appTodaySyncRecords, "transactions.updated_at"],
-    ["小程序今日记账条数", values.miniTodayRecords, "快照 transactions[].date"],
-    ["小程序今日记账用户", values.miniTodayRecordUsers, "快照 user_id"],
-    ["小程序今日同步账目", values.miniTodaySyncRecords, "快照 transactions[].updatedAt"],
+    ["统计日期", values.selectedDate, "Asia/Shanghai 自然日"],
+    ["App 可证活跃用户", values.appActiveUsers, "app_activity_events / auth.users.last_sign_in_at / profiles.device_last_seen_at"],
+    ["App 打开事件", values.appOpenEvents, "app_activity_events.occurred_at；旧版本没有该事件表数据"],
+    ["App Auth 登录用户", values.appAuthLogins, "auth.users.last_sign_in_at；不等于 App 打开次数"],
+    ["App 设备同步用户", values.appDeviceSeenUsers, "profiles.device_last_seen_at；仅同步时更新"],
+    ["小程序可证活跃用户", values.miniActiveUsers, "mini_sessions.last_used_at / mini_users.last_seen_at / 快照 updated_at"],
+    ["小程序 session 用户", values.miniSessionUsers, "mini_sessions.last_used_at"],
+    ["App 选日发生记账", values.appDayRecords, "transactions.occurred_at"],
+    ["App 选日记账用户", values.appDayRecordUsers, "transactions.user_id"],
+    ["App 选日同步账目", values.appDaySyncRecords, "transactions.updated_at"],
+    ["小程序选日发生记账", values.miniDayRecords, "快照 transactions[].date"],
+    ["小程序选日记账用户", values.miniDayRecordUsers, "快照 user_id"],
+    ["小程序选日同步账目", values.miniDaySyncRecords, "快照 transactions[].updatedAt"],
   ].map(([label, value, evidence]) => ({ label, value, evidence }));
+}
+
+function buildAppActivityEvents(authUsers: Array<any>, profiles: Json[], appActivityEvents: Json[]) {
+  const events: Array<{ user_id: string; occurred_at: number; type: string }> = [];
+  for (const row of appActivityEvents) {
+    const userId = String(row.user_id ?? "");
+    const occurredAt = numberValue(row.occurred_at);
+    if (userId && occurredAt) events.push({ user_id: userId, occurred_at: occurredAt, type: stringValue(row.event_type, 40) || "app_open" });
+  }
+  for (const user of authUsers) {
+    const occurredAt = dateMs(user.last_sign_in_at);
+    if (user.id && occurredAt) events.push({ user_id: user.id, occurred_at: occurredAt, type: "auth_last_sign_in" });
+  }
+  for (const profile of profiles) {
+    const userId = String(profile.id ?? "");
+    const occurredAt = numberValue(profile.device_last_seen_at);
+    if (userId && occurredAt) events.push({ user_id: userId, occurred_at: occurredAt, type: "profile_device_seen" });
+  }
+  return events;
+}
+
+function buildMiniActivityEvents(miniUsers: Json[], miniSessions: Json[], snapshots: Json[]) {
+  const events: Array<{ user_id: string; occurred_at: number; type: string }> = [];
+  for (const row of miniSessions) {
+    const userId = String(row.user_id ?? "");
+    const occurredAt = numberValue(row.last_used_at);
+    if (userId && occurredAt) events.push({ user_id: userId, occurred_at: occurredAt, type: "mini_session_last_used" });
+  }
+  for (const row of miniUsers) {
+    const userId = String(row.id ?? "");
+    const occurredAt = numberValue(row.last_seen_at) || numberValue(row.updated_at);
+    if (userId && occurredAt) events.push({ user_id: userId, occurred_at: occurredAt, type: "mini_user_last_seen" });
+  }
+  for (const row of snapshots) {
+    const userId = String(row.user_id ?? "");
+    const occurredAt = numberValue(row.updated_at);
+    if (userId && occurredAt) events.push({ user_id: userId, occurred_at: occurredAt, type: "mini_snapshot_sync" });
+  }
+  return events;
 }
 
 function buildUserRows(
@@ -283,35 +382,57 @@ function buildUserRows(
   miniUsers: Json[],
   miniSessions: Json[],
   snapshots: Json[],
+  appActivityEvents: Json[],
   liveTransactions: Json[],
   appFeedbackRows: Json[],
   miniFeedbackRows: Json[],
-  todayStart: number,
-  todayKey: string,
+  selectedStart: number,
+  selectedDate: string,
 ) {
   const profilesById = mapBy(profiles, "id");
-  const appTxStats = summarizeAppTransactions(liveTransactions, todayStart);
+  const selectedEnd = selectedStart + dayMs;
+  const appActivity = buildAppActivityEvents(authUsers, profiles, appActivityEvents);
+  const miniActivity = buildMiniActivityEvents(miniUsers, miniSessions, snapshots);
+  const appActivityStats = summarizeActivity(appActivity, selectedStart, selectedEnd);
+  const miniActivityStats = summarizeActivity(miniActivity, selectedStart, selectedEnd);
+  const appTxStats = summarizeAppTransactions(liveTransactions, selectedStart, selectedEnd);
   const appFeedbackStats = summarizeFeedback(appFeedbackRows, "user_id");
-  const miniSessionStats = summarizeMiniSessions(miniSessions, todayStart);
-  const miniTxStats = summarizeMiniTransactions(snapshots, todayStart, todayKey);
+  const miniTxStats = summarizeMiniTransactions(snapshots, selectedStart, selectedDate);
   const miniFeedbackStats = summarizeFeedback(miniFeedbackRows, "mini_user_id");
+  const snapshotProfilesById = miniSnapshotProfiles(snapshots);
+  const appActivityByUser = groupActivityByUser(appActivity);
+  const miniActivityByUser = groupActivityByUser(miniActivity);
+  const appRecordsByUser = groupRecordEventsByUser(liveTransactions);
+  const miniRecordsByUser = groupMiniRecordEventsByUser(snapshots);
 
   const appRows = authUsers.map((user) => {
     const profile = profilesById.get(user.id) ?? {};
     const metadata = user.user_metadata ?? {};
     const tx = appTxStats.get(user.id) ?? emptyUserStats();
     const feedback = appFeedbackStats.get(user.id) ?? emptyFeedbackStats();
+    const activity = appActivityStats.get(user.id) ?? emptyActivityStats();
     const registeredAt = numberValue(profile.created_at) || dateMs(user.created_at);
     const lastLoginAt = dateMs(user.last_sign_in_at);
+    const activityRows = appActivityByUser.get(user.id) ?? [];
+    const recordRows = appRecordsByUser.get(user.id) ?? [];
     return {
       source: "App",
+      source_key: "app",
       user_id: user.id,
       display_name: stringValue(profile.display_name, 80) || stringValue(metadata.display_name, 80) || stringValue(user.email, 120) || shortId(user.id),
       email: stringValue(user.email, 160) || stringValue(profile.email, 160),
       contact: stringValue(profile.phone, 80),
+      device_brand: stringValue(profile.device_brand, 80),
+      device_model: stringValue(profile.device_model, 120),
+      device_platform: stringValue(profile.device_platform, 32) || "android",
+      app_version: stringValue(profile.app_version, 32),
+      gender: genderValue(profile.gender) || genderValue(metadata.gender),
+      birth_date: stringValue(profile.birth_date, 20) || stringValue(metadata.birth_date, 20),
+      city: stringValue(profile.city, 80) || stringValue(metadata.city, 80),
       registered_at: registeredAt,
       last_login_at: lastLoginAt,
-      today_logged_in: lastLoginAt >= todayStart,
+      last_seen_at: activity.last_activity_at,
+      today_logged_in: activity.day_active,
       total_records: tx.total_records,
       today_records: tx.today_records,
       today_sync_records: tx.today_sync_records,
@@ -321,24 +442,42 @@ function buildUserRows(
       last_feedback_at: feedback.last_feedback_at,
       role: stringValue(profile.role, 32) || "user",
       membership_tier: stringValue(profile.membership_tier, 32) || "free",
-      evidence: "Auth 登录 + transactions 云端表",
+      activity_week: seriesByDay(activityRows, selectedStart, 7),
+      activity_month: seriesByDay(activityRows, selectedStart, 30),
+      activity_year: seriesByMonth(activityRows, selectedStart, 12),
+      record_week: seriesByDay(recordRows, selectedStart, 7),
+      record_month: seriesByDay(recordRows, selectedStart, 30),
+      record_year: seriesByMonth(recordRows, selectedStart, 12),
+      evidence: "App 活跃来自 app_activity_events / Auth 最后登录 / profiles 设备同步；旧版本没有完整打开流水",
     };
   });
 
   const miniRows = miniUsers.map((user: Json) => {
     const id = String(user.id);
-    const sessions = miniSessionStats.get(id) ?? emptySessionStats();
+    const activity = miniActivityStats.get(id) ?? emptyActivityStats();
     const tx = miniTxStats.get(id) ?? emptyUserStats();
     const feedback = miniFeedbackStats.get(id) ?? emptyFeedbackStats();
+    const snapshotProfile = snapshotProfilesById.get(id) ?? {};
+    const activityRows = miniActivityByUser.get(id) ?? [];
+    const recordRows = miniRecordsByUser.get(id) ?? [];
     return {
       source: "小程序",
+      source_key: "mini",
       user_id: id,
       display_name: stringValue(user.nickname, 80) || `小程序用户 ${shortId(id)}`,
       email: "",
       contact: "",
+      device_brand: stringValue(user.device_brand, 80),
+      device_model: stringValue(user.device_model, 120),
+      device_platform: stringValue(user.device_platform, 32) || "wechat-mini",
+      app_version: stringValue(user.app_version, 32),
+      gender: genderValue(user.gender) || genderValue(snapshotProfile.gender),
+      birth_date: stringValue(user.birth_date, 20) || stringValue(snapshotProfile.birth_date, 20),
+      city: stringValue(user.city, 80) || stringValue(snapshotProfile.city, 80),
       registered_at: numberValue(user.created_at),
-      last_login_at: sessions.last_login_at,
-      today_logged_in: sessions.today_logged_in,
+      last_login_at: activity.last_activity_at,
+      last_seen_at: activity.last_activity_at,
+      today_logged_in: activity.day_active,
       total_records: tx.total_records,
       today_records: tx.today_records,
       today_sync_records: tx.today_sync_records,
@@ -348,26 +487,62 @@ function buildUserRows(
       last_feedback_at: feedback.last_feedback_at,
       role: "mini_user",
       membership_tier: "",
-      evidence: "mini_sessions + mini_ledger_snapshots",
+      activity_week: seriesByDay(activityRows, selectedStart, 7),
+      activity_month: seriesByDay(activityRows, selectedStart, 30),
+      activity_year: seriesByMonth(activityRows, selectedStart, 12),
+      record_week: seriesByDay(recordRows, selectedStart, 7),
+      record_month: seriesByDay(recordRows, selectedStart, 30),
+      record_year: seriesByMonth(recordRows, selectedStart, 12),
+      evidence: "小程序活跃来自 mini_sessions / mini_users.last_seen_at / 账本快照同步",
     };
   });
 
   return [...appRows, ...miniRows].sort((a, b) => {
-    const aTime = Math.max(numberValue(a.last_login_at), numberValue(a.last_sync_at), numberValue(a.last_record_at), numberValue(a.registered_at));
-    const bTime = Math.max(numberValue(b.last_login_at), numberValue(b.last_sync_at), numberValue(b.last_record_at), numberValue(b.registered_at));
-    return bTime - aTime;
+    const byRegistered = numberValue(b.registered_at) - numberValue(a.registered_at);
+    if (byRegistered !== 0) return byRegistered;
+    return String(a.user_id).localeCompare(String(b.user_id));
   });
 }
 
-function summarizeAppTransactions(rows: Json[], todayStart: number) {
+function miniSnapshotProfiles(snapshots: Json[]) {
+  const rows = new Map<string, Json>();
+  for (const snapshot of snapshots) {
+    const userId = String(snapshot.user_id ?? "");
+    if (!userId) continue;
+    const payload = snapshot.payload && typeof snapshot.payload === "object" ? snapshot.payload as Json : {};
+    const profile = payload.profile && typeof payload.profile === "object" ? payload.profile as Json : {};
+    rows.set(userId, {
+      gender: profile.gender,
+      birth_date: profile.birthDate,
+      city: profile.city,
+    });
+  }
+  return rows;
+}
+
+function summarizeActivity(rows: Array<{ user_id: string; occurred_at: number }>, dayStart: number, dayEnd: number) {
+  const stats = new Map<string, ReturnType<typeof emptyActivityStats>>();
+  for (const row of rows) {
+    const id = String(row.user_id ?? "");
+    if (!id) continue;
+    const stat = stats.get(id) ?? emptyActivityStats();
+    stat.total_activity_events += 1;
+    stat.last_activity_at = Math.max(stat.last_activity_at, numberValue(row.occurred_at));
+    stat.day_active = stat.day_active || inRange(row.occurred_at, dayStart, dayEnd);
+    stats.set(id, stat);
+  }
+  return stats;
+}
+
+function summarizeAppTransactions(rows: Json[], dayStart: number, dayEnd: number) {
   const stats = new Map<string, ReturnType<typeof emptyUserStats>>();
   for (const row of rows) {
     const id = String(row.user_id ?? "");
     if (!id) continue;
     const stat = stats.get(id) ?? emptyUserStats();
     stat.total_records += 1;
-    if (numberValue(row.occurred_at) >= todayStart) stat.today_records += 1;
-    if (numberValue(row.updated_at) >= todayStart) stat.today_sync_records += 1;
+    if (inRange(numberValue(row.occurred_at), dayStart, dayEnd)) stat.today_records += 1;
+    if (inRange(numberValue(row.updated_at), dayStart, dayEnd)) stat.today_sync_records += 1;
     stat.last_record_at = Math.max(stat.last_record_at, numberValue(row.occurred_at));
     stat.last_sync_at = Math.max(stat.last_sync_at, numberValue(row.updated_at));
     stats.set(id, stat);
@@ -376,6 +551,7 @@ function summarizeAppTransactions(rows: Json[], todayStart: number) {
 }
 
 function summarizeMiniTransactions(snapshots: Json[], todayStart: number, todayKey: string) {
+  const todayEnd = todayStart + dayMs;
   const stats = new Map<string, ReturnType<typeof emptyUserStats>>();
   for (const row of miniTransactionsFromSnapshots(snapshots)) {
     const id = row.user_id;
@@ -383,7 +559,7 @@ function summarizeMiniTransactions(snapshots: Json[], todayStart: number, todayK
     const stat = stats.get(id) ?? emptyUserStats();
     stat.total_records += 1;
     if (row.date === todayKey) stat.today_records += 1;
-    if (row.updated_at >= todayStart) stat.today_sync_records += 1;
+    if (inRange(row.updated_at, todayStart, todayEnd)) stat.today_sync_records += 1;
     stat.last_record_at = Math.max(stat.last_record_at, row.record_at);
     stat.last_sync_at = Math.max(stat.last_sync_at, row.updated_at);
     stats.set(id, stat);
@@ -443,6 +619,10 @@ function emptyUserStats() {
   return { total_records: 0, today_records: 0, today_sync_records: 0, last_record_at: 0, last_sync_at: 0 };
 }
 
+function emptyActivityStats() {
+  return { total_activity_events: 0, last_activity_at: 0, day_active: false };
+}
+
 function emptySessionStats() {
   return { last_login_at: 0, today_logged_in: false };
 }
@@ -466,8 +646,86 @@ function countDistinct(rows: Json[], field: string): number {
   return new Set(rows.map((row) => String(row[field] ?? "")).filter(Boolean)).size;
 }
 
+function groupActivityByUser(rows: Array<{ user_id: string; occurred_at: number }>) {
+  const grouped = new Map<string, Array<{ occurred_at: number }>>();
+  for (const row of rows) {
+    if (!row.user_id || !row.occurred_at) continue;
+    const list = grouped.get(row.user_id) ?? [];
+    list.push({ occurred_at: row.occurred_at });
+    grouped.set(row.user_id, list);
+  }
+  return grouped;
+}
+
+function groupRecordEventsByUser(rows: Json[]) {
+  const grouped = new Map<string, Array<{ occurred_at: number }>>();
+  for (const row of rows) {
+    const userId = String(row.user_id ?? "");
+    const occurredAt = numberValue(row.occurred_at);
+    if (!userId || !occurredAt) continue;
+    const list = grouped.get(userId) ?? [];
+    list.push({ occurred_at: occurredAt });
+    grouped.set(userId, list);
+  }
+  return grouped;
+}
+
+function groupMiniRecordEventsByUser(snapshots: Json[]) {
+  const grouped = new Map<string, Array<{ occurred_at: number }>>();
+  for (const row of miniTransactionsFromSnapshots(snapshots)) {
+    const occurredAt = row.record_at;
+    if (!row.user_id || !occurredAt) continue;
+    const list = grouped.get(row.user_id) ?? [];
+    list.push({ occurred_at: occurredAt });
+    grouped.set(row.user_id, list);
+  }
+  return grouped;
+}
+
+function seriesByDay(rows: Array<{ occurred_at: number }>, endDayStart: number, days: number) {
+  const start = endDayStart - (days - 1) * dayMs;
+  return Array.from({ length: days }, (_, index) => {
+    const day = start + index * dayMs;
+    const end = day + dayMs;
+    return {
+      date: monthDayKeyChina(day),
+      value: rows.filter((row) => inRange(row.occurred_at, day, end)).length,
+    };
+  });
+}
+
+function seriesByMonth(rows: Array<{ occurred_at: number }>, endDayStart: number, months: number) {
+  const endDate = new Date(endDayStart + chinaOffsetMs);
+  const endYear = endDate.getUTCFullYear();
+  const endMonth = endDate.getUTCMonth();
+  return Array.from({ length: months }, (_, index) => {
+    const cursor = new Date(Date.UTC(endYear, endMonth - (months - 1 - index), 1));
+    const next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+    const start = cursor.getTime() - chinaOffsetMs;
+    const end = next.getTime() - chinaOffsetMs;
+    return {
+      date: cursor.toISOString().slice(2, 7),
+      value: rows.filter((row) => inRange(row.occurred_at, start, end)).length,
+    };
+  });
+}
+
+function inRange(value: number, start: number, end: number): boolean {
+  return value >= start && value < end;
+}
+
 function startOfChinaDay(value: number): number {
   return Math.floor((value + chinaOffsetMs) / dayMs) * dayMs - chinaOffsetMs;
+}
+
+function requestedDateKey(value: unknown, fallback: number): string {
+  const raw = stringValue(value, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : dateKeyChina(fallback);
+}
+
+function dayStartFromKey(value: string): number {
+  const parsed = Date.parse(`${value}T00:00:00+08:00`);
+  return Number.isFinite(parsed) ? parsed : startOfChinaDay(Date.now());
 }
 
 function dateKeyChina(value: number): string {
@@ -668,6 +926,11 @@ async function safeJson(request: Request): Promise<Json> {
 
 function stringValue(value: unknown, maxLength: number): string {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function genderValue(value: unknown): string {
+  const raw = stringValue(value, 24);
+  return ["female", "male", "other", "prefer_not"].includes(raw) ? raw : "";
 }
 
 function positiveInt(value: unknown, field: string): number {

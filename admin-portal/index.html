@@ -84,7 +84,14 @@
               <h2>运营总览</h2>
               <p id="refreshMeta">等待刷新数据。</p>
             </div>
-            <span class="source-pill">数据源：Supabase 真实表</span>
+            <div class="date-tools">
+              <label>
+                统计日期
+                <input id="dateFilter" type="date" />
+              </label>
+              <button id="todayBtn" class="ghost" type="button">今天</button>
+              <span class="source-pill">数据源：Supabase 真实表</span>
+            </div>
           </div>
           <div id="supportNotice" class="notice"></div>
           <section id="kpiGrid" class="kpi-grid"></section>
@@ -96,7 +103,7 @@
             </article>
             <article class="chart-panel">
               <div class="item-title">最近活动分布</div>
-              <p class="muted">App 按最近登录，小程序按最近打开统计；这是“最后一次活动”的分布，不伪装成完整 DAU 曲线。</p>
+                <p class="muted">按可证明活动统计；旧 App 版本没有完整打开事件，不伪装成完整 DAU 曲线。</p>
               <div id="activeChart" class="bar-chart"></div>
             </article>
             <article class="chart-panel">
@@ -138,7 +145,14 @@
               <h2>用户明细</h2>
               <p>App 用户来自 Supabase Auth，小程序用户来自 mini_users；两个渠道分开显示，不做可能重复的合并。</p>
             </div>
-            <input id="userSearch" class="search" placeholder="搜索用户名、邮箱、来源或 ID" />
+            <div class="user-tools">
+              <div class="filter-group" aria-label="用户来源筛选">
+                <button class="filter-chip active" data-user-source="all" type="button">全部</button>
+                <button class="filter-chip" data-user-source="app" type="button">只看 App</button>
+                <button class="filter-chip" data-user-source="mini" type="button">只看小程序</button>
+              </div>
+              <input id="userSearch" class="search" placeholder="搜索用户名、邮箱、设备、城市或 ID" />
+            </div>
           </div>
           <div class="table-wrap">
             <table class="user-table">
@@ -147,17 +161,22 @@
                   <th>来源</th>
                   <th>用户名</th>
                   <th>邮箱/联系</th>
+                  <th>设备品牌</th>
+                  <th>性别</th>
+                  <th>生日</th>
+                  <th>城市</th>
                   <th>注册时间</th>
-                  <th>最后登录/打开</th>
-                  <th>今天登录</th>
+                <th>最后活跃</th>
+                <th>选日活跃</th>
                   <th>账目</th>
-                  <th>今天记账</th>
-                  <th>今天同步</th>
-                  <th>反馈</th>
-                  <th>证据</th>
-                </tr>
-              </thead>
-              <tbody id="userRows"></tbody>
+                  <th>选日记账</th>
+                  <th>选日同步</th>
+                <th>反馈</th>
+                <th>证据</th>
+                <th>详情</th>
+              </tr>
+            </thead>
+            <tbody id="userRows"></tbody>
             </table>
           </div>
         </section>
@@ -252,7 +271,20 @@
       </section>
     </main>
 
+    <div id="userModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="userModalTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <p id="userModalSource" class="eyebrow">User Detail</p>
+            <h2 id="userModalTitle">用户详情</h2>
+          </div>
+          <button id="closeUserModal" class="ghost" type="button">关闭</button>
+        </div>
+        <div id="userModalBody"></div>
+      </div>
+    </div>
+
     <div id="toast" class="toast hidden"></div>
-    <script type="module" src="app.js?v=20260702-feedback"></script>
+    <script type="module" src="app.js?v=20260702-activity-portrait"></script>
   </body>
 </html>

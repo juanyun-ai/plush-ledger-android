@@ -98,6 +98,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         session?.let {
             viewModelScope.launch {
                 ledger.ensureUserWorkspace(it.userId, it.displayName, it.phone, it.email)
+                ledger.recordAppActivity()
                 if (!state.value.locked) observeLedger(it.userId)
             }
             if (!state.value.locked) startCloudRefresh(it)
@@ -885,6 +886,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                 .onFailure { syncWarning = "登录成功，但首次云恢复失败；本地数据仍安全保留" }
         }
         ledger.ensureUserWorkspace(session.userId, session.displayName, session.phone, session.email)
+        ledger.recordAppActivity("sign_in")
         app.enqueueImmediateSync()
         state.value = state.value.copy(
             session = sessions.currentSession() ?: session,

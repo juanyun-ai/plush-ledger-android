@@ -1,5 +1,6 @@
 package com.plushledger.sync
 
+import android.os.Build as AndroidBuild
 import com.plushledger.BuildConfig
 import com.plushledger.auth.AuthChannel
 import com.plushledger.data.AccountEntity
@@ -132,6 +133,39 @@ class SupabaseClient {
             email = user.optString("email").takeIf(String::isNotBlank),
             phone = user.optString("phone").takeIf(String::isNotBlank)
         )
+    }
+
+    suspend fun updateProfileClientInfo(accessToken: String, userId: String) {
+        val payload = clientInfoPayload()
+            .put("device_platform", "android")
+            .put("device_last_seen_at", System.currentTimeMillis())
+            .put("app_version", BuildConfig.VERSION_NAME)
+        request(
+            method = "PATCH",
+            path = "/rest/v1/profiles?id=eq.$userId",
+            body = payload,
+            accessToken = accessToken,
+            prefer = "return=minimal"
+        )
+    }
+
+    suspend fun recordAppActivity(accessToken: String, userId: String, eventType: String = "app_open") {
+        val now = System.currentTimeMillis()
+        val event = clientInfoPayload()
+            .put("user_id", userId)
+            .put("event_type", eventType.take(40))
+            .put("device_platform", "android")
+            .put("app_version", BuildConfig.VERSION_NAME)
+            .put("occurred_at", now)
+            .put("created_at", now)
+        request(
+            method = "POST",
+            path = "/rest/v1/app_activity_events",
+            body = JSONArray().put(event),
+            accessToken = accessToken,
+            prefer = "return=minimal"
+        )
+        updateProfileClientInfo(accessToken, userId)
     }
 
     suspend fun refreshSession(refreshToken: String): RemoteSession {
@@ -385,6 +419,14 @@ class SupabaseClient {
             val text = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
             error("头像上传失败 $code: $text")
         }
+    }
+
+    private fun clientInfoPayload(): JSONObject {
+        val brand = AndroidBuild.MANUFACTURER.orEmpty().trim().take(80)
+        val model = AndroidBuild.MODEL.orEmpty().trim().take(120)
+        return JSONObject()
+            .put("device_brand", brand.ifBlank { JSONObject.NULL })
+            .put("device_model", model.ifBlank { JSONObject.NULL })
     }
 }
 

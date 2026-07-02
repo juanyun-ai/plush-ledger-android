@@ -41,10 +41,13 @@ async function login(body: Json): Promise<Response> {
   if (!session.openid) return json({ error: "微信登录失败：未返回 openid" }, 502);
 
   const now = Date.now();
+  const clientInfo = clientInfoValue(body.client);
   const user = await rest("POST", "/rest/v1/mini_users?on_conflict=appid,openid&select=*", [{
     appid: wechatAppId,
     openid: session.openid,
     unionid: session.unionid ?? null,
+    ...clientPatch(clientInfo),
+    last_seen_at: now,
     updated_at: now,
   }], {
     Prefer: "resolution=merge-duplicates,return=representation",
@@ -85,6 +88,7 @@ async function pushSnapshot(req: Request, body: Json): Promise<Response> {
   }], {
     Prefer: "resolution=merge-duplicates,return=representation",
   });
+  await updateMiniUserProfile(session.user_id, payload, now, clientInfoValue(body.client));
   return json({ ok: true, updatedAt: now });
 }
 
@@ -184,6 +188,52 @@ async function loadSnapshot(userId: string): Promise<Json | null> {
   return rows[0] ?? null;
 }
 
+async function updateMiniUserProfile(userId: unknown, payload: unknown, now: number, clientInfo: Json): Promise<void> {
+  const profile = profileFromPayload(payload);
+  const nickname = profileNickname(profile);
+  const gender = genderValue(profile.gender);
+  const birthDate = birthDateValue(profile.birthDate);
+  const city = stringValue(profile.city, 80);
+  const patch: Json = {
+    ...clientPatch(clientInfo),
+    updated_at: now,
+    last_seen_at: now,
+  };
+  if (nickname) patch.nickname = nickname;
+  if (gender) patch.gender = gender;
+  if (birthDate) patch.birth_date = birthDate;
+  if (city) patch.city = city;
+  await rest(
+    "PATCH",
+    `/rest/v1/mini_users?id=eq.${encodeURIComponent(String(userId))}`,
+    patch,
+    { Prefer: "return=minimal" },
+  );
+}
+
+function profileFromPayload(payload: unknown): Json {
+  const ledger = payload && typeof payload === "object" ? payload as Json : {};
+  return ledger.profile && typeof ledger.profile === "object" ? ledger.profile as Json : {};
+}
+
+function profileNickname(profile: Json): string {
+  const nickname = stringValue(profile.nickname, 80);
+  return nickname && nickname !== "绒绒用户" ? nickname : "";
+}
+
+function clientInfoValue(value: unknown): Json {
+  return value && typeof value === "object" ? value as Json : {};
+}
+
+function clientPatch(clientInfo: Json): Json {
+  return {
+    device_brand: stringValue(clientInfo.brand, 80) || null,
+    device_model: stringValue(clientInfo.model, 120) || null,
+    device_platform: stringValue(clientInfo.platform, 32) || null,
+    app_version: stringValue(clientInfo.version, 32) || null,
+  };
+}
+
 async function rest(method: string, path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<Json[]> {
   if (!supabaseUrl || !serviceRoleKey) throw new Error("Supabase 后端环境变量未配置");
   const response = await fetch(`${supabaseUrl}${path}`, {
@@ -227,6 +277,16 @@ function json(payload: unknown, status = 200): Response {
 
 function stringValue(value: unknown, maxLength: number): string {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function genderValue(value: unknown): string {
+  const raw = stringValue(value, 24);
+  return ["female", "male", "other", "prefer_not"].includes(raw) ? raw : "";
+}
+
+function birthDateValue(value: unknown): string {
+  const raw = stringValue(value, 20);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
 }
 
 function categoryValue(value: unknown): string {

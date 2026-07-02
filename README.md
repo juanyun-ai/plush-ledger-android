@@ -14,7 +14,7 @@
 
   <br>
 
-  <a href="https://github.com/juanyun-ai/plush-ledger-android/releases/download/v1.0.6/rongrong-ledger-1.0.6-debug.apk"><b>下载 Android APK</b></a>
+  <a href="https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.0.7.apk"><b>下载 Android APK</b></a>
   ·
   <a href="https://juanyun-ai.github.io/plush-ledger-android/"><b>产品网页</b></a>
   ·
@@ -52,8 +52,8 @@
 
 ## 当前状态
 
-- Android App 是当前完整版本，当前源码版本为 **1.0.7**；最新已发布 APK 仍为 **1.0.6**，待本次修复打包后更新。
-- 微信小程序已上线，最新版本为 **1.4.7**；由于个人主体小程序类目和隐私合规限制，小程序版收敛了 AI 智能记账、生活日历、资料上传、手机绑定等入口。
+- Android App 是当前完整版本，当前源码版本和最新已发布 APK 均为 **1.0.7**。
+- 微信小程序已上线，当前维护版本为 **1.4.9**；由于个人主体小程序类目和隐私合规限制，小程序版收敛了生活日历、资料上传、手机绑定等入口，AI 快记采用本机规则解析。
 - 两端共用“本地优先、可选云同步、用户确认后入账”的产品原则，但功能页面并不完全一致；Android 版保留更完整的 AI、日记、生活日历和应用内更新体验。
 - 项目从 2026-06-06 开始制作，前三到五天完成基础记账产品，随后围绕真实使用、设计稿、下载更新、导入导出、云同步、合规和小程序提审持续迭代约三周。
 - 2026-06-24 完成 `xiaoxing.online` 相关备案和产品官网准备；2026-06-28 至 2026-06-29 完成小程序提审整改与上线收敛。
@@ -62,7 +62,9 @@
 
 - 稳定 HTTPS 页面：[privacy.xiaoxing.online](https://privacy.xiaoxing.online/)
 - 管理后台：[admin.xiaoxing.online](https://admin.xiaoxing.online/)，默认连接绒绒记账 Supabase 项目，登录管理员账号后可管理反馈、官方消息、版本和远程配置。
-- 最新 APK：[rongrong-ledger-1.0.6-debug.apk](https://github.com/juanyun-ai/plush-ledger-android/releases/download/v1.0.6/rongrong-ledger-1.0.6-debug.apk)
+- 小程序用户在管理后台优先显示用户自设昵称；微信 openid 仅用于内部账号绑定，不作为公开用户名展示。
+- 运营看板只展示数据库可证明的数据：App 打开事件来自 `app_activity_events`，旧版本没有记录时不会倒填假活跃；记账发生日和同步日分开看。
+- 最新 APK：[rongrong-ledger-1.0.7.apk](https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.0.7.apk)
 - 国内访问长期方案：优先用 Cloudflare Pages 或 Vercel 避开腾讯云接入备案阻塞；如后续需要大陆加速，再考虑腾讯云 EdgeOne 和接入备案。
 
 ## 功能
@@ -154,6 +156,8 @@ app/build/outputs/apk/debug/app-debug.apk
 1. 本地模式和登录模式的反馈都改为 App 内直连开发者后台，不再依赖邮箱收件。
 2. “关于我们 - 联系我们”底部新增在线留言框，提供清空、暂存、取消和发送四个操作。
 3. 官网、隐私政策、用户协议和账号注销说明改为优先引导 App 内在线留言。
+4. 管理后台用户明细支持 App / 小程序筛选、注册时间降序、设备品牌、性别、生日、城市和详情弹窗。
+5. 新增 `app_activity_events` 轻量活动表，后续 App 打开和登录会形成可证明活跃数据；旧版本没有事件流水时不倒填假留存。
 
 ### v1.0.6
 

@@ -11,6 +11,8 @@ const state = {
   session: loadJson(SESSION_KEY, null),
   dashboard: null,
   activeTab: "overview",
+  userSourceFilter: "all",
+  selectedDate: localDateKey(),
 };
 
 const els = {
@@ -21,6 +23,8 @@ const els = {
   loginForm: byId("loginForm"),
   sessionLabel: byId("sessionLabel"),
   refreshBtn: byId("refreshBtn"),
+  dateFilter: byId("dateFilter"),
+  todayBtn: byId("todayBtn"),
   logoutBtn: byId("logoutBtn"),
   configBtn: byId("configBtn"),
   toast: byId("toast"),
@@ -39,6 +43,11 @@ const els = {
   transactionChart: byId("transactionChart"),
   feedbackStatusChart: byId("feedbackStatusChart"),
   activityRows: byId("activityRows"),
+  userModal: byId("userModal"),
+  userModalSource: byId("userModalSource"),
+  userModalTitle: byId("userModalTitle"),
+  userModalBody: byId("userModalBody"),
+  closeUserModal: byId("closeUserModal"),
 };
 
 const links = [
@@ -61,6 +70,7 @@ init();
 function init() {
   byId("supabaseUrl").value = state.settings.supabaseUrl || "";
   byId("supabaseAnonKey").value = state.settings.supabaseAnonKey || "";
+  els.dateFilter.value = state.selectedDate;
   renderLinks();
   bindEvents();
   renderShell();
@@ -89,10 +99,25 @@ function bindEvents() {
   });
 
   els.refreshBtn.addEventListener("click", () => loadDashboard());
+  els.dateFilter.addEventListener("change", () => {
+    state.selectedDate = els.dateFilter.value || localDateKey();
+    loadDashboard();
+  });
+  els.todayBtn.addEventListener("click", () => {
+    state.selectedDate = localDateKey();
+    els.dateFilter.value = state.selectedDate;
+    loadDashboard();
+  });
   els.logoutBtn.addEventListener("click", logout);
   els.configBtn.addEventListener("click", resetConnection);
   els.feedbackSearch.addEventListener("input", renderFeedback);
   els.userSearch.addEventListener("input", renderUsers);
+  document.querySelectorAll("[data-user-source]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.userSourceFilter = button.dataset.userSource || "all";
+      renderUsers();
+    });
+  });
 
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
@@ -102,6 +127,10 @@ function bindEvents() {
   els.messageForm.addEventListener("submit", saveMessage);
   els.versionForm.addEventListener("submit", saveVersion);
   els.configForm.addEventListener("submit", saveConfig);
+  els.closeUserModal.addEventListener("click", closeUserModal);
+  els.userModal.addEventListener("click", (event) => {
+    if (event.target === els.userModal) closeUserModal();
+  });
 }
 
 function renderShell() {
@@ -155,7 +184,9 @@ function resetConnection() {
 async function loadDashboard() {
   if (!isReady()) return;
   try {
-    state.dashboard = await adminAction("dashboard", {});
+    state.dashboard = await adminAction("dashboard", { date: state.selectedDate });
+    state.selectedDate = state.dashboard?.analytics?.summary?.selected_date || state.selectedDate;
+    els.dateFilter.value = state.selectedDate;
     renderDashboard();
     toast("数据已刷新");
   } catch (error) {
@@ -178,8 +209,9 @@ function renderOverview() {
   const analytics = state.dashboard?.analytics || {};
   const summary = analytics.summary || {};
   const support = analytics.support_email || {};
+  const selectedLabel = summary.selected_date || state.selectedDate || "-";
   els.refreshMeta.textContent = analytics.refreshed_at
-    ? `上次刷新：${formatTime(analytics.refreshed_at)}。刷新按钮会重新读取 Supabase 数据库；今天按北京时间 ${summary.today_key || "-"} 统计。`
+    ? `上次刷新：${formatTime(analytics.refreshed_at)}。当前查看北京时间 ${selectedLabel} 的真实数据。`
     : "等待刷新数据。";
   els.supportNotice.innerHTML = `
     <strong>反馈来源说明</strong>
@@ -189,10 +221,10 @@ function renderOverview() {
   const cards = [
     ["App 用户", summary.app_users, `${summary.app_profiles || 0} 个已建档案`],
     ["小程序用户", summary.mini_users, "mini_users 表，不与 App 合并"],
-    ["今日 App 登录", summary.app_today_logins, "auth.users.last_sign_in_at"],
-    ["今日小程序打开", summary.mini_today_logins, "mini_sessions.last_used_at"],
-    ["今日 App 记账", summary.app_today_records, `${summary.app_today_record_users || 0} 个用户`],
-    ["今日小程序记账", summary.mini_today_records, `${summary.mini_today_record_users || 0} 个用户`],
+    ["选日 App 可证活跃", summary.app_day_active_users, `打开事件 ${summary.app_day_open_events || 0} / Auth 登录 ${summary.app_day_auth_logins || 0} / 设备同步 ${summary.app_day_device_seen_users || 0}`],
+    ["选日小程序可证活跃", summary.mini_day_active_users, `session 用户 ${summary.mini_day_session_users || 0}`],
+    ["选日 App 记账发生", summary.app_day_records, `${summary.app_day_record_users || 0} 个用户；不是登录次数`],
+    ["选日小程序记账发生", summary.mini_day_records, `${summary.mini_day_record_users || 0} 个用户`],
     ["云端 App 账目", summary.transactions, `支出 ${formatMoney(summary.expense_minor)} / 收入 ${formatMoney(summary.income_minor)}`],
     ["新反馈", summary.feedback_new, `${summary.feedback_total || 0} 条反馈 · App ${summary.app_feedback_total || 0} / 小程序 ${summary.mini_feedback_total || 0}`],
   ];
@@ -205,7 +237,7 @@ function renderOverview() {
   `).join("");
 
   renderStackedBars(els.signupChart, analytics.charts?.signups_by_day || [], ["App", "小程序"]);
-  renderStackedBars(els.activeChart, analytics.charts?.active_by_day || [], ["App 登录", "小程序"]);
+  renderStackedBars(els.activeChart, analytics.charts?.active_by_day || [], ["App 可证活跃", "小程序可证活跃"]);
   renderStackedBars(els.transactionChart, analytics.charts?.transactions_by_day || [], ["App", "小程序"]);
   renderStatusBars(els.feedbackStatusChart, analytics.charts?.feedback_by_status || []);
   renderActivity(analytics.activity || []);
@@ -214,8 +246,29 @@ function renderOverview() {
 function renderUsers() {
   const keyword = els.userSearch.value.trim().toLowerCase();
   const rows = (state.dashboard?.users || []).filter((item) => {
-    const haystack = `${item.source || ""} ${item.user_id || ""} ${item.display_name || ""} ${item.email || ""} ${item.contact || ""} ${item.role || ""}`.toLowerCase();
+    const sourceKey = item.source_key || "";
+    if (state.userSourceFilter !== "all" && sourceKey !== state.userSourceFilter) return false;
+    const haystack = [
+      item.source,
+      sourceKey,
+      item.user_id,
+      item.display_name,
+      item.email,
+      item.contact,
+      item.device_brand,
+      item.device_model,
+      item.device_platform,
+      genderLabel(item.gender),
+      item.birth_date,
+      item.city,
+      item.role,
+    ].join(" ").toLowerCase();
     return !keyword || haystack.includes(keyword);
+  });
+  document.querySelectorAll("[data-user-source]").forEach((button) => {
+    const active = button.dataset.userSource === state.userSourceFilter;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
   });
   els.userRows.innerHTML = rows.map((item) => `
     <tr>
@@ -225,6 +278,13 @@ function renderUsers() {
         <div class="item-meta">${escapeHtml(shortId(item.user_id || ""))}</div>
       </td>
       <td>${escapeHtml(item.email || item.contact || "-")}</td>
+      <td>
+        ${escapeHtml(deviceLabel(item))}
+        <div class="item-meta">${escapeHtml(item.app_version ? `v${item.app_version}` : item.device_platform || "")}</div>
+      </td>
+      <td>${escapeHtml(genderLabel(item.gender))}</td>
+      <td>${escapeHtml(item.birth_date || "未填写")}</td>
+      <td>${escapeHtml(item.city || "未填写")}</td>
       <td>${formatTime(item.registered_at)}</td>
       <td>${formatTime(item.last_login_at)}</td>
       <td>${formatBool(item.today_logged_in)}</td>
@@ -233,8 +293,12 @@ function renderUsers() {
       <td>${Number(item.today_sync_records || 0)}</td>
       <td>${Number(item.feedback_count || 0)}</td>
       <td class="content-cell">${escapeHtml(item.evidence || "")}</td>
+      <td><button class="small ghost" data-user-detail="${escapeHtml(item.source_key || "")}:${escapeHtml(item.user_id || "")}" type="button">查看</button></td>
     </tr>
-  `).join("") || `<tr><td colspan="11">暂无用户</td></tr>`;
+  `).join("") || `<tr><td colspan="16">暂无用户</td></tr>`;
+  document.querySelectorAll("[data-user-detail]").forEach((button) => {
+    button.addEventListener("click", () => openUserModal(button.dataset.userDetail || ""));
+  });
 }
 
 function renderFeedback() {
@@ -449,22 +513,27 @@ function renderLinks() {
 
 function renderStackedBars(target, rows, fields) {
   const max = Math.max(1, ...rows.map((row) => fields.reduce((sum, field) => sum + Number(row[field] || 0), 0)));
-  target.innerHTML = rows.map((row) => {
+  const bars = rows.map((row) => {
     const total = fields.reduce((sum, field) => sum + Number(row[field] || 0), 0);
     const segments = fields.map((field, index) => {
       const value = Number(row[field] || 0);
-      return `<span class="bar-segment series-${index}" style="height:${Math.max(4, value / max * 100)}%" title="${escapeHtml(field)}：${value}"></span>`;
+      const height = value > 0 ? Math.max(6, value / max * 100) : 0;
+      return `<span class="bar-segment series-${index}" style="height:${height}%" title="${escapeHtml(field)}：${value}"></span>`;
     }).join("");
     return `<div class="bar-column"><div class="bar-stack">${segments}</div><small>${escapeHtml(row.date)}</small><b>${total}</b></div>`;
-  }).join("") || `<p class="muted">暂无数据</p>`;
+  }).join("");
+  const legend = `<div class="chart-legend">${fields.map((field, index) => `<span><i class="series-${index}"></i>${escapeHtml(field)}</span>`).join("")}</div>`;
+  target.innerHTML = rows.length ? `${legend}<div class="bar-grid">${bars}</div>` : `<p class="muted">暂无数据</p>`;
 }
 
 function renderSingleBars(target, rows) {
   const max = Math.max(1, ...rows.map((row) => Number(row.value || 0)));
-  target.innerHTML = rows.map((row) => {
+  const bars = rows.map((row) => {
     const value = Number(row.value || 0);
-    return `<div class="bar-column"><div class="bar-stack"><span class="bar-segment series-0" style="height:${Math.max(4, value / max * 100)}%" title="${value}"></span></div><small>${escapeHtml(row.date)}</small><b>${value}</b></div>`;
-  }).join("") || `<p class="muted">暂无数据</p>`;
+    const height = value > 0 ? Math.max(6, value / max * 100) : 0;
+    return `<div class="bar-column"><div class="bar-stack"><span class="bar-segment series-0" style="height:${height}%" title="${value}"></span></div><small>${escapeHtml(row.date)}</small><b>${value}</b></div>`;
+  }).join("");
+  target.innerHTML = rows.length ? `<div class="bar-grid">${bars}</div>` : `<p class="muted">暂无数据</p>`;
 }
 
 function renderStatusBars(target, rows) {
@@ -489,6 +558,88 @@ function renderActivity(rows) {
       <td>${escapeHtml(row.evidence || "")}</td>
     </tr>
   `).join("") || `<tr><td colspan="3">暂无今日行为数据</td></tr>`;
+}
+
+function openUserModal(key) {
+  const separator = key.indexOf(":");
+  const sourceKey = separator >= 0 ? key.slice(0, separator) : "";
+  const userId = separator >= 0 ? key.slice(separator + 1) : key;
+  const user = (state.dashboard?.users || []).find((item) => item.source_key === sourceKey && item.user_id === userId);
+  if (!user) return;
+  const feedback = (state.dashboard?.feedback || []).filter((item) => item.user_id === user.user_id);
+  els.userModalSource.textContent = user.source || "User Detail";
+  els.userModalTitle.textContent = user.display_name || shortId(user.user_id);
+  els.userModalBody.innerHTML = `
+    <section class="detail-grid">
+      ${detailItem("用户 ID", shortId(user.user_id))}
+      ${detailItem("联系方式", user.email || user.contact || "未填写")}
+      ${detailItem("设备", deviceLabel(user))}
+      ${detailItem("版本", user.app_version ? `v${user.app_version}` : "未收集")}
+      ${detailItem("性别", genderLabel(user.gender))}
+      ${detailItem("生日", user.birth_date || "未填写")}
+      ${detailItem("城市", user.city || "未填写")}
+      ${detailItem("注册时间", formatTime(user.registered_at))}
+      ${detailItem("最后活跃", formatTime(user.last_seen_at || user.last_login_at))}
+      ${detailItem("选日活跃", formatBool(user.today_logged_in))}
+      ${detailItem("累计账目", Number(user.total_records || 0))}
+      ${detailItem("累计反馈", Number(user.feedback_count || 0))}
+    </section>
+    <section class="detail-section">
+      <h3>活动趋势</h3>
+      <p class="muted">${escapeHtml(user.evidence || "")}</p>
+      ${detailCharts([
+        ["近 7 日活动", user.activity_week || []],
+        ["近 30 日活动", user.activity_month || []],
+        ["近 12 月活动", user.activity_year || []],
+      ])}
+    </section>
+    <section class="detail-section">
+      <h3>记账趋势</h3>
+      ${detailCharts([
+        ["近 7 日记账", user.record_week || []],
+        ["近 30 日记账", user.record_month || []],
+        ["近 12 月记账", user.record_year || []],
+      ])}
+    </section>
+    <section class="detail-section">
+      <h3>反馈记录</h3>
+      ${feedback.length ? feedback.map((item) => `
+        <article class="feedback-card">
+          <div><strong>${statusLabel(item.status)}</strong><span>${formatTime(item.created_at)}</span></div>
+          <p>${escapeHtml(item.content || "")}</p>
+          <small>${escapeHtml(item.source_label || "")} · ${escapeHtml(item.page || "-")}</small>
+        </article>
+      `).join("") : `<p class="muted">这个用户暂无反馈记录。</p>`}
+    </section>
+  `;
+  els.userModal.classList.remove("hidden");
+}
+
+function closeUserModal() {
+  els.userModal.classList.add("hidden");
+}
+
+function detailItem(label, value) {
+  return `<div class="detail-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "-")}</strong></div>`;
+}
+
+function detailCharts(items) {
+  return `<div class="detail-charts">${items.map(([title, rows]) => `
+    <div class="detail-chart">
+      <div class="item-title">${escapeHtml(title)}</div>
+      ${inlineBars(rows || [])}
+    </div>
+  `).join("")}</div>`;
+}
+
+function inlineBars(rows) {
+  if (!rows.length) return `<p class="muted">暂无数据</p>`;
+  const max = Math.max(1, ...rows.map((row) => Number(row.value || 0)));
+  return `<div class="inline-bars">${rows.map((row) => {
+    const value = Number(row.value || 0);
+    const height = value > 0 ? Math.max(5, value / max * 100) : 0;
+    return `<div class="inline-bar"><i style="height:${height}%"></i><small>${escapeHtml(row.date)}</small><b>${value}</b></div>`;
+  }).join("")}</div>`;
 }
 
 function switchTab(tab) {
@@ -622,6 +773,14 @@ function escapeHtml(value) {
   }[char]));
 }
 
+function localDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatTime(value) {
   const number = Number(value);
   if (!number) return "-";
@@ -641,6 +800,23 @@ function formatMoney(value) {
 
 function formatBool(value) {
   return value ? "是" : "否";
+}
+
+function genderLabel(value) {
+  return {
+    female: "女",
+    male: "男",
+    other: "其他",
+    prefer_not: "未透露",
+  }[value] || "未填写";
+}
+
+function deviceLabel(item) {
+  const brand = String(item.device_brand || "").trim();
+  const model = String(item.device_model || "").trim();
+  if (!brand && !model) return "未收集";
+  if (brand && model && !model.toLowerCase().includes(brand.toLowerCase())) return `${brand} ${model}`;
+  return brand || model;
 }
 
 function shortId(value) {
