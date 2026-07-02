@@ -14,7 +14,7 @@ class CategoryCatalogTest {
         }
 
         assertEquals(10, roots.size)
-        assertEquals(listOf("早餐", "正餐", "外卖", "奶茶咖啡", "零食", "聚餐"), namesByRoot["餐饮"])
+        assertEquals(listOf("早餐", "午餐", "晚餐", "外卖", "咖啡", "零食", "聚餐"), namesByRoot["餐饮"])
         assertTrue(namesByRoot["交通"].orEmpty().contains("单车月卡"))
         assertTrue(namesByRoot["人情社交"].orEmpty().contains("社交活动"))
         assertEquals(listOf("临时支出", "杂项备用", "未分类"), namesByRoot["其他"])

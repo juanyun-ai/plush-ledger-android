@@ -650,12 +650,11 @@ class LedgerRepository(
     suspend fun analyzeAiEntry(text: String, ledgerState: LedgerState): AiLedgerAnalysis? =
         analyzeAiEntries(text, ledgerState).firstOrNull()
 
-    suspend fun submitFeedback(content: String) {
-        val session = sessionStore.currentSession() ?: error("请先登录云端账号")
-        val token = session.accessToken ?: error("本地模式暂不能发送建议")
+    suspend fun submitFeedback(content: String, page: String = "about") {
+        val session = sessionStore.currentSession()
         val trimmed = content.trim()
         require(trimmed.length in 5..500) { "建议内容需要 5-500 个字" }
-        supabaseClient.submitFeedback(token, session.userId, session.email, trimmed)
+        supabaseClient.submitFeedback(session?.accessToken, session?.email, trimmed, page)
     }
 
     suspend fun createMembershipOrder(providerName: String, reference: String): String {
@@ -905,16 +904,22 @@ class LedgerRepository(
         val createdAt = now()
         return listOf(
             OfficialMessage(
+                id = "release_1_0_7_builtin",
+                title = "绒绒记账 v1.0.7 更新",
+                body = "1. 本地模式和登录模式的用户反馈都改为 App 内直达开发者后台，不再依赖邮箱。\n2. 关于我们页新增在线留言框，支持清空、暂存、取消和发送。\n3. 联系与注销说明改为优先使用 App 内在线留言，避免用户反馈丢失。",
+                createdAt = createdAt
+            ),
+            OfficialMessage(
                 id = "release_1_0_6_builtin",
                 title = "绒绒记账 v1.0.6 更新",
-                body = "1. 分类图标更新：买菜、咖啡、早餐、晚餐、飞机、轮渡和生日礼物换成新版毛绒风图标。\n2. 餐饮分类调整为早餐、午餐、晚餐和咖啡，交通新增飞机和轮渡，日常新增买菜，人情社交新增生日礼物。\n3. 我的页“连续记账”改为“累计记账”，按真实记账日期数展示；货币单位选择恢复国旗显示。\n4. 本地模式反馈会自动带入邮件正文，并补齐 support@xiaoxing.online 的根域名 MX 配置。",
-                createdAt = createdAt
+                body = "1. 分类图标更新：买菜、咖啡、早餐、晚餐、飞机、轮渡和生日礼物换成新版毛绒风图标。\n2. 餐饮分类调整为早餐、午餐、晚餐和咖啡，交通新增飞机和轮渡，日常新增买菜，人情社交新增生日礼物。\n3. 我的页“连续记账”改为“累计记账”，按真实记账日期数展示；货币单位选择恢复国旗显示。",
+                createdAt = createdAt - 1
             ),
             OfficialMessage(
                 id = "release_1_0_5_builtin",
                 title = "绒绒记账 v1.0.5 更新",
                 body = "1. AI 软件订阅分类图标换成新版毛绒风图标。\n2. 绒绒日记首卡文案、编辑弹窗和社交分享卡片按新设计重新排版。\n3. QQ 登录和绑定图标改为矢量企鹅，避免出现剪贴小方块。\n4. 主题选择页继续优化毛绒双列布局，并新增产品下载页作为下载兜底。",
-                createdAt = createdAt - 1
+                createdAt = createdAt - 2
             ),
             OfficialMessage(
                 id = "release_1_0_4_builtin",

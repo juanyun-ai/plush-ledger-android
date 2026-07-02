@@ -183,7 +183,7 @@ function renderOverview() {
     : "等待刷新数据。";
   els.supportNotice.innerHTML = `
     <strong>反馈来源说明</strong>
-    <span>后台已同步 App feedback 和小程序 mini_feedback。${escapeHtml(support.address || "support@xiaoxing.online")} 当前走 ${escapeHtml(support.source || "邮箱服务")}，邮件不会自动进数据库；这不是刷新问题。</span>
+    <span>后台已同步 App feedback 和小程序 mini_feedback。${escapeHtml(support.address || "2998319435@qq.com")} 是备用收件箱；请优先引导用户使用 App/小程序内在线留言。</span>
   `;
 
   const cards = [

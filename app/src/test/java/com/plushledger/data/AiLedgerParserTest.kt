@@ -12,11 +12,11 @@ class AiLedgerParserTest {
 
     @Test
     fun recognizesDesignedExpenseSubcategoriesBeforeGenericFallback() {
-        assertEquals("奶茶咖啡", parse("下午买奶茶 18 元，用微信").categoryLabel)
-        assertEquals("正餐", parse("午饭花了 28 元").categoryLabel)
+        assertEquals("咖啡", parse("下午买奶茶 18 元，用微信").categoryLabel)
+        assertEquals("午餐", parse("午饭花了 28 元").categoryLabel)
         assertEquals("公交地铁", parse("坐地铁 4 元").categoryLabel)
         assertEquals("水电房租", parse("交房租 2600 元").categoryLabel)
-        assertEquals("人情红包", parse("随礼红包 200 元").categoryLabel)
+        assertEquals("请客送礼", parse("随礼红包 200 元").categoryLabel)
     }
 
     @Test
@@ -44,7 +44,7 @@ class AiLedgerParserTest {
             sourceText = "请归类到奶茶咖啡，瑞幸 15 元"
         )
 
-        assertEquals("奶茶咖啡", category?.name)
+        assertEquals("咖啡", category?.name)
     }
 
     @Test
@@ -54,7 +54,7 @@ class AiLedgerParserTest {
 
         assertEquals(1_500L, analysis.amountMinor)
         assertEquals(LocalDate.of(2025, 12, 31), date)
-        assertEquals("奶茶咖啡", analysis.categoryLabel)
+        assertEquals("咖啡", analysis.categoryLabel)
     }
 
     @Test
@@ -83,7 +83,7 @@ class AiLedgerParserTest {
         val entries = LocalAiLedgerParser.parseAll("昨天瑞幸咖啡15元微信支付，今天地铁4元现金", categories, emptyList())
 
         assertEquals(2, entries.size)
-        assertEquals("奶茶咖啡", entries[0].categoryLabel)
+        assertEquals("咖啡", entries[0].categoryLabel)
         assertEquals(1_500L, entries[0].amountMinor)
         assertEquals(LocalDate.now().minusDays(1), entries[0].localDate())
         assertEquals("公交地铁", entries[1].categoryLabel)

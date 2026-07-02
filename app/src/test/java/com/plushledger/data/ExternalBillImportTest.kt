@@ -37,7 +37,7 @@ class ExternalBillImportTest {
         assertNotNull(parsed)
         assertEquals("expense", parsed?.type)
         assertEquals(1_850L, parsed?.amountMinor)
-        assertEquals("奶茶咖啡", parsed?.categoryLabel)
+        assertEquals("咖啡", parsed?.categoryLabel)
         assertEquals("支付宝", parsed?.accountLabel)
     }
 }

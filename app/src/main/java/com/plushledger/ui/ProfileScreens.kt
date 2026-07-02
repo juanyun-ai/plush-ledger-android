@@ -142,7 +142,6 @@ fun InboxScreen(
     busy: Boolean,
     isLocalMode: Boolean,
     onFeedback: (String) -> Unit,
-    onOpenSupport: (String) -> Unit,
     onDownloadUpdate: (AppVersionInfo) -> Unit
 ) {
     val palette = LocalPlushPalette.current
@@ -205,7 +204,7 @@ fun InboxScreen(
         item {
             PlushCard {
                 if (isLocalMode) {
-                    Text("本地模式的账目不上传云端；你仍可以通过系统邮箱把建议直接发给开发者。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                    Text("本地模式的账目不上传云端；这里的建议会直接发送到开发者后台，不再依赖邮箱。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
                     Spacer(Modifier.height(10.dp))
                 }
                 OutlinedTextField(
@@ -217,7 +216,7 @@ fun InboxScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 PlushButton("发送建议", Icons.Default.Send, Modifier.fillMaxWidth(), enabled = !busy && feedback.length >= 5) {
-                    if (isLocalMode) onOpenSupport(feedback) else onFeedback(feedback)
+                    onFeedback(feedback)
                     feedback = ""
                 }
             }
@@ -250,7 +249,6 @@ fun MyScreen(
     viewModel: LedgerViewModel,
     onDownloadUpdate: (AppVersionInfo) -> Unit
 ) {
-    val context = LocalContext.current
     var page by rememberSaveable { mutableStateOf(MyPage.ROOT) }
     BackHandler(enabled = page != MyPage.ROOT) { page = MyPage.ROOT }
     when (page) {
@@ -284,7 +282,6 @@ fun MyScreen(
                 busy = state.isBusy,
                 isLocalMode = state.session?.accessToken == null,
                 onFeedback = viewModel::submitFeedback,
-                onOpenSupport = { content -> openSupportEmail(context, content) },
                 onDownloadUpdate = onDownloadUpdate
             )
         }
@@ -298,7 +295,11 @@ fun MyScreen(
             onDelete = viewModel::deleteCategory,
             onReorder = viewModel::moveCategory
         )
-        MyPage.ABOUT -> AboutScreen(onBack = { page = MyPage.ROOT })
+        MyPage.ABOUT -> AboutScreen(
+            onBack = { page = MyPage.ROOT },
+            busy = state.isBusy,
+            onFeedback = viewModel::submitFeedback
+        )
         MyPage.DIARY -> DiaryScreen(
             userId = state.session?.userId ?: state.ledger.profile?.id ?: "local-diary",
             quotes = rememberQuoteCollection(),
@@ -522,10 +523,16 @@ private fun DiarySummaryCard(userId: String, quote: String, onChangeQuote: () ->
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AboutScreen(onBack: () -> Unit) {
+private fun AboutScreen(
+    onBack: () -> Unit,
+    busy: Boolean,
+    onFeedback: (String) -> Unit
+) {
     val palette = LocalPlushPalette.current
     val context = LocalContext.current
-    var showMailPrompt by rememberSaveable { mutableStateOf(false) }
+    val draftStore = remember(context) { context.getSharedPreferences("about_feedback_draft", Context.MODE_PRIVATE) }
+    var savedDraft by rememberSaveable { mutableStateOf(draftStore.getString("content", "").orEmpty()) }
+    var feedback by rememberSaveable { mutableStateOf(savedDraft) }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 112.dp),
@@ -574,8 +581,60 @@ private fun AboutScreen(onBack: () -> Unit) {
             PlushCard(padding = 16.dp) {
                 SectionTitle("联系我们", Icons.Default.Email)
                 Spacer(Modifier.height(10.dp))
-                Box(Modifier.fillMaxWidth().clickable { showMailPrompt = true }) {
-                    MenuRow(Icons.Default.Email, SUPPORT_EMAIL, "用户反馈和合作联系", palette.rose)
+                MenuRow(Icons.Default.Email, SUPPORT_EMAIL, "备用联系邮箱；请优先使用下方在线留言", palette.rose)
+                Spacer(Modifier.height(12.dp))
+                Text("在线留言", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Spacer(Modifier.height(6.dp))
+                Text("这里会直接进入开发者后台，不依赖邮箱。请尽量写清问题页面、操作步骤或希望增加的功能。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = feedback,
+                    onValueChange = { feedback = it.take(500) },
+                    label = { Text("留言内容") },
+                    placeholder = { Text("例如：我在统计页点某个按钮后没有反应……") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 7
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("${feedback.length}/500，至少 5 个字", color = palette.muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { feedback = "" }, enabled = feedback.isNotBlank() && !busy) {
+                        Text("清空", color = palette.coral, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(
+                        onClick = {
+                            savedDraft = feedback
+                            draftStore.edit().putString("content", feedback).apply()
+                            Toast.makeText(context, "留言已暂存", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = feedback.isNotBlank() && !busy
+                    ) {
+                        Text("暂存", color = palette.muted, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(
+                        onClick = {
+                            feedback = savedDraft
+                            Toast.makeText(context, "已取消本次编辑", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = !busy
+                    ) {
+                        Text("取消", color = palette.pink, fontWeight = FontWeight.Black)
+                    }
+                }
+                PlushButton(
+                    "发送",
+                    Icons.Default.Send,
+                    Modifier.fillMaxWidth(),
+                    enabled = !busy && feedback.trim().length >= 5,
+                    color = palette.rose
+                ) {
+                    val pending = feedback.trim()
+                    savedDraft = pending
+                    draftStore.edit().putString("content", pending).apply()
+                    onFeedback(pending)
+                    feedback = ""
                 }
             }
         }
@@ -591,21 +650,6 @@ private fun AboutScreen(onBack: () -> Unit) {
                 }
             }
         }
-    }
-    if (showMailPrompt) {
-        ContactSupportDialog(
-            email = SUPPORT_EMAIL,
-            onDismiss = { showMailPrompt = false },
-            onOpenEmail = {
-                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                    data = Uri.parse("mailto:$SUPPORT_EMAIL")
-                    putExtra(Intent.EXTRA_SUBJECT, "绒绒记账用户反馈")
-                }
-                runCatching { context.startActivity(intent) }
-                    .onFailure { Toast.makeText(context, "没有找到可用的邮箱 App", Toast.LENGTH_SHORT).show() }
-                showMailPrompt = false
-            }
-        )
     }
 }
 

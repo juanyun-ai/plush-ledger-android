@@ -79,7 +79,7 @@ async function requireAdmin(request: Request, env: ReturnType<typeof readEnv>) {
 
 async function dashboard(admin: ReturnType<typeof createClient>, userId: string) {
   const [appFeedback, miniFeedback, messages, versions, config, profile, analytics] = await Promise.all([
-    select(admin, "feedback", "id,user_id,email,content,status,created_at,updated_at", "created_at", false, 200),
+    select(admin, "feedback", "id,user_id,email,content,status,source,page,app_version,created_at,updated_at", "created_at", false, 200),
     select(admin, "mini_feedback", "id,mini_user_id,contact,content,category,status,source,page,app_version,created_at,updated_at", "created_at", false, 200),
     select(admin, "official_messages", "id,title,body,source_key,created_at,updated_at", "created_at", false, 100),
     select(admin, "app_versions", "id,platform,version_code,version_name,apk_url,backup_apk_url,sha256,file_size_bytes,release_notes,is_mandatory,active,published_at,created_at,updated_at", "version_code", false, 60),
@@ -119,7 +119,7 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>) {
     select(admin, "mini_sessions", "user_id,created_at,last_used_at", "last_used_at", false, 1000),
     select(admin, "mini_ledger_snapshots", "user_id,payload,created_at,updated_at", "updated_at", false, 1000),
     select(admin, "transactions", "id,user_id,type,amount_minor,occurred_at,created_at,updated_at,deleted_at", "created_at", false, 2000),
-    select(admin, "feedback", "id,user_id,status,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "feedback", "id,user_id,status,source,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_feedback", "id,mini_user_id,status,created_at,updated_at", "created_at", false, 1000),
     select(admin, "app_versions", "version_code,version_name,apk_url,file_size_bytes,active,published_at,updated_at", "version_code", false, 20),
   ]);
@@ -154,10 +154,10 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>) {
   return {
     refreshed_at: now,
     support_email: {
-      address: "support@xiaoxing.online",
-      source: "阿里云邮箱 MX",
+      address: "2998319435@qq.com",
+      source: "QQ 邮箱备用收件箱",
       connected_to_feedback: false,
-      note: "当前 MX 指向阿里云邮箱，后台只自动读取 App feedback 和小程序 mini_feedback；邮件自动入库需要邮箱路由或邮件服务把原邮件推送到数据库入口。",
+      note: "当前 MX 不是可靠收件箱；后台主通道是 App 内在线留言写入 feedback 表，以及小程序 mini_feedback。",
     },
     summary: {
       auth_users: authUsers.length,
@@ -541,7 +541,8 @@ function normalizeFeedback(appRows: Json[], miniRows: Json[]) {
   return [
     ...appRows.map((row) => ({
       ...row,
-      source_label: "App",
+      email: row.email || (row.source === "app_local" ? "本地模式用户" : ""),
+      source_label: row.source === "app_local" ? "App 本地" : "App",
       contact: row.email || "",
     })),
     ...miniRows.map((row) => ({

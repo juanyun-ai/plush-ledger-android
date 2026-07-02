@@ -45,4 +45,4 @@
 - 管理函数会校验当前登录用户是否为管理员。
 - 远程配置表 `app_config` 只适合放非敏感公开配置，不要放密钥。
 - 小程序反馈走 `mini_feedback` 表，用户账本快照仍保存在 `mini_ledger_snapshots`，两类数据不要混用。
-- `support@xiaoxing.online` 当前 MX 指向阿里云邮箱。普通邮箱自动转发只能转到另一个邮箱地址，不能直接写入 Supabase；要自动入库，需要迁移/新增邮件路由服务，或使用能把原邮件推送到 HTTP Webhook 的邮件服务。
+- `support@xiaoxing.online` 当前 MX 指向阿里云 DirectMail，不应作为可靠收件箱使用。App/小程序内在线留言会写入 Supabase 反馈表，是当前主反馈通道；`2998319435@qq.com` 仅作备用收件箱。

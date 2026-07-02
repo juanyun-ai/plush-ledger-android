@@ -199,19 +199,23 @@ class SupabaseClient {
         occurredAt = optLong("occurred_at", 0).takeIf { it > 0 }
     )
 
-    suspend fun submitFeedback(accessToken: String, userId: String, email: String?, content: String) {
-        val payload = JSONArray().put(
-            JSONObject()
-                .put("user_id", userId)
-                .put("email", email)
-                .put("content", content)
-        )
+    suspend fun submitFeedback(accessToken: String?, email: String?, content: String, page: String = "about") {
+        val payload = JSONObject()
+            .put("content", content)
+            .put("contact", email)
+            .put("page", page)
+            .put("appVersion", BuildConfig.VERSION_NAME)
+            .put(
+                "client",
+                JSONObject()
+                    .put("platform", "android")
+                    .put("versionCode", BuildConfig.VERSION_CODE)
+            )
         request(
             method = "POST",
-            path = "/rest/v1/feedback",
+            path = "/functions/v1/feedback-submit",
             body = payload,
-            accessToken = accessToken,
-            prefer = "return=minimal"
+            accessToken = accessToken
         )
     }
 
