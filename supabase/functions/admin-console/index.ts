@@ -163,6 +163,20 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
   const latestVersion = versions.find((row: Json) => row.active !== false) ?? versions[0] ?? null;
   const latestVersionSize = latestVersion ? numberValue(latestVersion.file_size_bytes) : 0;
   const feedbackRows = [...appFeedbackRows, ...miniFeedbackRows];
+  const users = buildUserRows(
+    authUsers,
+    profiles,
+    miniUsers,
+    miniSessions,
+    snapshots,
+    appActivityEvents,
+    liveTransactions,
+    appFeedbackRows,
+    miniFeedbackRows,
+    selectedStart,
+    selectedDate,
+  );
+  const portrait = buildPortraitAnalytics(users);
 
   return {
     refreshed_at: now,
@@ -177,7 +191,7 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
       app_profiles: profiles.length,
       mini_users: miniUsers.length,
       app_users: authUsers.length,
-      total_known_users: authUsers.length + miniUsers.length,
+      total_known_users: users.length,
       today_key: todayKey,
       selected_date: selectedDate,
       selected_is_today: selectedDate === todayKey,
@@ -208,6 +222,10 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
       mini_feedback_total: miniFeedbackRows.length,
       feedback_new: feedbackRows.filter((row: Json) => row.status === "new").length,
       feedback_done: feedbackRows.filter((row: Json) => row.status === "done").length,
+      region_known_users: portrait.regionKnown,
+      region_unknown_users: portrait.regionUnknown,
+      device_brand_known_users: portrait.deviceBrandKnown,
+      device_brand_unknown_users: portrait.deviceBrandUnknown,
       latest_version_name: stringValue(latestVersion?.version_name, 32),
       latest_version_code: numberValue(latestVersion?.version_code),
       latest_version_size_mb: latestVersionSize ? Number((latestVersionSize / 1024 / 1024).toFixed(2)) : 0,
@@ -226,6 +244,9 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
         ["小程序", aggregateMiniTransactionsByDay(snapshots, 14, selectedStart)],
       ]),
       feedback_by_status: statusBuckets(feedbackRows),
+      region_distribution: portrait.regions,
+      device_brand_distribution: portrait.deviceBrands,
+      portrait_coverage: portrait.coverage,
     },
     activity: buildTodayActivity({
       selectedDate,
@@ -242,19 +263,7 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
       miniDayRecordUsers,
       miniDaySyncRecords: miniDaySyncRecords.length,
     }),
-    users: buildUserRows(
-      authUsers,
-      profiles,
-      miniUsers,
-      miniSessions,
-      snapshots,
-      appActivityEvents,
-      liveTransactions,
-      appFeedbackRows,
-      miniFeedbackRows,
-      selectedStart,
-      selectedDate,
-    ),
+    users,
   };
 }
 
@@ -311,12 +320,66 @@ function aggregateEventObjectsByDay(
 }
 
 function mergeSeries(series: Array<[string, Array<{ date: string; value: number }>]>) {
-  const dates = Array.from(new Set(series.flatMap(([, rows]) => rows.map((row) => row.date)))).sort();
+  const seen = new Set<string>();
+  const dates: string[] = [];
+  for (const [, rows] of series) {
+    for (const row of rows) {
+      if (seen.has(row.date)) continue;
+      seen.add(row.date);
+      dates.push(row.date);
+    }
+  }
   return dates.map((date) => {
     const row: Json = { date };
     for (const [name, rows] of series) row[name] = rows.find((item) => item.date === date)?.value ?? 0;
     return row;
   });
+}
+
+function buildPortraitAnalytics(users: Json[]) {
+  const regionKnown = users.filter((row) => hasText(row.city)).length;
+  const deviceBrandKnown = users.filter((row) => hasText(row.device_brand)).length;
+  const sourceRows = (field: string, emptyLabel: string) => distributionBySource(users, field, emptyLabel, 8);
+  const coverage = [
+    coverageRow("地区", users, (row) => hasText(row.city)),
+    coverageRow("设备品牌", users, (row) => hasText(row.device_brand)),
+    coverageRow("性别", users, (row) => Boolean(genderValue(row.gender))),
+    coverageRow("生日", users, (row) => hasText(row.birth_date)),
+  ];
+  return {
+    regionKnown,
+    regionUnknown: users.length - regionKnown,
+    deviceBrandKnown,
+    deviceBrandUnknown: users.length - deviceBrandKnown,
+    regions: sourceRows("city", "未填写"),
+    deviceBrands: sourceRows("device_brand", "未采集"),
+    coverage,
+  };
+}
+
+function distributionBySource(users: Json[], field: string, emptyLabel: string, limit: number) {
+  const buckets = new Map<string, Json>();
+  for (const user of users) {
+    const label = stringValue(user[field], 80) || emptyLabel;
+    const source = user.source_key === "mini" ? "小程序" : "App";
+    const row = buckets.get(label) ?? { label, App: 0, "小程序": 0 };
+    row[source] = numberValue(row[source]) + 1;
+    buckets.set(label, row);
+  }
+  return Array.from(buckets.values())
+    .map((row) => ({ ...row, total: numberValue(row.App) + numberValue(row["小程序"]) }))
+    .sort((a, b) => numberValue(b.total) - numberValue(a.total) || String(a.label).localeCompare(String(b.label)))
+    .slice(0, limit)
+    .map(({ total: _total, ...row }) => row);
+}
+
+function coverageRow(label: string, users: Json[], predicate: (row: Json) => boolean) {
+  const collected = users.filter(predicate).length;
+  return {
+    label,
+    "已采集": collected,
+    "未采集": users.length - collected,
+  };
 }
 
 function buildTodayActivity(values: Record<string, number | string>) {
@@ -926,6 +989,10 @@ async function safeJson(request: Request): Promise<Json> {
 
 function stringValue(value: unknown, maxLength: number): string {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function hasText(value: unknown): boolean {
+  return stringValue(value, 160).length > 0;
 }
 
 function genderValue(value: unknown): string {

@@ -182,6 +182,7 @@ button.small { padding: 0.45rem 0.75rem; font-size: 0.85rem; }
 }
 
 .chart-panel { padding: 1rem; min-height: 270px; }
+.chart-panel.wide { grid-column: 1 / -1; min-height: 230px; }
 
 .bar-chart {
   display: grid;
@@ -264,6 +265,54 @@ button.small { padding: 0.45rem 0.75rem; font-size: 0.85rem; }
   display: grid;
   gap: 0.8rem;
   margin-top: 1rem;
+}
+
+.horizontal-chart {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.hbar-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.hbar-row {
+  display: grid;
+  grid-template-columns: minmax(82px, 0.9fr) minmax(140px, 2.3fr) 46px;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.hbar-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hbar-track {
+  display: flex;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #fff0dc;
+  border: 1px solid rgba(234, 217, 197, 0.75);
+}
+
+.hbar-track i {
+  display: block;
+  min-width: 0;
+  height: 100%;
+}
+
+.hbar-row strong {
+  text-align: right;
+  font-size: 0.88rem;
 }
 
 .status-row {

@@ -42,6 +42,9 @@ const els = {
   activeChart: byId("activeChart"),
   transactionChart: byId("transactionChart"),
   feedbackStatusChart: byId("feedbackStatusChart"),
+  regionChart: byId("regionChart"),
+  deviceBrandChart: byId("deviceBrandChart"),
+  portraitCoverageChart: byId("portraitCoverageChart"),
   activityRows: byId("activityRows"),
   userModal: byId("userModal"),
   userModalSource: byId("userModalSource"),
@@ -225,6 +228,8 @@ function renderOverview() {
     ["选日小程序可证活跃", summary.mini_day_active_users, `session 用户 ${summary.mini_day_session_users || 0}`],
     ["选日 App 记账发生", summary.app_day_records, `${summary.app_day_record_users || 0} 个用户；不是登录次数`],
     ["选日小程序记账发生", summary.mini_day_records, `${summary.mini_day_record_users || 0} 个用户`],
+    ["地区已采集", summary.region_known_users, `${summary.region_unknown_users || 0} 个用户未填写`],
+    ["设备已采集", summary.device_brand_known_users, `${summary.device_brand_unknown_users || 0} 个用户未同步品牌`],
     ["云端 App 账目", summary.transactions, `支出 ${formatMoney(summary.expense_minor)} / 收入 ${formatMoney(summary.income_minor)}`],
     ["新反馈", summary.feedback_new, `${summary.feedback_total || 0} 条反馈 · App ${summary.app_feedback_total || 0} / 小程序 ${summary.mini_feedback_total || 0}`],
   ];
@@ -240,6 +245,9 @@ function renderOverview() {
   renderStackedBars(els.activeChart, analytics.charts?.active_by_day || [], ["App 可证活跃", "小程序可证活跃"]);
   renderStackedBars(els.transactionChart, analytics.charts?.transactions_by_day || [], ["App", "小程序"]);
   renderStatusBars(els.feedbackStatusChart, analytics.charts?.feedback_by_status || []);
+  renderHorizontalStackedBars(els.regionChart, analytics.charts?.region_distribution || [], ["App", "小程序"]);
+  renderHorizontalStackedBars(els.deviceBrandChart, analytics.charts?.device_brand_distribution || [], ["App", "小程序"]);
+  renderHorizontalStackedBars(els.portraitCoverageChart, analytics.charts?.portrait_coverage || [], ["已采集", "未采集"]);
   renderActivity(analytics.activity || []);
 }
 
@@ -548,6 +556,26 @@ function renderStatusBars(target, rows) {
       </div>
     `;
   }).join("") || `<p class="muted">暂无数据</p>`;
+}
+
+function renderHorizontalStackedBars(target, rows, fields) {
+  const legend = `<div class="chart-legend">${fields.map((field, index) => `<span><i class="series-${index}"></i>${escapeHtml(field)}</span>`).join("")}</div>`;
+  const body = rows.map((row) => {
+    const total = fields.reduce((sum, field) => sum + Number(row[field] || 0), 0);
+    const segments = fields.map((field, index) => {
+      const value = Number(row[field] || 0);
+      const width = total > 0 ? value / total * 100 : 0;
+      return `<i class="series-${index}" style="width:${width}%" title="${escapeHtml(field)}：${value}"></i>`;
+    }).join("");
+    return `
+      <div class="hbar-row">
+        <span>${escapeHtml(row.label || row.date || "-")}</span>
+        <div class="hbar-track">${segments}</div>
+        <strong>${total}</strong>
+      </div>
+    `;
+  }).join("");
+  target.innerHTML = rows.length ? `${legend}<div class="hbar-list">${body}</div>` : `<p class="muted">暂无数据</p>`;
 }
 
 function renderActivity(rows) {

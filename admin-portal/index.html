@@ -116,6 +116,21 @@
               <p class="muted">来自 App 和小程序内反馈表。</p>
               <div id="feedbackStatusChart" class="status-bars"></div>
             </article>
+            <article class="chart-panel">
+              <div class="item-title">用户地区分布</div>
+              <p class="muted">只统计用户主动填写或同步过来的城市；未填写单独展示。</p>
+              <div id="regionChart" class="horizontal-chart"></div>
+            </article>
+            <article class="chart-panel">
+              <div class="item-title">设备品牌分布</div>
+              <p class="muted">App 来自 Android 设备同步，小程序来自微信运行环境。</p>
+              <div id="deviceBrandChart" class="horizontal-chart"></div>
+            </article>
+            <article class="chart-panel wide">
+              <div class="item-title">用户资料覆盖率</div>
+              <p class="muted">展示真实已采集字段和缺口，不用估算值代替。</p>
+              <div id="portraitCoverageChart" class="horizontal-chart"></div>
+            </article>
           </section>
           <section class="panel subpanel">
             <div class="panel-heading inline">
