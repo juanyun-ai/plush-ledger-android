@@ -3,7 +3,6 @@ package com.plushledger.data
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.YearMonth
 import java.time.temporal.TemporalAdjusters
@@ -50,7 +49,7 @@ object LocalAiLedgerParser {
 
     private fun parseSingle(source: String, categories: List<CategoryEntity>, accounts: List<AccountEntity>): AiLedgerAnalysis? {
         val amount = parseAmount(source) ?: return null
-        val type = if (listOf("收入", "工资", "兼职", "收款", "到账", "报销", "理财", "收益", "利息", "稿费", "转租", "租金").any(source::contains)) "income" else "expense"
+        val type = if (incomeTypeWords.any(source::contains)) "income" else "expense"
         val category = chooseCategory(source, type, categories)
         val account = chooseAccount(source, accounts)
         return AiLedgerAnalysis(
@@ -134,7 +133,8 @@ object LocalAiLedgerParser {
             candidates.firstOrNull { it.name == matchedName }?.let { return it }
         }
         return if (type == "income") {
-            candidates.firstOrNull { it.name == "其他收入" }
+            candidates.firstOrNull { it.name == "其他" }
+                ?: candidates.firstOrNull { it.name == "其他收入" }
                 ?: candidates.firstOrNull { it.name == "工资" }
                 ?: candidates.firstOrNull()
         } else {
@@ -180,11 +180,14 @@ object LocalAiLedgerParser {
             match.groupValues.drop(1).firstOrNull(String::isNotBlank)?.let(::parseMinor)
         }.lastOrNull()?.let { return it }
 
+        val dateRanges = explicitDatePatterns.flatMap { pattern -> pattern.findAll(text).map { it.range } }
         return bareNumberPattern.findAll(text)
             .filterNot { match ->
                 val before = text.getOrNull(match.range.first - 1)
                 val after = text.getOrNull(match.range.last + 1)
-                before in dateNumberDelimiters || after in dateNumberDelimiters
+                before in dateNumberDelimiters ||
+                    after in dateNumberDelimiters ||
+                    dateRanges.any { range -> match.range.first >= range.first && match.range.last <= range.last }
             }
             .mapNotNull { parseMinor(it.value) }
             .lastOrNull()
@@ -206,29 +209,17 @@ object LocalAiLedgerParser {
             Regex("本周[一二三四五六日天]").find(text) != null -> parseWeekday(text, today, previousWeek = false)
             else -> parseExplicitDate(text, today) ?: today
         }
-        val explicitTime = Regex("(?:上午|早上|中午|下午|晚上)?\\s*(\\d{1,2})(?:点|:)(\\d{1,2})?").find(text)
-        val time = explicitTime?.let { match ->
-            var hour = match.groupValues[1].toIntOrNull() ?: 12
-            val minute = match.groupValues[2].toIntOrNull() ?: 0
-            if ((text.contains("下午") || text.contains("晚上")) && hour in 1..11) hour += 12
-            LocalTime.of(hour.coerceIn(0, 23), minute.coerceIn(0, 59))
-        } ?: when {
-            text.contains("早餐") || text.contains("早上") -> LocalTime.of(8, 0)
-            text.contains("午饭") || text.contains("中午") -> LocalTime.of(12, 0)
-            text.contains("晚饭") || text.contains("晚上") -> LocalTime.of(19, 0)
-            else -> LocalTime.now().withSecond(0).withNano(0)
-        }
-        return date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        return date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 
     private fun parseExplicitDate(text: String, today: LocalDate): LocalDate? {
-        Regex("(?<!\\d)(\\d{4})\\s*(?:年|[-/.])\\s*(\\d{1,2})\\s*(?:月|[-/.])\\s*(\\d{1,2})\\s*日?")
+        fullDatePattern
             .find(text)?.let { match ->
                 return runCatching {
                     LocalDate.of(match.groupValues[1].toInt(), match.groupValues[2].toInt(), match.groupValues[3].toInt())
                 }.getOrNull()
             }
-        Regex("(?<!\\d)(\\d{1,2})\\s*(?:月|[-/.])\\s*(\\d{1,2})\\s*日?")
+        monthDayPattern
             .find(text)?.let { match ->
                 return runCatching {
                     LocalDate.of(today.year, match.groupValues[1].toInt(), match.groupValues[2].toInt())
@@ -297,9 +288,17 @@ object LocalAiLedgerParser {
         "房屋" to listOf("房屋转租", "转租", "房租收入", "租金收入", "收租", "出租房"),
         "兼职" to listOf("兼职", "稿费", "副业"),
         "理财" to listOf("理财", "利息", "收益"),
-        "礼金" to listOf("礼金", "红包", "礼物")
+        "礼金" to listOf("礼金", "红包", "礼物"),
+        "退税退费" to listOf("退税", "退费", "退款", "退回", "返还", "返现", "报销", "顺风车退费")
     )
 
+    private val incomeTypeWords = listOf(
+        "收入", "工资", "兼职", "收款", "收到", "到账", "入账", "报销", "理财", "收益", "利息",
+        "稿费", "转租", "租金", "退税", "退费", "退款", "退回", "返还", "返现"
+    )
+    private val fullDatePattern = Regex("(?<!\\d)(\\d{4})\\s*(?:年|[-/.])\\s*(\\d{1,2})\\s*(?:月|[-/.])\\s*(\\d{1,2})\\s*(?:日|号)?")
+    private val monthDayPattern = Regex("(?<!\\d)(\\d{1,2})\\s*(?:月|[-/.])\\s*(\\d{1,2})\\s*(?:日|号)?")
+    private val explicitDatePatterns = listOf(fullDatePattern, monthDayPattern)
     private val genericCategoryNames = setOf("其他", "其他收入", "未分类", "无法归类", "临时支出")
     private val dateNumberDelimiters = setOf('年', '月', '日', '号', '点', ':', '：', '/', '-', '.', '~', '～')
     private val weekdayNames = listOf("一", "二", "三", "四", "五", "六", "日", "天")

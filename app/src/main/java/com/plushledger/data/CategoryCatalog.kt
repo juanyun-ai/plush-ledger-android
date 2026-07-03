@@ -90,7 +90,9 @@ object CategoryCatalog {
         CategorySpec("income.rent", "房屋", INCOME, "home", "#E0A86E"),
         CategorySpec("income.parttime", "兼职", INCOME, "parttime", "#6E8DBF"),
         CategorySpec("income.investment", "理财", INCOME, "investment", "#8AA46D"),
-        CategorySpec("income.gift", "礼金", INCOME, "gift_income", "#76A9A8")
+        CategorySpec("income.gift", "礼金", INCOME, "gift_income", "#76A9A8"),
+        CategorySpec("income.refund", "退税退费", INCOME, "refund_income", "#71BBA4"),
+        CategorySpec("income.other", "其他", INCOME, "other", "#B9B3AA")
     )
 
     fun defaultCategories(userId: String, bookId: String, now: Long): List<CategoryEntity> {

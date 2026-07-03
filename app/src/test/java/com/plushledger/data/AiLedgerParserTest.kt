@@ -35,6 +35,26 @@ class AiLedgerParserTest {
     }
 
     @Test
+    fun recognizesExplicitMonthDayRefundAsIncomeAtStartOfDay() {
+        val analysis = parse("7 月 1 号收到滴滴顺风车退费 4 元")
+        val occurred = Instant.ofEpochMilli(analysis.occurredAt).atZone(ZoneId.systemDefault())
+
+        assertEquals("income", analysis.type)
+        assertEquals("退税退费", analysis.categoryLabel)
+        assertEquals(LocalDate.of(LocalDate.now().year, 7, 1), occurred.toLocalDate())
+        assertEquals(0, occurred.hour)
+        assertEquals(0, occurred.minute)
+    }
+
+    @Test
+    fun fallsBackUnknownIncomeToOtherIncomeCategory() {
+        val analysis = parse("收到一笔说不清来源的钱 12 元")
+
+        assertEquals("income", analysis.type)
+        assertEquals("其他", analysis.categoryLabel)
+    }
+
+    @Test
     fun keepsExplicitCategoryAheadOfModelGuess() {
         val category = LocalAiLedgerParser.resolveCategory(
             type = "expense",

@@ -24,4 +24,12 @@ class CategoryCatalogTest {
     fun oldUnknownCategoryNameMapsToNewLabel() {
         assertEquals(setOf("无法归类"), CategoryCatalog.legacyNamesFor("expense.other.unknown"))
     }
+
+    @Test
+    fun incomeCategoriesIncludeRefundAndOtherFallback() {
+        val categories = CategoryCatalog.defaultCategories("user", "book", 0)
+        val incomeNames = CategoryCatalog.rootCategories(categories, "income").map { it.name }
+
+        assertEquals(listOf("工资", "房屋", "兼职", "理财", "礼金", "退税退费", "其他"), incomeNames)
+    }
 }

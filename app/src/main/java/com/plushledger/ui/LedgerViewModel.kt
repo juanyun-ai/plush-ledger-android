@@ -323,7 +323,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         accountId: String?,
         toAccountId: String?,
         note: String,
-        occurredDateTime: java.time.LocalDateTime
+        occurredDate: LocalDate
     ): Boolean {
         val session = state.value.session
         if (session == null) {
@@ -362,7 +362,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                     accountId = account,
                     toAccountId = toAccountId,
                     note = note,
-                    occurredAt = occurredDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    occurredAt = occurredDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 )
             }.onSuccess {
                 app.enqueueImmediateSync()
@@ -522,7 +522,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         categoryId: String?,
         accountId: String?,
         note: String,
-        occurredDateTime: java.time.LocalDateTime
+        occurredDate: LocalDate
     ) {
         val session = state.value.session ?: return
         val amount = Money.parseToMinor(amountText)
@@ -540,7 +540,7 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
                     categoryId = categoryId,
                     accountId = account,
                     note = note,
-                    occurredAt = occurredDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    occurredAt = occurredDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 )
             }.onSuccess {
                 app.enqueueImmediateSync()

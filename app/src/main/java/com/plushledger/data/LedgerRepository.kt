@@ -915,34 +915,40 @@ class LedgerRepository(
         val createdAt = now()
         return listOf(
             OfficialMessage(
+                id = "release_1_0_8_builtin",
+                title = "绒绒记账 v1.0.8 更新",
+                body = "1. AI 记账增强日期和退费识别，支持“7月1号收到退费”这类表达。\n2. 收入分类新增“退税退费”和“其他”，并补上对应毛绒风图标。\n3. 记账与编辑页不再要求精确时间，只保留日期。\n4. 统计页新增月报、季度报和年度报，底部提示会按真实账目动态生成。",
+                createdAt = createdAt
+            ),
+            OfficialMessage(
                 id = "release_1_0_7_builtin",
                 title = "绒绒记账 v1.0.7 更新",
                 body = "1. 本地模式和登录模式的用户反馈都改为 App 内直达开发者后台，不再依赖邮箱。\n2. 关于我们页新增在线留言框，支持清空、暂存、取消和发送。\n3. 联系与注销说明改为优先使用 App 内在线留言，避免用户反馈丢失。",
-                createdAt = createdAt
+                createdAt = createdAt - 1
             ),
             OfficialMessage(
                 id = "release_1_0_6_builtin",
                 title = "绒绒记账 v1.0.6 更新",
                 body = "1. 分类图标更新：买菜、咖啡、早餐、晚餐、飞机、轮渡和生日礼物换成新版毛绒风图标。\n2. 餐饮分类调整为早餐、午餐、晚餐和咖啡，交通新增飞机和轮渡，日常新增买菜，人情社交新增生日礼物。\n3. 我的页“连续记账”改为“累计记账”，按真实记账日期数展示；货币单位选择恢复国旗显示。",
-                createdAt = createdAt - 1
+                createdAt = createdAt - 2
             ),
             OfficialMessage(
                 id = "release_1_0_5_builtin",
                 title = "绒绒记账 v1.0.5 更新",
                 body = "1. AI 软件订阅分类图标换成新版毛绒风图标。\n2. 绒绒日记首卡文案、编辑弹窗和社交分享卡片按新设计重新排版。\n3. QQ 登录和绑定图标改为矢量企鹅，避免出现剪贴小方块。\n4. 主题选择页继续优化毛绒双列布局，并新增产品下载页作为下载兜底。",
-                createdAt = createdAt - 2
+                createdAt = createdAt - 3
             ),
             OfficialMessage(
                 id = "release_1_0_4_builtin",
                 title = "绒绒记账 v1.0.4 更新",
                 body = "1. 预算管理支持剩余预算显示为负数，并展示超出预算比例。\n2. 学习工作新增 AI 软件订阅分类，AI 识别也会优先匹配常见 AI 订阅支出。\n3. 绒绒日记支持近期日记左滑删除，状态可选择不设置，清空按钮显示更稳定。\n4. 日记首页卡片和社交分享卡片重新排版，二维码保持真实可扫。",
-                createdAt = createdAt - 2
+                createdAt = createdAt - 4
             ),
             OfficialMessage(
                 id = "release_1_0_3_builtin",
                 title = "绒绒记账 v1.0.3 更新",
                 body = "1. AI 记账暂存后会提示并自动关闭弹窗，同时新增清空输入。\n2. 生活日历增加节气、休班角标、周末蓝色日期、今日按钮和法定假期倒计时。\n3. 纪念日拆分为独立专区，历史日记改为弹窗编辑，日记支持暂存和一键清空。\n4. 状态选择和日记分享卡片继续按新设计优化，二维码保持真实可扫。",
-                createdAt = createdAt - 3
+                createdAt = createdAt - 5
             ),
             OfficialMessage(
                 id = "release_1_0_2_builtin",

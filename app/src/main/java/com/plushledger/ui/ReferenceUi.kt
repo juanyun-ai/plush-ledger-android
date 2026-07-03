@@ -253,6 +253,7 @@ private fun categoryArtRes(name: String?): Int = when (name?.trim()) {
     "兼职", "副业", "稿费" -> R.drawable.category_parttime
     "理财", "投资", "投资收益", "利息收益" -> R.drawable.category_investment
     "礼金", "礼金收入", "红包礼金", "礼物" -> R.drawable.category_gift_income
+    "退税退费", "退税", "退费", "退款", "返还" -> R.drawable.category_refund_income
     "其他" -> R.drawable.root_other
     "临时支出" -> R.drawable.sub_temporary
     "杂项备用" -> R.drawable.sub_miscellaneous

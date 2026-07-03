@@ -1,6 +1,5 @@
 package com.plushledger.ui
 
-import android.app.TimePickerDialog
 import android.app.DatePickerDialog
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -59,7 +58,6 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.DirectionsBus
@@ -119,6 +117,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.plushledger.data.AccountEntity
 import com.plushledger.data.AiLedgerAnalysis
 import com.plushledger.R
+import com.plushledger.data.CategoryCatalog
 import com.plushledger.data.CategoryEntity
 import com.plushledger.data.CategorySpend
 import com.plushledger.data.LedgerState
@@ -127,8 +126,6 @@ import com.plushledger.data.TransactionEntity
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -487,7 +484,7 @@ private fun AiConfirmationDialog(
     onConfirm: (AiLedgerAnalysis) -> Unit
 ) {
     val palette = LocalPlushPalette.current
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm") }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
     var type by rememberSaveable(suggestion.sourceText) { mutableStateOf(suggestion.type) }
     var amountText by rememberSaveable(suggestion.sourceText) {
         mutableStateOf(BigDecimal(suggestion.amountMinor).movePointLeft(2).stripTrailingZeros().toPlainString())
@@ -506,7 +503,7 @@ private fun AiConfirmationDialog(
     val selectedAccount = accounts.firstOrNull { it.id == accountId }
     val parsedAmount = Money.parseToMinor(amountText)
     val parsedDate = runCatching {
-        LocalDateTime.parse(dateText.trim(), dateFormatter).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        LocalDate.parse(dateText.trim(), dateFormatter).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }.getOrNull()
     val canConfirm = parsedAmount != null && parsedAmount > 0 && parsedDate != null && selectedCategory != null && selectedAccount != null
 
@@ -539,7 +536,7 @@ private fun AiConfirmationDialog(
                 }
                 Spacer(Modifier.height(8.dp))
                 AiEditableTextRow("金额", amountText, { amountText = it.filter { char -> char.isDigit() || char == '.' }.take(12) }, "例如 15.50", KeyboardType.Decimal)
-                AiEditableTextRow("日期", dateText, { dateText = it.take(16) }, "yyyy-MM-dd HH:mm")
+                AiEditableTextRow("日期", dateText, { dateText = it.take(10) }, "yyyy-MM-dd")
                 AiEditableChoiceRow("分类", selectedCategory?.name ?: "请选择", typeCategories, { it.name }) { categoryId = it.id }
                 AiEditableChoiceRow("账户", selectedAccount?.name ?: "请选择", accounts, { it.name }) { accountId = it.id }
                 AiEditableTextRow("备注", note, { note = it.take(80) }, "备注")
@@ -616,7 +613,7 @@ private fun AiBatchConfirmationDialog(
         return
     }
     val palette = LocalPlushPalette.current
-    val formatter = remember { DateTimeFormatter.ofPattern("M月d日 HH:mm", Locale.CHINA) }
+    val formatter = remember { DateTimeFormatter.ofPattern("M月d日", Locale.CHINA) }
     var drafts by remember(suggestions) { mutableStateOf(suggestions) }
     var editingIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -823,7 +820,7 @@ fun BillsScreen(
     onMonth: (Long) -> Unit,
     onDate: (LocalDate) -> Unit,
     onDelete: (String) -> Unit,
-    onUpdate: (String, String, String?, String?, String, LocalDateTime) -> Unit
+    onUpdate: (String, String, String?, String?, String, LocalDate) -> Unit
 ) {
     var filter by rememberSaveable { mutableStateOf("all") }
     var showCalendar by rememberSaveable { mutableStateOf(false) }
@@ -949,7 +946,7 @@ private fun BillDetailScreen(
     accounts: List<AccountEntity>,
     onBack: () -> Unit,
     onDelete: () -> Unit,
-    onUpdate: (String, String?, String?, String, LocalDateTime) -> Unit
+    onUpdate: (String, String?, String?, String, LocalDate) -> Unit
 ) {
     val palette = LocalPlushPalette.current
     var confirmDelete by remember { mutableStateOf(false) }
@@ -1046,7 +1043,7 @@ private fun BillEditDialog(
     categories: List<CategoryEntity>,
     accounts: List<AccountEntity>,
     onDismiss: () -> Unit,
-    onSave: (String, String?, String?, String, LocalDateTime) -> Unit
+    onSave: (String, String?, String?, String, LocalDate) -> Unit
 ) {
     val context = LocalContext.current
     val palette = LocalPlushPalette.current
@@ -1055,7 +1052,6 @@ private fun BillEditDialog(
     var accountId by remember(record.id) { mutableStateOf(record.accountId) }
     var note by remember(record.id) { mutableStateOf(record.note) }
     var date by remember(record.id) { mutableStateOf(record.localDate()) }
-    var time by remember(record.id) { mutableStateOf(Instant.ofEpochMilli(record.occurredAt).atZone(ZoneId.systemDefault()).toLocalTime()) }
     val allowedCategories = categories.filter { it.kind == record.type && it.parentId != null }.ifEmpty { categories.filter { it.kind == record.type } }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1078,14 +1074,11 @@ private fun BillEditDialog(
                 item {
                     Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { DatePickerDialog(context, { _, year, month, day -> date = LocalDate.of(year, month + 1, day) }, date.year, date.monthValue - 1, date.dayOfMonth).show() }, shape = RoundedCornerShape(16.dp), color = palette.surfaceAlt) { Text("日期  ${date.format(DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.CHINA))}", Modifier.padding(13.dp), color = palette.ink, fontWeight = FontWeight.Bold) }
                 }
-                item {
-                    Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { TimePickerDialog(context, { _, hour, minute -> time = LocalTime.of(hour, minute) }, time.hour, time.minute, true).show() }, shape = RoundedCornerShape(16.dp), color = palette.surfaceAlt) { Text("时间  ${time.format(DateTimeFormatter.ofPattern("HH:mm"))}", Modifier.padding(13.dp), color = palette.ink, fontWeight = FontWeight.Bold) }
-                }
                 item { OutlinedTextField(note, { note = it.take(80) }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        confirmButton = { TextButton(onClick = { onSave(amount, categoryId, accountId, note, LocalDateTime.of(date, time)) }) { Text("保存修改", color = palette.rose, fontWeight = FontWeight.Black) } }
+        confirmButton = { TextButton(onClick = { onSave(amount, categoryId, accountId, note, date) }) { Text("保存修改", color = palette.rose, fontWeight = FontWeight.Black) } }
     )
 }
 
@@ -1192,7 +1185,7 @@ private fun BudgetNumber(label: String, value: Long, color: Color, modifier: Mod
 fun RecordScreen(
     state: UiState,
     onBack: () -> Unit,
-    onAdd: (String, String, String?, String?, String?, String, LocalDateTime) -> Boolean,
+    onAdd: (String, String, String?, String?, String?, String, LocalDate) -> Boolean,
     onDefaultAccount: (String) -> Unit,
     onBudget: (String, String?) -> Unit,
     onAddAccount: (String, String) -> Unit,
@@ -1203,7 +1196,6 @@ fun RecordScreen(
 ) {
     val ledger = state.ledger
     val palette = LocalPlushPalette.current
-    val context = LocalContext.current
     var type by rememberSaveable { mutableStateOf("expense") }
     var amount by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
@@ -1213,7 +1205,6 @@ fun RecordScreen(
     var accountId by rememberSaveable(state.defaultAccountId) { mutableStateOf(state.defaultAccountId) }
     var toAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var date by rememberSaveable { mutableStateOf(LocalDate.now()) }
-    var timeText by rememberSaveable { mutableStateOf(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))) }
     var showDate by rememberSaveable { mutableStateOf(false) }
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var showNote by rememberSaveable { mutableStateOf(false) }
@@ -1398,19 +1389,6 @@ fun RecordScreen(
                     PlushCalendar(date, YearMonth.from(date), onSelect = { date = it; showDate = false })
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                RecordInfoRow(Icons.Default.Schedule, "时间", timeText) {
-                    val current = runCatching {
-                        LocalTime.parse(timeText, DateTimeFormatter.ofPattern("HH:mm"))
-                    }.getOrDefault(LocalTime.now())
-                    TimePickerDialog(
-                        context,
-                        { _, hour, minute -> timeText = String.format(Locale.US, "%02d:%02d", hour, minute) },
-                        current.hour,
-                        current.minute,
-                        true
-                    ).show()
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 val defaultAccount = ledger.accounts.firstOrNull { it.id == accountId }
                     ?: ledger.accounts.firstOrNull { it.id == state.defaultAccountId }
                     ?: ledger.accounts.firstOrNull { it.name == "现金" }
@@ -1461,10 +1439,7 @@ fun RecordScreen(
             Icons.Default.EditNote,
             Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 18.dp).fillMaxWidth()
         ) {
-            val time = runCatching {
-                LocalTime.parse(timeText, DateTimeFormatter.ofPattern("HH:mm"))
-            }.getOrDefault(LocalTime.now())
-            val accepted = onAdd(type, amount, categoryId, accountId, toAccountId, note, LocalDateTime.of(date, time))
+            val accepted = onAdd(type, amount, categoryId, accountId, toAccountId, note, date)
             if (accepted) {
                 amount = ""
                 note = ""
@@ -2179,21 +2154,25 @@ private fun FoldSection(
 fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) -> Unit, onDate: (LocalDate) -> Unit) {
     var showCalendar by rememberSaveable { mutableStateOf(false) }
     var detailSpend by remember { mutableStateOf<CategorySpend?>(null) }
+    var reportMode by rememberSaveable { mutableStateOf("month") }
     val palette = LocalPlushPalette.current
     val month = YearMonth.from(selectedDate)
-    val monthRecords = ledger.transactions.filter { YearMonth.from(it.localDate()) == month }
-    val monthExpense = monthRecords.filter { it.type == "expense" }.sumOf { it.amountMinor }
-    val monthIncome = monthRecords.filter { it.type == "income" }.sumOf { it.amountMinor }
-    val monthBalance = monthIncome - monthExpense
-    val chartData = ledger.categorySpend
-    val weeklySpend = month.weeklyExpense(monthRecords)
+    val period = statsPeriod(reportMode, selectedDate)
+    val periodRecords = ledger.transactions.inDateRange(period.start, period.endExclusive)
+    val previousRecords = ledger.transactions.inDateRange(period.previousStart, period.start)
+    val periodExpense = periodRecords.filter { it.type == "expense" }.sumOf { it.amountMinor }
+    val periodIncome = periodRecords.filter { it.type == "income" }.sumOf { it.amountMinor }
+    val periodBalance = periodIncome - periodExpense
+    val chartData = periodCategorySpend(periodRecords, ledger.categories)
+    val trendSpend = periodTrend(reportMode, period, periodRecords)
+    val insight = statsInsight(period, periodExpense, periodIncome, previousRecords.filter { it.type == "expense" }.sumOf { it.amountMinor }, chartData)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             BrandHeader(
                 "统计",
                 "用数据了解自己，让每一笔都有意义～",
-                month.format(DateTimeFormatter.ofPattern("yyyy年M月")),
+                period.title,
                 onTrailingClick = { showCalendar = !showCalendar }
             )
         }
@@ -2201,20 +2180,30 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
             CalendarSelector(selectedDate, month, onMonth) { onDate(it); showCalendar = false }
         }
         item {
-            StatsOverviewCard(monthExpense, monthIncome, monthBalance)
+            ReferenceSegment(
+                items = listOf("month" to "月报", "quarter" to "季度报", "year" to "年度报"),
+                selected = reportMode,
+                onSelected = {
+                    reportMode = it
+                    detailSpend = null
+                }
+            )
+        }
+        item {
+            StatsOverviewCard(period.metricPrefix, periodExpense, periodIncome, periodBalance)
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatsDonutPanel(chartData, monthExpense, Modifier.weight(1f).height(316.dp))
-                StatsTrendPanel(weeklySpend, Modifier.weight(1f).height(316.dp))
+                StatsDonutPanel(chartData, periodExpense, Modifier.weight(1f).height(316.dp))
+                StatsTrendPanel(period.trendTitle, trendSpend, Modifier.weight(1f).height(316.dp))
             }
         }
         item {
-            if (ledger.categorySpend.isEmpty()) WarmPanel(Modifier.fillMaxWidth(), padding = 14.dp) {
+            if (chartData.isEmpty()) WarmPanel(Modifier.fillMaxWidth(), padding = 14.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     MascotArt(72.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text("这个月还没有支出，记一笔后就能看到分类排行～", color = palette.muted, fontSize = 12.sp)
+                    Text("${period.title}还没有支出，记一笔后就能看到分类排行～", color = palette.muted, fontSize = 12.sp)
                 }
             } else WarmPanel(padding = 14.dp) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -2224,17 +2213,17 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
                     Spacer(Modifier.width(22.dp))
                 }
                 Spacer(Modifier.height(8.dp))
-                val max = ledger.categorySpend.maxOf { it.amountMinor }.coerceAtLeast(1)
-                ledger.categorySpend.take(8).forEachIndexed { index, spend ->
+                val max = chartData.maxOf { it.amountMinor }.coerceAtLeast(1)
+                chartData.take(8).forEachIndexed { index, spend ->
                     StatsCategoryRow(
                         spend = spend,
                         rank = index + 1,
                         max = max,
-                        total = monthExpense,
+                        total = periodExpense,
                         color = statsColor(index),
                         onClick = { detailSpend = spend }
                     )
-                    if (index != ledger.categorySpend.take(8).lastIndex) {
+                    if (index != chartData.take(8).lastIndex) {
                         Spacer(Modifier.height(5.dp))
                         Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                         Spacer(Modifier.height(5.dp))
@@ -2248,7 +2237,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
                 Spacer(Modifier.width(8.dp))
                 Surface(shape = RoundedCornerShape(20.dp), color = palette.surfaceAlt, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
                     Text(
-                        if (monthBalance >= 0) "棒棒哒！本月结余很不错呢～继续保持，向小目标前进吧！" else "这个月支出偏高，看看分类排行就能找到节奏～",
+                        insight,
                         color = palette.ink,
                         fontSize = 14.sp,
                         lineHeight = 22.sp,
@@ -2260,7 +2249,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
     }
     detailSpend?.let { spend ->
         val categories = ledger.categories.associateBy { it.id }
-        val records = monthRecords
+        val records = periodRecords
             .filter { it.type == "expense" && it.categoryId in spend.memberCategoryIds }
             .sortedByDescending { it.occurredAt }
         AlertDialog(
@@ -2268,7 +2257,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
             title = { Text("${spend.category.name}明细", fontWeight = FontWeight.Bold, color = palette.ink) },
             text = {
                 Column(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("本月共 ${records.size} 笔，合计 ${Money.formatCny(spend.amountMinor)}", color = palette.muted, fontSize = 12.sp)
+                    Text("${period.metricPrefix}共 ${records.size} 笔，合计 ${Money.formatCny(spend.amountMinor)}", color = palette.muted, fontSize = 12.sp)
                     records.take(10).forEach { record ->
                         StatsTransactionRow(record, categories)
                     }
@@ -2336,13 +2325,13 @@ private fun CalendarSelector(
 }
 
 @Composable
-private fun StatsOverviewCard(expense: Long, income: Long, balance: Long) {
+private fun StatsOverviewCard(metricPrefix: String, expense: Long, income: Long, balance: Long) {
     val palette = LocalPlushPalette.current
     WarmPanel(padding = 18.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                StatsMetric("本月支出", expense, palette.coral, Modifier.weight(1f))
-                StatsMetric("本月收入", income, palette.moss, Modifier.weight(1f))
+                StatsMetric("${metricPrefix}支出", expense, palette.coral, Modifier.weight(1f))
+                StatsMetric("${metricPrefix}收入", income, palette.moss, Modifier.weight(1f))
                 StatsMetric("结余", balance, palette.rose, Modifier.weight(1f))
             }
             Spacer(Modifier.width(4.dp))
@@ -2394,9 +2383,9 @@ private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modi
 }
 
 @Composable
-private fun StatsTrendPanel(spend: List<WeekSpend>, modifier: Modifier = Modifier) {
+private fun StatsTrendPanel(title: String, spend: List<WeekSpend>, modifier: Modifier = Modifier) {
     WarmPanel(modifier, padding = 12.dp) {
-        ProfileSectionLine("周支出趋势")
+        ProfileSectionLine(title)
         MonthWeekTrendChart(spend)
     }
 }
@@ -2561,6 +2550,125 @@ private fun StatsTransactionRow(record: TransactionEntity, categories: Map<Strin
 }
 
 private data class WeekSpend(val label: String, val amountMinor: Long)
+
+private data class StatsPeriod(
+    val start: LocalDate,
+    val endExclusive: LocalDate,
+    val previousStart: LocalDate,
+    val title: String,
+    val metricPrefix: String,
+    val trendTitle: String,
+    val previousLabel: String
+)
+
+private fun statsPeriod(mode: String, selectedDate: LocalDate): StatsPeriod {
+    val month = YearMonth.from(selectedDate)
+    return when (mode) {
+        "quarter" -> {
+            val firstMonth = ((selectedDate.monthValue - 1) / 3) * 3 + 1
+            val start = LocalDate.of(selectedDate.year, firstMonth, 1)
+            val end = start.plusMonths(3)
+            val quarter = (firstMonth - 1) / 3 + 1
+            StatsPeriod(
+                start = start,
+                endExclusive = end,
+                previousStart = start.minusMonths(3),
+                title = "${selectedDate.year}年Q$quarter",
+                metricPrefix = "本季",
+                trendTitle = "季度月支出趋势",
+                previousLabel = "上季"
+            )
+        }
+        "year" -> {
+            val start = LocalDate.of(selectedDate.year, 1, 1)
+            StatsPeriod(
+                start = start,
+                endExclusive = start.plusYears(1),
+                previousStart = start.minusYears(1),
+                title = "${selectedDate.year}年",
+                metricPrefix = "本年",
+                trendTitle = "年度月支出趋势",
+                previousLabel = "去年"
+            )
+        }
+        else -> StatsPeriod(
+            start = month.atDay(1),
+            endExclusive = month.plusMonths(1).atDay(1),
+            previousStart = month.minusMonths(1).atDay(1),
+            title = month.format(DateTimeFormatter.ofPattern("yyyy年M月")),
+            metricPrefix = "本月",
+            trendTitle = "周支出趋势",
+            previousLabel = "上月"
+        )
+    }
+}
+
+private fun List<TransactionEntity>.inDateRange(start: LocalDate, endExclusive: LocalDate): List<TransactionEntity> =
+    filter {
+        val date = it.localDate()
+        !date.isBefore(start) && date.isBefore(endExclusive)
+    }
+
+private fun periodCategorySpend(records: List<TransactionEntity>, categories: List<CategoryEntity>): List<CategorySpend> {
+    val categoriesById = categories.associateBy { it.id }
+    return records
+        .filter { it.type == "expense" && it.categoryId != null }
+        .groupBy { transaction ->
+            transaction.categoryId
+                ?.let(categoriesById::get)
+                ?.let { CategoryCatalog.rootOf(it, categoriesById).id }
+        }
+        .mapNotNull { (rootCategoryId, rows) ->
+            val category = rootCategoryId?.let(categoriesById::get) ?: return@mapNotNull null
+            CategorySpend(
+                category = category,
+                amountMinor = rows.sumOf { it.amountMinor },
+                memberCategoryIds = rows.mapNotNull { it.categoryId }.toSet()
+            )
+        }
+        .sortedByDescending { it.amountMinor }
+}
+
+private fun periodTrend(mode: String, period: StatsPeriod, records: List<TransactionEntity>): List<WeekSpend> =
+    if (mode == "month") {
+        YearMonth.from(period.start).weeklyExpense(records)
+    } else {
+        val months = mutableListOf<WeekSpend>()
+        var cursor = YearMonth.from(period.start)
+        val stop = YearMonth.from(period.endExclusive.minusDays(1))
+        while (!cursor.isAfter(stop)) {
+            val amount = records
+                .filter { it.type == "expense" && YearMonth.from(it.localDate()) == cursor }
+                .sumOf { it.amountMinor }
+            months += WeekSpend("${cursor.monthValue}月", amount)
+            cursor = cursor.plusMonths(1)
+        }
+        months
+    }
+
+private fun statsInsight(
+    period: StatsPeriod,
+    expense: Long,
+    income: Long,
+    previousExpense: Long,
+    spend: List<CategorySpend>
+): String {
+    val top = spend.firstOrNull()
+    if (expense <= 0) return "${period.title}还没有支出记录，等有新账目后这里会自动变成小复盘。"
+    val topName = top?.category?.name ?: "分类排行"
+    val topPercent = (top?.amountMinor ?: 0L) * 100 / expense.coerceAtLeast(1)
+    if (income > 0 && expense > income) {
+        return "${period.metricPrefix}结余是 ${Money.formatCny(income - expense)}，$topName 是最明显的变化点。"
+    }
+    if (previousExpense > 0) {
+        val diff = expense - previousExpense
+        val threshold = (previousExpense * 0.18f).toLong().coerceAtLeast(1_000L)
+        if (diff > threshold) return "${period.metricPrefix}比${period.previousLabel}多花 ${Money.formatCny(diff)}，先看 $topName 就能定位变化。"
+        if (diff < -threshold) return "${period.metricPrefix}比${period.previousLabel}少花 ${Money.formatCny(-diff)}，记录节奏更轻一点。"
+    }
+    if (topPercent >= 45) return "$topName 占${period.metricPrefix}支出的 $topPercent%，这段时间的重点很清楚。"
+    return "$topName 排在${period.metricPrefix}第一，顺着分类榜看一眼就有数。"
+}
 
 private fun YearMonth.weeklyExpense(records: List<TransactionEntity>): List<WeekSpend> {
     val end = atEndOfMonth()
@@ -2761,6 +2869,7 @@ private fun categoryIcon(name: String?): androidx.compose.ui.graphics.vector.Ima
     "学习" -> Icons.Default.MenuBook
     "工资", "兼职" -> Icons.Default.Work
     "礼金", "人情", "生日礼物" -> Icons.Default.Redeem
+    "退税退费" -> Icons.Default.Payments
     "理财" -> Icons.Default.Payments
     else -> Icons.Default.MoreHoriz
 }
