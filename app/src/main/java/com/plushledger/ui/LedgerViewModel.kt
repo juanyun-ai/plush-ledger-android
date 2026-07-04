@@ -263,7 +263,6 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     fun socialLogin(provider: String) {
         val name = when {
             provider.contains("微信") -> "微信"
-            provider.contains("QQ", ignoreCase = true) -> "QQ"
             else -> provider
         }
         state.value = state.value.copy(message = "$name 绑定已准备接入；密钥只能放后端。Android 原生绑定还需要腾讯开放平台移动应用 AppID、包名签名和回调配置，未完成前不会写入假的绑定状态")
@@ -619,7 +618,15 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateProfile(displayName: String, ageText: String, birthDate: String?, gender: String?) {
+    fun updateProfile(
+        displayName: String,
+        ageText: String,
+        birthDate: String?,
+        gender: String?,
+        province: String?,
+        city: String?,
+        accountNo: String?
+    ) {
         val session = state.value.session ?: return
         val age = ageText.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
         if (ageText.isNotBlank() && (age == null || age !in 0..150)) {
@@ -627,12 +634,17 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         viewModelScope.launch {
-            ledger.updateProfile(session.userId, displayName, age, birthDate, gender)
-            app.enqueueImmediateSync()
-            state.value = state.value.copy(
-                session = sessions.currentSession(),
-                message = "已保存本次修改"
-            )
+            runCatching {
+                ledger.updateProfile(session.userId, displayName, age, birthDate, gender, province, city, accountNo)
+                app.enqueueImmediateSync()
+            }.onSuccess {
+                state.value = state.value.copy(
+                    session = sessions.currentSession(),
+                    message = "已保存本次修改"
+                )
+            }.onFailure { error ->
+                state.value = state.value.copy(message = error.message ?: "资料保存失败")
+            }
         }
     }
 

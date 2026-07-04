@@ -133,6 +133,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
 fun HomeScreen(
@@ -2163,6 +2165,8 @@ private fun FoldSection(
 fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) -> Unit, onDate: (LocalDate) -> Unit) {
     var showCalendar by rememberSaveable { mutableStateOf(false) }
     var detailSpend by remember { mutableStateOf<CategorySpend?>(null) }
+    var selectedSpendId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedTrendIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var reportMode by rememberSaveable { mutableStateOf("month") }
     val palette = LocalPlushPalette.current
     val month = YearMonth.from(selectedDate)
@@ -2195,6 +2199,8 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
                 onSelected = {
                     reportMode = it
                     detailSpend = null
+                    selectedSpendId = null
+                    selectedTrendIndex = null
                 }
             )
         }
@@ -2202,10 +2208,18 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
             StatsOverviewCard(period.metricPrefix, periodExpense, periodIncome, periodBalance)
         }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatsDonutPanel(chartData, periodExpense, Modifier.weight(1f).height(316.dp)) { detailSpend = it }
-                StatsTrendPanel(period.trendTitle, trendSpend, Modifier.weight(1f).height(316.dp))
+            StatsDonutPanel(
+                chartData,
+                periodExpense,
+                Modifier.fillMaxWidth(),
+                selectedId = selectedSpendId
+            ) {
+                selectedSpendId = it.category.id
+                detailSpend = it
             }
+        }
+        item {
+            StatsTrendPanel(period.trendTitle, trendSpend, selectedTrendIndex, Modifier.fillMaxWidth()) { selectedTrendIndex = it }
         }
         item {
             if (chartData.isEmpty()) WarmPanel(Modifier.fillMaxWidth(), padding = 14.dp) {
@@ -2371,18 +2385,45 @@ private fun StatsMetric(label: String, value: Long, color: Color, modifier: Modi
 }
 
 @Composable
-private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modifier: Modifier = Modifier, onSelect: (CategorySpend) -> Unit = {}) {
+private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modifier: Modifier = Modifier, selectedId: String? = null, onSelect: (CategorySpend) -> Unit = {}) {
     val palette = LocalPlushPalette.current
-    WarmPanel(modifier, padding = 12.dp) {
+    val selected = spend.firstOrNull { it.category.id == selectedId } ?: spend.firstOrNull()
+    WarmPanel(modifier, padding = 14.dp) {
         ProfileSectionLine("支出构成")
-        DonutChart(spend, compact = true, onSelect = onSelect)
-        spend.take(6).forEachIndexed { index, item ->
-            val percent = item.amountMinor * 1000 / totalExpense.coerceAtLeast(1)
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onSelect(item) }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(statsColor(index)))
-                Spacer(Modifier.width(7.dp))
-                Text(item.category.name, color = palette.ink, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${percent / 10}.${percent % 10}%", color = palette.muted, fontSize = 12.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            DonutChart(spend, compact = false, selectedId = selected?.category?.id, modifier = Modifier.weight(0.86f), onSelect = onSelect)
+            Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                spend.take(6).forEachIndexed { index, item ->
+                    val percent = item.amountMinor * 1000 / totalExpense.coerceAtLeast(1)
+                    val isSelected = item.category.id == selected?.category?.id
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (isSelected) statsColor(index).copy(alpha = 0.10f) else Color.Transparent)
+                            .clickable { onSelect(item) }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.size(if (isSelected) 11.dp else 8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(statsColor(index)))
+                        Spacer(Modifier.width(7.dp))
+                        Text(item.category.name, color = palette.ink, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Black else FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${percent / 10}.${percent % 10}%", color = if (isSelected) palette.rose else palette.muted, fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal, fontSize = 12.sp)
+                    }
+                }
+                selected?.let { item ->
+                    Surface(shape = RoundedCornerShape(16.dp), color = palette.surfaceAlt, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+                        Text(
+                            "${item.category.name} · ${Money.formatCny(item.amountMinor)}",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            color = palette.ink,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
         if (spend.isEmpty()) {
@@ -2392,10 +2433,10 @@ private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modi
 }
 
 @Composable
-private fun StatsTrendPanel(title: String, spend: List<WeekSpend>, modifier: Modifier = Modifier) {
+private fun StatsTrendPanel(title: String, spend: List<WeekSpend>, selectedIndex: Int?, modifier: Modifier = Modifier, onSelect: (Int) -> Unit = {}) {
     WarmPanel(modifier, padding = 12.dp) {
         ProfileSectionLine(title)
-        MonthWeekTrendChart(spend)
+        MonthWeekTrendChart(spend, selectedIndex, onSelect)
     }
 }
 
@@ -2410,16 +2451,16 @@ private fun ProfileSectionLine(title: String) {
 }
 
 @Composable
-private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false, onSelect: (CategorySpend) -> Unit = {}) {
+private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false, selectedId: String? = null, modifier: Modifier = Modifier, onSelect: (CategorySpend) -> Unit = {}) {
     val palette = LocalPlushPalette.current
     val rawTotal = spend.sumOf { it.amountMinor }
     val total = rawTotal.coerceAtLeast(1)
-    val top = spend.firstOrNull()
+    val top = spend.firstOrNull { it.category.id == selectedId } ?: spend.firstOrNull()
     val topPercent = (top?.amountMinor ?: 0L) * 1000 / total
-    Box(Modifier.fillMaxWidth().height(if (compact) 150.dp else 210.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxWidth().height(if (compact) 150.dp else 210.dp), contentAlignment = Alignment.Center) {
         Canvas(
             Modifier
-                .size(if (compact) 116.dp else 168.dp)
+                .size(if (compact) 116.dp else 176.dp)
                 .pointerInput(spend, total) {
                     detectTapGestures { tap ->
                         val center = Offset(size.width / 2f, size.height / 2f)
@@ -2450,7 +2491,15 @@ private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false, onS
             var start = -90f
             spend.take(6).forEachIndexed { index, item ->
                 val sweep = item.amountMinor.toFloat() / total * 360f
-                drawArc(statsColor(index), start, sweep, false, Offset(stroke / 2, stroke / 2), Size(size.width - stroke, size.height - stroke), style = Stroke(stroke, cap = StrokeCap.Round))
+                val selected = item.category.id == selectedId
+                val middle = start + sweep / 2f
+                val radians = middle * PI.toFloat() / 180f
+                val shift = if (selected) 9.dp.toPx() else 0f
+                val offset = Offset(stroke / 2 + cos(radians) * shift, stroke / 2 + sin(radians) * shift)
+                if (selected) {
+                    drawArc(Color.White, start, sweep, false, offset, Size(size.width - stroke, size.height - stroke), style = Stroke(stroke + 8.dp.toPx(), cap = StrokeCap.Round))
+                }
+                drawArc(statsColor(index), start, sweep, false, offset, Size(size.width - stroke, size.height - stroke), style = Stroke(stroke + if (selected) 2.dp.toPx() else 0f, cap = StrokeCap.Round))
                 start += sweep
             }
         }
@@ -2480,10 +2529,10 @@ private fun BarChart(spend: List<CategorySpend>, compact: Boolean = false) {
 }
 
 @Composable
-private fun MonthWeekTrendChart(spend: List<WeekSpend>) {
+private fun MonthWeekTrendChart(spend: List<WeekSpend>, selectedIndex: Int?, onSelect: (Int) -> Unit) {
     val palette = LocalPlushPalette.current
     val max = spend.maxOfOrNull { it.amountMinor }?.coerceAtLeast(1) ?: 1
-    Box(Modifier.fillMaxWidth().height(214.dp).padding(top = 10.dp)) {
+    Box(Modifier.fillMaxWidth().height(260.dp).padding(top = 8.dp)) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             repeat(4) {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border.copy(alpha = 0.72f)))
@@ -2497,14 +2546,29 @@ private fun MonthWeekTrendChart(spend: List<WeekSpend>) {
             spend.forEachIndexed { index, week ->
                 val height = if (max <= 0) 22.dp else (34 + (week.amountMinor.toFloat() / max * 104)).dp
                 Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
-                    Text(Money.formatCny(week.amountMinor).replace("¥", ""), color = palette.ink, fontSize = 10.sp, maxLines = 1)
+                    val selected = selectedIndex == index
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (selected) palette.rose.copy(alpha = 0.14f) else Color.Transparent
+                    ) {
+                        Text(
+                            Money.formatCny(week.amountMinor).replace("¥", ""),
+                            modifier = Modifier.padding(horizontal = if (selected) 5.dp else 0.dp, vertical = 2.dp),
+                            color = if (selected) palette.rose else palette.ink,
+                            fontWeight = if (selected) FontWeight.Black else FontWeight.Normal,
+                            fontSize = if (spend.size >= 10) 8.sp else 10.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                     Spacer(Modifier.height(5.dp))
                     Box(
                         Modifier
-                            .width(28.dp)
-                            .height(height)
+                            .width(if (selected) 31.dp else 25.dp)
+                            .height(if (selected) height + 10.dp else height)
                             .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
                             .background(Brush.verticalGradient(listOf(statsColor(index).copy(alpha = 0.58f), statsColor(index))))
+                            .clickable { onSelect(index) }
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(

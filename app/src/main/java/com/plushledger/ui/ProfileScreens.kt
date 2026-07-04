@@ -303,6 +303,7 @@ fun MyScreen(
         MyPage.DIARY -> DiaryScreen(
             userId = state.session?.userId ?: state.ledger.profile?.id ?: "local-diary",
             quotes = rememberQuoteCollection(),
+            locationHint = listOfNotNull(state.ledger.profile?.province, state.ledger.profile?.city).joinToString(" "),
             onChanged = viewModel::syncNow,
             onBack = { page = MyPage.ROOT }
         )
@@ -648,9 +649,9 @@ private fun AboutScreen(
                     color = palette.rose
                 ) {
                     val pending = feedback.trim()
-                    savedDraft = pending
-                    draftStore.edit().putString("content", pending).apply()
                     onFeedback(pending)
+                    savedDraft = ""
+                    draftStore.edit().remove("content").apply()
                     feedback = ""
                 }
             }
@@ -684,7 +685,7 @@ private fun AboutValue(icon: ImageVector, label: String, color: Color, modifier:
 private fun ProfileScreen(
     state: UiState,
     onBack: () -> Unit,
-    onSave: (String, String, String?, String?) -> Unit,
+    onSave: (String, String, String?, String?, String?, String?, String?) -> Unit,
     onAvatar: (android.net.Uri) -> Unit,
     onBind: (String) -> Unit,
     onSendIdentityCode: (String, String) -> Unit,
@@ -702,17 +703,26 @@ private fun ProfileScreen(
     val initialAge = profile?.age?.toString().orEmpty()
     val initialBirthDate = profile?.birthDate.orEmpty()
     val initialGender = profile?.gender ?: "prefer_not"
+    val initialProvince = profile?.province.orEmpty()
+    val initialCity = profile?.city.orEmpty()
+    val initialAccountNo = profileAccountNo(profile, userKey)
     val initialSignature = remember(userKey) { prefs.getString("signature_$userKey", "认真生活，温柔记账") ?: "认真生活，温柔记账" }
     var nickname by rememberSaveable(profile?.displayName) { mutableStateOf(initialName) }
     var age by rememberSaveable(profile?.age) { mutableStateOf(initialAge) }
     var birthDate by rememberSaveable(profile?.birthDate) { mutableStateOf(initialBirthDate) }
     var gender by rememberSaveable(profile?.gender) { mutableStateOf(initialGender) }
+    var province by rememberSaveable(profile?.province) { mutableStateOf(initialProvince) }
+    var city by rememberSaveable(profile?.city) { mutableStateOf(initialCity) }
+    var accountNo by rememberSaveable(profile?.accountNo) { mutableStateOf(initialAccountNo) }
     var signature by rememberSaveable(userKey) { mutableStateOf(initialSignature) }
     var editMode by rememberSaveable { mutableStateOf(false) }
     var identityChannel by rememberSaveable { mutableStateOf<String?>(null) }
     var showNicknameEditor by rememberSaveable { mutableStateOf(false) }
     var showAgeEditor by rememberSaveable { mutableStateOf(false) }
     var showGenderEditor by rememberSaveable { mutableStateOf(false) }
+    var showProvinceEditor by rememberSaveable { mutableStateOf(false) }
+    var showCityEditor by rememberSaveable { mutableStateOf(false) }
+    var showAccountNoEditor by rememberSaveable { mutableStateOf(false) }
     var showSignatureEditor by rememberSaveable { mutableStateOf(false) }
     var showPrivacy by rememberSaveable { mutableStateOf(false) }
     var showPassword by rememberSaveable { mutableStateOf(false) }
@@ -726,7 +736,8 @@ private fun ProfileScreen(
     var deleteSeconds by remember { mutableIntStateOf(15) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(onAvatar) }
     val dirty = nickname != initialName || age != initialAge || birthDate != initialBirthDate ||
-        gender != initialGender || signature != initialSignature
+        gender != initialGender || province != initialProvince || city != initialCity ||
+        accountNo != initialAccountNo || signature != initialSignature
     val genderLabel = when (gender) {
         "female" -> "女"
         "male" -> "男"
@@ -735,6 +746,10 @@ private fun ProfileScreen(
     }
     val ageLabel = age.ifBlank { "--" } + "岁"
     val birthdayLabel = birthDate.toBirthdayLabel()
+    val constellation = birthDate.toConstellation()
+    val locationLabel = listOf(province, city).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "未设置" }
+    val createdLabel = profile?.createdAt?.toDateLabel() ?: "首次使用时记录"
+    val usingDays = profile?.createdAt?.let { Duration.between(Instant.ofEpochMilli(it), Instant.now()).toDays().coerceAtLeast(0) + 1 } ?: 1
     val remoteMode = state.session?.accessToken != null
 
     LaunchedEffect(showDelete) {
@@ -771,9 +786,11 @@ private fun ProfileScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TinyPill(if (privacyOn) "**岁" else ageLabel, palette.rose)
                             TinyPill(genderLabel, palette.rose)
+                            TinyPill(if (privacyOn) "地区已隐藏" else locationLabel, palette.moss)
                         }
                         Spacer(Modifier.height(10.dp))
                         Text("生日  ${if (privacyOn) "**月**日" else birthdayLabel}", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text("账号编号  ${accountNo.ifBlank { "--" }}", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(membershipLabel(profile?.role, profile?.membershipTier), color = badgeColor(profile?.role, profile?.membershipTier), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                     MascotArt(86.dp, R.drawable.mascot_action_heart)
@@ -793,6 +810,11 @@ private fun ProfileScreen(
                 ProfileListRow(Icons.Default.Person, "昵称", nickname.ifBlank { "绒绒用户" }, palette.rose, onClick = {
                     editMode = true
                     showNicknameEditor = true
+                })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.Badge, "用户 ID / 账号编号", accountNo.ifBlank { "未设置" }, palette.rose, onClick = {
+                    editMode = true
+                    showAccountNoEditor = true
                 })
                 ProfileDivider()
                 ProfileListRow(Icons.Default.Badge, "年龄", if (privacyOn) "**岁" else ageLabel, palette.moss, onClick = {
@@ -830,6 +852,15 @@ private fun ProfileScreen(
                     }
                 )
                 ProfileDivider()
+                ProfileListRow(Icons.Default.Home, "地区", if (privacyOn) "已隐藏" else locationLabel, palette.moss, onClick = {
+                    editMode = true
+                    showProvinceEditor = true
+                })
+                ProfileDivider()
+                ProfileListRow(Icons.Default.Star, "星座", constellation, palette.lilac, enabled = false, onClick = {})
+                ProfileDivider()
+                ProfileListRow(Icons.Default.CalendarMonth, "注册时间 / 使用天数", "$createdLabel · 第 ${usingDays} 天", palette.coral, enabled = false, onClick = {})
+                ProfileDivider()
                 ProfileListRow(Icons.Default.ChatBubble, "个性签名", signature, palette.coral, onClick = {
                     editMode = true
                     showSignatureEditor = true
@@ -840,8 +871,6 @@ private fun ProfileScreen(
             PlushCard {
                 ProfileSectionTitle("账号绑定")
                 ProfileProviderRow(R.drawable.logo_wechat, "微信", if (profile?.wechatBound == true) "已绑定" else "未绑定", palette.moss, onClick = { onBind("微信绑定") })
-                ProfileDivider()
-                ProfileProviderRow(R.drawable.logo_qq, "QQ", if (profile?.qqBound == true) "已绑定" else "未绑定", palette.blue, onClick = { onBind("QQ绑定") })
                 ProfileDivider()
                 ProfileListRow(Icons.Default.Email, "邮箱", (profile?.email ?: state.session?.email ?: "本地账号").maskIf(privacyOn), palette.coral, enabled = remoteMode, onClick = {
                     identityChannel = "email"
@@ -878,7 +907,7 @@ private fun ProfileScreen(
             item {
                 PlushButton("保存修改", Icons.Default.Save, Modifier.fillMaxWidth(), enabled = dirty) {
                     prefs.edit().putString("signature_$userKey", signature).apply()
-                    onSave(nickname, age, birthDate.ifBlank { null }, gender)
+                    onSave(nickname, age, birthDate.ifBlank { null }, gender, province, city, accountNo)
                     editMode = false
                 }
             }
@@ -921,6 +950,29 @@ private fun ProfileScreen(
                 }
             },
             confirmButton = {}
+        )
+    }
+    if (showProvinceEditor) {
+        RegionEditDialog(
+            province = province,
+            city = city,
+            onDismiss = { showProvinceEditor = false },
+            onConfirm = { nextProvince, nextCity ->
+                province = nextProvince
+                city = nextCity
+                showProvinceEditor = false
+            }
+        )
+    }
+    if (showAccountNoEditor) {
+        ProfileTextEditDialog(
+            title = "修改账号编号",
+            value = accountNo,
+            label = "4-18 位字母、数字或下划线",
+            maxLength = 18,
+            filter = { it.filter { ch -> ch.isLetterOrDigit() || ch == '_' } },
+            onDismiss = { showAccountNoEditor = false },
+            onConfirm = { accountNo = it.trim(); showAccountNoEditor = false }
         )
     }
     if (showSignatureEditor) {
@@ -1308,6 +1360,46 @@ private fun ProfileProviderRow(
         Spacer(Modifier.width(6.dp))
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted.copy(alpha = if (enabled) 1f else 0.35f))
     }
+}
+
+@Composable
+private fun RegionEditDialog(
+    province: String,
+    city: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    var nextProvince by rememberSaveable { mutableStateOf(province) }
+    var nextCity by rememberSaveable { mutableStateOf(city) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("设置地区", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = nextProvince,
+                    onValueChange = { nextProvince = it.take(20) },
+                    label = { Text("省份") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp)
+                )
+                OutlinedTextField(
+                    value = nextCity,
+                    onValueChange = { nextCity = it.take(24) },
+                    label = { Text("城市") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp)
+                )
+                Text("地区会用于分享卡片自动选择省份插图。", color = LocalPlushPalette.current.muted, fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(nextProvince.trim(), nextCity.trim()) }) {
+                Text("保存")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
 }
 
 @Composable
@@ -2156,6 +2248,32 @@ private fun String.toBirthdayLabel(): String =
         val date = LocalDate.parse(this)
         date.format(DateTimeFormatter.ofPattern("MM月dd日"))
     }.getOrDefault(ifBlank { "未设置" })
+
+private fun String.toConstellation(): String {
+    val date = runCatching { LocalDate.parse(this) }.getOrNull() ?: return "生日设置后自动生成"
+    val md = date.monthValue * 100 + date.dayOfMonth
+    return when {
+        md in 321..419 -> "白羊座"
+        md in 420..520 -> "金牛座"
+        md in 521..621 -> "双子座"
+        md in 622..722 -> "巨蟹座"
+        md in 723..822 -> "狮子座"
+        md in 823..922 -> "处女座"
+        md in 923..1023 -> "天秤座"
+        md in 1024..1122 -> "天蝎座"
+        md in 1123..1221 -> "射手座"
+        md >= 1222 || md <= 119 -> "摩羯座"
+        md in 120..218 -> "水瓶座"
+        else -> "双鱼座"
+    }
+}
+
+private fun Long.toDateLabel(): String =
+    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate().format(DateTimeFormatter.ofPattern("yyyy年M月d日"))
+
+private fun profileAccountNo(profile: com.plushledger.data.ProfileEntity?, userKey: String): String =
+    profile?.accountNo?.takeIf { it.isNotBlank() }
+        ?: ("RR" + userKey.filter(Char::isLetterOrDigit).takeLast(10).uppercase().padStart(10, '0'))
 
 private fun String.maskIf(enabled: Boolean): String {
     if (!enabled || isBlank() || this == "未绑定" || this == "本地账号") return this

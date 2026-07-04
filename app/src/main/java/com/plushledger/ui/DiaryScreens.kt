@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -95,7 +96,7 @@ private val diaryStatuses = listOf(
 )
 
 @Composable
-fun DiaryScreen(userId: String, quotes: List<String>, onChanged: () -> Unit = {}, onBack: () -> Unit) {
+fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "", onChanged: () -> Unit = {}, onBack: () -> Unit) {
     val context = LocalContext.current
     val palette = LocalPlushPalette.current
     val store = remember(userId) { DiaryStore(context.applicationContext, userId) }
@@ -129,7 +130,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, onChanged: () -> Unit = {}
                     Text("把今天的心情，轻轻写下来。", color = palette.muted, fontSize = 12.sp)
                 }
                 IconButton(onClick = {
-                    sharePreview = DiaryShareCard.create(context, selectedDate)
+                    sharePreview = DiaryShareCard.create(context, selectedDate, displayStatus, locationHint)
                 }) { Icon(Icons.Default.Share, "分享日记", tint = palette.pink) }
                 MascotArt(46.dp, R.drawable.mascot_action_sleep)
             }
@@ -150,18 +151,16 @@ fun DiaryScreen(userId: String, quotes: List<String>, onChanged: () -> Unit = {}
                         contentScale = ContentScale.Crop
                     )
                     Surface(
-                        modifier = Modifier.align(Alignment.TopStart).padding(start = 24.dp, top = 28.dp),
+                        modifier = Modifier.align(Alignment.TopStart).padding(start = 70.dp, top = 55.dp),
                         shape = RoundedCornerShape(999.dp),
-                        color = Color(0xFFFFE8B1).copy(alpha = 0.96f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.72f)),
-                        shadowElevation = 3.dp
+                        color = Color(0xFFFDE7B8).copy(alpha = 0.94f)
                     ) {
                         Text(
                             selectedDate.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
-                            modifier = Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 13.dp, vertical = 5.dp),
                             color = palette.ink,
                             fontWeight = FontWeight.Black,
-                            fontSize = 13.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -188,7 +187,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, onChanged: () -> Unit = {}
                         border = BorderStroke(1.dp, palette.border)
                     ) {
                         Text(
-                            if (status.isBlank()) "不设置状态" else status,
+                            if (status.isBlank()) "设置状态" else status,
                             Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
                             color = if (status.isBlank()) palette.muted else palette.pink,
                             fontWeight = FontWeight.Bold,
@@ -283,7 +282,12 @@ fun DiaryScreen(userId: String, quotes: List<String>, onChanged: () -> Unit = {}
         Dialog(onDismissRequest = { sharePreview = null }) {
             Surface(shape = RoundedCornerShape(28.dp), color = Color(0xFFFFFCF7), border = BorderStroke(1.5.dp, Color(0xFFFFDAB4)), shadowElevation = 18.dp) {
                 Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Image(bitmap.asImageBitmap(), "日记分享卡片", Modifier.fillMaxWidth().height(560.dp), contentScale = ContentScale.Fit)
+                    Image(
+                        bitmap.asImageBitmap(),
+                        "日记分享卡片",
+                        Modifier.fillMaxWidth().aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat()),
+                        contentScale = ContentScale.Fit
+                    )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { sharePreview = null }, modifier = Modifier.weight(1f)) { Text("取消", color = palette.muted) }
                         PlushButton("分享图片", Icons.Default.Share, Modifier.weight(1f), color = palette.pink) {
@@ -478,7 +482,7 @@ private fun DiaryEditDialog(
                         Spacer(Modifier.weight(1f))
                         Text(statusIcon(status), fontSize = 18.sp)
                         Spacer(Modifier.width(6.dp))
-                        Text(if (status.isBlank()) "不设置状态" else status, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(if (status.isBlank()) "设置状态" else status, color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(Modifier.width(6.dp))
                         Icon(Icons.Default.ChevronRight, null, tint = palette.muted)
                     }
@@ -561,7 +565,7 @@ private fun DiaryStatusDialog(selected: String, onDismiss: () -> Unit, onSelect:
                     border = BorderStroke(1.dp, if (selected.isBlank()) palette.pink else palette.border)
                 ) {
                     Text(
-                        "不设置状态",
+                        "设置状态",
                         modifier = Modifier.padding(vertical = 12.dp),
                         color = if (selected.isBlank()) palette.pink else palette.ink,
                         fontWeight = FontWeight.Bold,
@@ -658,25 +662,39 @@ private fun matchingQuote(mood: String, quotes: List<String>): String {
 }
 
 private object DiaryShareCard {
-    private const val WIDTH = 1122
-    private const val HEIGHT = 1402
-
-    fun create(context: Context, date: LocalDate, locationHint: String = ""): Bitmap {
-        val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
+    fun create(context: Context, date: LocalDate, mood: String, locationHint: String = ""): Bitmap {
+        val art = BitmapFactory.decodeResource(context.resources, shareArt(locationHint))
+        val width = art.width
+        val height = art.height
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val art = BitmapFactory.decodeResource(context.resources, shareArt(locationHint))
-        canvas.drawBitmap(art, null, Rect(0, 0, WIDTH, HEIGHT), paint)
-        paint.color = 0xF9FFF8EE.toInt()
-        canvas.drawRoundRect(RectF(706f, 118f, 1010f, 229f), 24f, 24f, paint)
-        paint.color = 0xFF7D5B46.toInt()
+        canvas.drawBitmap(art, null, Rect(0, 0, width, height), paint)
+
+        val dateBox = RectF(width * 0.646f, height * 0.102f, width * 0.930f, height * 0.154f)
+        paint.color = 0xF6FFF5DF.toInt()
+        canvas.drawRoundRect(dateBox, 28f, 28f, paint)
+        paint.color = 0xFFA86B21.toInt()
         paint.textAlign = Paint.Align.CENTER
+        paint.isFakeBoldText = true
+        paint.textSize = width * 0.026f
+        canvas.drawText(date.format(DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.CHINA)), dateBox.centerX(), dateBox.centerY() + width * 0.010f, paint)
+
+        val moodBox = RectF(width * 0.076f, height * 0.216f, width * 0.552f, height * 0.280f)
+        paint.color = 0xF8FFF6E9.toInt()
+        canvas.drawRoundRect(moodBox, 22f, 22f, paint)
+        paint.color = 0xFF7D5B46.toInt()
+        paint.textSize = width * 0.030f
         paint.isFakeBoldText = false
-        paint.textSize = 38f
-        canvas.drawText(date.format(DateTimeFormatter.ofPattern("yyyy年 M 月 d 日", Locale.CHINA)), 858f, 166f, paint)
-        paint.textSize = 25f
-        paint.color = 0xFF9F7F66.toInt()
-        canvas.drawText(date.format(DateTimeFormatter.ofPattern("EEEE", Locale.CHINA)), 858f, 205f, paint)
+        canvas.drawText(mood.ifBlank { "设置状态" }.take(10), moodBox.centerX(), moodBox.centerY() + width * 0.011f, paint)
+
+        val qr = BitmapFactory.decodeResource(context.resources, R.drawable.miniprogram_code)
+        val qrSize = (width * 0.265f).toInt()
+        val qrLeft = (width * 0.665f).toInt()
+        val qrTop = (height * 0.704f).toInt()
+        paint.color = 0xFFFFFCF4.toInt()
+        canvas.drawRoundRect(RectF(qrLeft - 10f, qrTop - 10f, qrLeft + qrSize + 10f, qrTop + qrSize + 10f), 24f, 24f, paint)
+        canvas.drawBitmap(qr, null, Rect(qrLeft, qrTop, qrLeft + qrSize, qrTop + qrSize), paint)
         return bitmap
     }
 

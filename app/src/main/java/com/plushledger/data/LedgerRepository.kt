@@ -35,6 +35,7 @@ class LedgerRepository(
                     displayName = displayName,
                     phone = phone,
                     email = email,
+                    accountNo = defaultAccountNo(userId),
                     role = "user",
                     membershipTier = "free",
                     createdAt = now,
@@ -245,14 +246,42 @@ class LedgerRepository(
         return ExternalBillImportResult(records.size, preview.skippedRows)
     }
 
-    suspend fun updateProfile(userId: String, displayName: String, age: Int?, birthDate: String?, gender: String?) {
+    suspend fun updateProfile(
+        userId: String,
+        displayName: String,
+        age: Int?,
+        birthDate: String?,
+        gender: String?,
+        province: String?,
+        city: String?,
+        accountNo: String?
+    ) {
         val current = dao.getProfile(userId) ?: return
+        val normalizedAccountNo = accountNo?.trim()?.takeIf { it.isNotBlank() } ?: current.accountNo ?: defaultAccountNo(userId)
+        require(normalizedAccountNo.matches(Regex("^[A-Za-z0-9_]{4,18}$"))) { "账号编号仅支持 4-18 位字母、数字或下划线" }
+        val monthKey = YearMonth.now().toString()
+        val changedMonth = if (current.accountNoChangedMonth == monthKey) current.accountNoChangedMonth else monthKey
+        val baseChangeCount = if (current.accountNoChangedMonth == monthKey) current.accountNoChangedCount else 0
+        val accountChanged = !current.accountNo.equals(normalizedAccountNo, ignoreCase = true)
+        if (accountChanged && baseChangeCount >= 2) error("账号编号每月最多修改 2 次")
+        val session = sessionStore.currentSession()
+        if (accountChanged && session?.accessToken != null) {
+            val available = withFreshAccessToken { token ->
+                supabaseClient.profileAccountNoAvailable(token, userId, normalizedAccountNo)
+            }
+            if (!available) error("这个账号编号已经被使用了，请换一个")
+        }
         dao.upsertProfile(
             current.copy(
                 displayName = displayName.trim().ifBlank { current.displayName },
                 age = age,
                 birthDate = birthDate,
                 gender = gender,
+                province = province?.trim()?.takeIf { it.isNotBlank() },
+                city = city?.trim()?.takeIf { it.isNotBlank() },
+                accountNo = normalizedAccountNo,
+                accountNoChangedMonth = if (accountChanged) changedMonth else current.accountNoChangedMonth,
+                accountNoChangedCount = if (accountChanged) baseChangeCount + 1 else current.accountNoChangedCount,
                 updatedAt = now(),
                 syncState = SYNC_DIRTY
             )
@@ -942,6 +971,9 @@ class LedgerRepository(
         age = age?.takeIf { it in 0..150 },
         birthDate = birthDate?.takeIf { it.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$")) },
         gender = gender?.takeIf { it in setOf("female", "male", "other", "prefer_not") },
+        province = province?.trim()?.takeIf { it.length <= 30 },
+        city = city?.trim()?.takeIf { it.length <= 40 },
+        accountNo = accountNo?.trim()?.takeIf { it.matches(Regex("^[A-Za-z0-9_]{4,18}$")) },
         currency = currency.takeIf { it.length == 3 } ?: "CNY"
     )
 
@@ -1174,6 +1206,9 @@ private const val OFFICIAL_MESSAGES_KEY = "cached_messages"
 private val expenseColors = listOf("#C86F7E", "#D99676", "#B86A77", "#E0A0A8", "#A86E89")
 private val incomeColors = listOf("#5E9B83", "#6E8DBF", "#8AA46D", "#76A9A8")
 
+private fun defaultAccountNo(userId: String): String =
+    "RR" + userId.filter(Char::isLetterOrDigit).takeLast(10).uppercase(Locale.ROOT).padStart(10, '0')
+
 private fun JSONObject.toProfile() = ProfileEntity(
     id = getString("id"),
     displayName = getString("display_name"),
@@ -1183,6 +1218,11 @@ private fun JSONObject.toProfile() = ProfileEntity(
     age = nullableInt("age"),
     birthDate = nullableString("birth_date"),
     gender = nullableString("gender"),
+    province = nullableString("province"),
+    city = nullableString("city"),
+    accountNo = nullableString("account_no"),
+    accountNoChangedMonth = nullableString("account_no_changed_month"),
+    accountNoChangedCount = nullableInt("account_no_changed_count") ?: 0,
     role = optString("role", "user"),
     membershipTier = optString("membership_tier", "free"),
     wechatBound = optBoolean("wechat_bound", false),

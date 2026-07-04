@@ -963,15 +963,10 @@ private fun SocialLoginRow(viewModel: LedgerViewModel, withDivider: Boolean = fa
         Spacer(Modifier.height(8.dp))
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = { viewModel.socialLogin("微信") }, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, palette.border)) {
+        OutlinedButton(onClick = { viewModel.socialLogin("微信") }, modifier = Modifier.fillMaxWidth().height(46.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, palette.border)) {
             Image(painterResource(R.drawable.logo_wechat), contentDescription = null, modifier = Modifier.size(26.dp))
             Spacer(Modifier.size(6.dp))
             Text("微信", color = palette.ink, fontWeight = FontWeight.Bold)
-        }
-        OutlinedButton(onClick = { viewModel.socialLogin("QQ") }, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, palette.border)) {
-            Image(painterResource(R.drawable.logo_qq), contentDescription = null, modifier = Modifier.size(30.dp), contentScale = ContentScale.Fit)
-            Spacer(Modifier.size(6.dp))
-            Text("QQ", color = palette.ink, fontWeight = FontWeight.Bold)
         }
     }
 }

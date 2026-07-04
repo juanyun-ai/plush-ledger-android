@@ -149,6 +149,18 @@ class SupabaseClient {
         )
     }
 
+    suspend fun profileAccountNoAvailable(accessToken: String, userId: String, accountNo: String): Boolean {
+        val text = request(
+            method = "POST",
+            path = "/rest/v1/rpc/profile_account_no_available",
+            body = JSONObject()
+                .put("candidate", accountNo)
+                .put("current_user_id", userId),
+            accessToken = accessToken
+        )
+        return text.trim().equals("true", ignoreCase = true)
+    }
+
     suspend fun recordAppActivity(accessToken: String, userId: String, eventType: String = "app_open") {
         val now = System.currentTimeMillis()
         val event = clientInfoPayload()
@@ -489,6 +501,11 @@ private fun Any.toJson(): JSONObject = when (this) {
         .put("age", age)
         .put("birth_date", birthDate)
         .put("gender", gender)
+        .put("province", province)
+        .put("city", city)
+        .put("account_no", accountNo)
+        .put("account_no_changed_month", accountNoChangedMonth)
+        .put("account_no_changed_count", accountNoChangedCount)
         .put("wechat_bound", wechatBound)
         .put("qq_bound", qqBound)
         .put("agreement_version", agreementVersion)
