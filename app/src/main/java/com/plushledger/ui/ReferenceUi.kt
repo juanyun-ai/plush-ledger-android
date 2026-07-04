@@ -1,5 +1,6 @@
 package com.plushledger.ui
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
@@ -48,6 +48,7 @@ fun ReferenceHeader(
     branded: Boolean = false,
     mascot: Boolean = false,
     onMonth: (() -> Unit)? = null,
+    @DrawableRes mascotRes: Int = R.drawable.mascot_action_welcome,
     trailingAction: (() -> Unit)? = null
 ) {
     val palette = LocalPlushPalette.current
@@ -57,7 +58,7 @@ fun ReferenceHeader(
     ) {
         if (branded || mascot) {
             Image(
-                painter = painterResource(R.drawable.ic_launcher_transparent),
+                painter = painterResource(mascotRes),
                 contentDescription = null,
                 modifier = Modifier.size(56.dp),
                 contentScale = ContentScale.Fit
@@ -153,26 +154,13 @@ fun ReferenceSegment(
 }
 
 @Composable
-fun MascotArt(size: Dp = 88.dp) {
-    val palette = LocalPlushPalette.current
+fun MascotArt(size: Dp = 88.dp, @DrawableRes resId: Int = R.drawable.mascot_action_welcome) {
     Box(Modifier.size(size)) {
         Image(
-            painter = painterResource(R.drawable.ic_launcher_transparent),
+            painter = painterResource(resId),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Fit
-        )
-        Icon(
-            Icons.Default.AutoAwesome,
-            contentDescription = null,
-            tint = palette.rose.copy(alpha = 0.62f),
-            modifier = Modifier.size(size * 0.18f).align(Alignment.TopStart)
-        )
-        Icon(
-            Icons.Default.Favorite,
-            contentDescription = null,
-            tint = palette.coral.copy(alpha = 0.68f),
-            modifier = Modifier.size(size * 0.18f).align(Alignment.TopEnd)
         )
     }
 }

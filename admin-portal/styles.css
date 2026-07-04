@@ -415,7 +415,13 @@ td.content-cell { max-width: 420px; line-height: 1.55; }
 .split {
   display: grid;
   grid-template-columns: minmax(280px, 420px) 1fr;
+  align-items: start;
   gap: 1rem;
+}
+
+.split > .panel,
+.split > .form-panel {
+  align-self: start;
 }
 
 .stack { display: grid; gap: 0.75rem; }
@@ -614,6 +620,52 @@ td.content-cell { max-width: 420px; line-height: 1.55; }
 
 .feedback-card small {
   color: var(--muted);
+}
+
+.reply-cell {
+  min-width: 220px;
+}
+
+.reply-cell textarea {
+  width: 100%;
+  min-height: 74px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  color: var(--text);
+  background: #fffdfa;
+}
+
+.reply-actions {
+  margin-top: 0.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.reply-actions button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.38rem 0.72rem;
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.reply-actions small {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.reply-preview {
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: #fff5e8;
+  color: var(--text);
 }
 
 @media (max-width: 860px) {

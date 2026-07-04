@@ -13,6 +13,7 @@ const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const defaultWechatMiniAppId = "wx3124ddc53c168286";
 const wechatAppId = Deno.env.get("WECHAT_MINI_APPID") ?? defaultWechatMiniAppId;
 const wechatSecret = Deno.env.get("WECHAT_MINI_SECRET") ?? Deno.env.get("密钥") ?? "";
+const chinaOffsetMs = 8 * 60 * 60 * 1000;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return json({ ok: true });
@@ -26,6 +27,10 @@ Deno.serve(async (req) => {
     if (action === "pull") return await pullSnapshot(req);
     if (action === "messages.list") return await listMessages();
     if (action === "feedback.submit") return await submitFeedback(req, body);
+    if (action === "feedback.replies") return await listFeedbackReplies(req);
+    if (action === "email.requestCode") return await requestEmailCode(req, body);
+    if (action === "email.verifyCode") return await verifyEmailCode(req, body);
+    if (action === "birthday.sendDue") return await sendDueBirthdayGreetings(req, body);
     return json({ error: "未知操作" }, 400);
   } catch (error) {
     return json({ error: friendlyError(error) }, 500);
@@ -133,6 +138,126 @@ async function submitFeedback(req: Request, body: Json): Promise<Response> {
   return json({ ok: true, createdAt: now });
 }
 
+async function listFeedbackReplies(req: Request): Promise<Response> {
+  const session = await requireMiniSession(req);
+  const rows = await rest(
+    "GET",
+    `/rest/v1/mini_feedback?select=id,content,category,status,developer_reply,replied_at,reply_seen_at,created_at,updated_at&mini_user_id=eq.${encodeURIComponent(String(session.user_id))}&developer_reply=not.is.null&order=replied_at.desc&limit=50`,
+  );
+  const now = Date.now();
+  const unseenIds = rows
+    .filter((row) => !row.reply_seen_at)
+    .map((row) => String(row.id))
+    .filter(Boolean);
+  if (unseenIds.length) {
+    await rest(
+      "PATCH",
+      `/rest/v1/mini_feedback?id=in.(${unseenIds.join(",")})`,
+      { reply_seen_at: now, updated_at: now },
+      { Prefer: "return=minimal" },
+    );
+  }
+  return json({ ok: true, replies: rows });
+}
+
+async function requestEmailCode(req: Request, body: Json): Promise<Response> {
+  const session = await requireMiniSession(req);
+  const email = emailValue(body.email);
+  if (!email) return json({ error: "请输入正确邮箱" }, 400);
+  const now = Date.now();
+  const code = sixDigitCode();
+  const codeHash = await emailCodeHash(email, code);
+  await rest("POST", "/rest/v1/mini_email_verifications", [{
+    user_id: session.user_id,
+    email,
+    code_hash: codeHash,
+    expires_at: now + 10 * 60 * 1000,
+    created_at: now,
+  }], { Prefer: "return=minimal" });
+  await sendEmail(
+    email,
+    "绒绒记账邮箱验证码",
+    `<p>你的绒绒记账验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:4px;">${code}</p><p>10 分钟内有效。如果不是你本人操作，可以忽略这封邮件。</p>`,
+  );
+  return json({ ok: true, expiresAt: now + 10 * 60 * 1000 });
+}
+
+async function verifyEmailCode(req: Request, body: Json): Promise<Response> {
+  const session = await requireMiniSession(req);
+  const email = emailValue(body.email);
+  const code = String(body.code ?? "").replace(/\D/g, "").slice(0, 6);
+  if (!email || code.length !== 6) return json({ error: "验证码不正确" }, 400);
+  const rows = await rest(
+    "GET",
+    `/rest/v1/mini_email_verifications?select=id,code_hash,expires_at,consumed_at&user_id=eq.${encodeURIComponent(String(session.user_id))}&email=eq.${encodeURIComponent(email)}&consumed_at=is.null&order=created_at.desc&limit=5`,
+  );
+  const codeHash = await emailCodeHash(email, code);
+  const now = Date.now();
+  const matched = rows.find((row) => row.code_hash === codeHash && numberValue(row.expires_at) >= now);
+  if (!matched) return json({ error: "验证码已过期或不正确" }, 400);
+  await rest(
+    "PATCH",
+    `/rest/v1/mini_email_verifications?id=eq.${encodeURIComponent(String(matched.id))}`,
+    { consumed_at: now },
+    { Prefer: "return=minimal" },
+  );
+  await rest(
+    "PATCH",
+    `/rest/v1/mini_users?id=eq.${encodeURIComponent(String(session.user_id))}`,
+    { email, email_verified_at: now, updated_at: now },
+    { Prefer: "return=minimal" },
+  );
+  return json({ ok: true, email, verifiedAt: now });
+}
+
+async function sendDueBirthdayGreetings(req: Request, body: Json): Promise<Response> {
+  const secret = Deno.env.get("BIRTHDAY_CRON_SECRET") ?? "";
+  const requestSecret = req.headers.get("x-cron-secret") ?? stringValue(body.secret, 120);
+  if (!secret || requestSecret !== secret) return json({ error: "无权触发生日祝福任务" }, 403);
+  const today = requestedDateKey(body.date, Date.now());
+  const year = Number(today.slice(0, 4));
+  const monthDay = today.slice(5);
+  const rows = await rest(
+    "GET",
+    "/rest/v1/mini_users?select=id,openid,nickname,email,email_verified_at,province,city,birth_date,birthday_wechat_enabled,birthday_email_enabled,last_birthday_wechat_year,last_birthday_email_year&birth_date=not.is.null&limit=1000",
+  );
+  const due = rows.filter((row) => String(row.birth_date || "").slice(5) === monthDay);
+  let emailSent = 0;
+  let wechatSent = 0;
+  const errors: string[] = [];
+  for (const user of due) {
+    const id = String(user.id || "");
+    if (!id) continue;
+    const nickname = stringValue(user.nickname, 40) || "绒绒用户";
+    const place = stringValue(user.city, 80) || stringValue(user.province, 80);
+    if (user.birthday_email_enabled && user.email && user.email_verified_at && Number(user.last_birthday_email_year) !== year) {
+      try {
+        await sendEmail(
+          String(user.email),
+          "绒绒记账生日祝福",
+          `<p>${nickname}，生日快乐！</p><p>${birthdayGreeting(place)}</p><p>愿今天的每一笔开心，都值得被认真记下。</p>`,
+        );
+        await updateBirthdaySent(id, "email", year);
+        emailSent += 1;
+      } catch (error) {
+        errors.push(`email:${id}:${friendlyError(error)}`);
+      }
+    }
+    if (user.birthday_wechat_enabled && user.openid && Number(user.last_birthday_wechat_year) !== year) {
+      try {
+        const ok = await sendWechatBirthdayMessage(String(user.openid), nickname, place, today);
+        if (ok) {
+          await updateBirthdaySent(id, "wechat", year);
+          wechatSent += 1;
+        }
+      } catch (error) {
+        errors.push(`wechat:${id}:${friendlyError(error)}`);
+      }
+    }
+  }
+  return json({ ok: true, date: today, due: due.length, emailSent, wechatSent, errors: errors.slice(0, 20) });
+}
+
 async function codeToSession(code: string): Promise<Json> {
   const url = new URL("https://api.weixin.qq.com/sns/jscode2session");
   url.searchParams.set("appid", wechatAppId);
@@ -193,7 +318,9 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
   const nickname = profileNickname(profile);
   const gender = genderValue(profile.gender);
   const birthDate = birthDateValue(profile.birthDate);
+  const province = stringValue(profile.province, 80);
   const city = stringValue(profile.city, 80);
+  const signature = stringValue(profile.signature, 120);
   const patch: Json = {
     ...clientPatch(clientInfo),
     updated_at: now,
@@ -202,7 +329,11 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
   if (nickname) patch.nickname = nickname;
   if (gender) patch.gender = gender;
   if (birthDate) patch.birth_date = birthDate;
+  if (province) patch.province = province;
   if (city) patch.city = city;
+  if (signature) patch.signature = signature;
+  patch.birthday_wechat_enabled = Boolean(profile.birthdayWechatSubscribeEnabled);
+  patch.birthday_email_enabled = Boolean(profile.birthdayEmailEnabled);
   await rest(
     "PATCH",
     `/rest/v1/mini_users?id=eq.${encodeURIComponent(String(userId))}`,
@@ -289,6 +420,21 @@ function birthDateValue(value: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
 }
 
+function emailValue(value: unknown): string {
+  const raw = stringValue(value, 160).toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : "";
+}
+
+function numberValue(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function requestedDateKey(value: unknown, fallback: number): string {
+  const raw = stringValue(value, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : new Date(fallback + chinaOffsetMs).toISOString().slice(0, 10);
+}
+
 function categoryValue(value: unknown): string {
   const raw = stringValue(value, 24);
   return ["bug", "suggestion", "data", "other"].includes(raw) ? raw : "suggestion";
@@ -300,9 +446,102 @@ function randomToken(): string {
   return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function sixDigitCode(): string {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return String(100000 + (bytes[0] % 900000));
+}
+
 async function sha256(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function emailCodeHash(email: string, code: string): Promise<string> {
+  const secret = Deno.env.get("EMAIL_CODE_SECRET") || serviceRoleKey || "rongrong";
+  return await sha256(`${email}:${code}:${secret}`);
+}
+
+async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+  const apiKey = Deno.env.get("RESEND_API_KEY") ?? "";
+  const from = Deno.env.get("BIRTHDAY_EMAIL_FROM") ?? Deno.env.get("EMAIL_FROM") ?? "";
+  if (!apiKey || !from) throw new Error("邮箱服务未配置");
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ from, to, subject, html }),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`邮件发送失败 ${response.status}: ${text.slice(0, 120)}`);
+}
+
+function birthdayGreeting(place: string): string {
+  if (place) return `来自 ${place} 的专属祝福已经送达。`;
+  return "今天给你留一张专属生日祝福卡。";
+}
+
+async function updateBirthdaySent(userId: string, channel: "email" | "wechat", year: number): Promise<void> {
+  const field = channel === "email" ? "last_birthday_email_year" : "last_birthday_wechat_year";
+  await rest(
+    "PATCH",
+    `/rest/v1/mini_users?id=eq.${encodeURIComponent(userId)}`,
+    { [field]: year, updated_at: Date.now() },
+    { Prefer: "return=minimal" },
+  );
+}
+
+async function sendWechatBirthdayMessage(openid: string, nickname: string, place: string, today: string): Promise<boolean> {
+  const templateId = Deno.env.get("BIRTHDAY_WECHAT_TEMPLATE_ID") ?? "";
+  if (!templateId) throw new Error("微信生日祝福模板未配置");
+  const token = await wechatAccessToken();
+  const data = wechatTemplateData(nickname, place, today);
+  const response = await fetch(`https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      touser: openid,
+      template_id: templateId,
+      page: "pages/my/my",
+      data,
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.errcode) throw new Error(result.errmsg || `微信订阅消息失败 ${response.status}`);
+  return true;
+}
+
+async function wechatAccessToken(): Promise<string> {
+  assertConfigured();
+  const url = new URL("https://api.weixin.qq.com/cgi-bin/token");
+  url.searchParams.set("grant_type", "client_credential");
+  url.searchParams.set("appid", wechatAppId);
+  url.searchParams.set("secret", wechatSecret);
+  const response = await fetch(url);
+  const data = await response.json();
+  if (!response.ok || data.errcode || !data.access_token) {
+    throw new Error(`微信 access_token 获取失败：${data.errmsg ?? response.status}`);
+  }
+  return String(data.access_token);
+}
+
+function wechatTemplateData(nickname: string, place: string, today: string): Json {
+  const custom = Deno.env.get("BIRTHDAY_WECHAT_TEMPLATE_DATA_JSON");
+  if (custom) {
+    return JSON.parse(
+      custom
+        .replaceAll("{nickname}", nickname)
+        .replaceAll("{place}", place || "绒绒星球")
+        .replaceAll("{date}", today),
+    ) as Json;
+  }
+  return {
+    thing1: { value: "生日快乐" },
+    thing2: { value: `${nickname}，${place ? `${place}专属` : "你的"}生日祝福已送达` },
+    date3: { value: today },
+  };
 }
 
 function friendlyError(error: unknown): string {

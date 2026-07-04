@@ -384,7 +384,7 @@ private fun MyRoot(
                         Spacer(Modifier.height(8.dp))
                         Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFFFFEDC8), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFDFA2))) {
                             Row(Modifier.padding(start = 4.dp, end = 12.dp, top = 3.dp, bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                                MascotArt(24.dp)
+                                MascotArt(24.dp, R.drawable.mascot_action_like)
                                 Spacer(Modifier.width(4.dp))
                                 Text(
                                     badge,
@@ -395,7 +395,7 @@ private fun MyRoot(
                             }
                         }
                     }
-                    MascotArt(88.dp)
+                    MascotArt(88.dp, R.drawable.mascot_action_heart)
                 }
                 Spacer(Modifier.height(8.dp))
                 Surface(shape = RoundedCornerShape(22.dp), color = Color.White.copy(alpha = 0.9f), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
@@ -493,10 +493,10 @@ private fun DiarySummaryCard(userId: String, quote: String, onChangeQuote: () ->
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Image(
-                        painter = painterResource(R.drawable.diary_card_mascot),
+                        painter = painterResource(R.drawable.mascot_action_sleep),
                         contentDescription = "绒绒写日记",
-                        modifier = Modifier.width(124.dp).height(94.dp).clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop
+                        modifier = Modifier.width(124.dp).height(94.dp),
+                        contentScale = ContentScale.Fit
                     )
                     Surface(
                         modifier = Modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
@@ -542,7 +542,7 @@ private fun AboutScreen(
         item {
             ProfileWarmPanel(padding = 20.dp) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    MascotArt(116.dp)
+                    MascotArt(116.dp, R.drawable.mascot_action_heart)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Image(
@@ -646,7 +646,7 @@ private fun AboutScreen(
                         Spacer(Modifier.height(5.dp))
                         Text("谢谢你一直以来的陪伴～", color = palette.muted, fontSize = 12.sp)
                     }
-                    MascotArt(74.dp)
+                    MascotArt(74.dp, R.drawable.mascot_action_like)
                 }
             }
         }
@@ -759,7 +759,7 @@ private fun ProfileScreen(
                         Text("生日  ${if (privacyOn) "**月**日" else birthdayLabel}", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         Text(membershipLabel(profile?.role, profile?.membershipTier), color = badgeColor(profile?.role, profile?.membershipTier), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
-                    MascotArt(86.dp)
+                    MascotArt(86.dp, R.drawable.mascot_action_heart)
                 }
             }
         }
@@ -853,7 +853,7 @@ private fun ProfileScreen(
             ProfileWarmPanel(padding = 14.dp) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("完善个人信息，体验会更完整哦～", color = palette.ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    MascotArt(72.dp)
+                    MascotArt(72.dp, R.drawable.mascot_action_like)
                 }
             }
         }
@@ -1140,7 +1140,7 @@ private fun BirthdayPickerDialog(
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("选择生日", modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 23.sp)
-                    MascotArt(50.dp)
+                    MascotArt(50.dp, R.drawable.mascot_action_heart)
                 }
                 Surface(shape = RoundedCornerShape(24.dp), color = Color.White, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
                     Row(Modifier.padding(4.dp)) {
@@ -1481,7 +1481,7 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                         Text(profile?.displayName ?: state.session?.displayName ?: "绒绒用户", color = palette.ink, fontSize = 23.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("让每一次记录更顺手～", color = palette.muted, fontSize = 12.sp)
                     }
-                    MascotArt(82.dp)
+                    MascotArt(82.dp, R.drawable.mascot_action_wave)
                 }
             }
         }
@@ -1553,7 +1553,7 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                         Text("小绒绒提示：", color = palette.ink, fontWeight = FontWeight.Bold)
                         Text("设置好提醒，记账会更轻松哦～", color = palette.muted, fontSize = 12.sp)
                     }
-                    MascotArt(74.dp)
+                    MascotArt(74.dp, R.drawable.mascot_action_wave)
                 }
             }
         }
@@ -1971,7 +1971,7 @@ private fun ProfileCountryCodeButton(value: String, modifier: Modifier = Modifie
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                         TextButton(onClick = { showPicker = false }) { Text("取消", color = palette.pink, fontWeight = FontWeight.Bold) }
                         Spacer(Modifier.weight(1f))
-                        MascotArt(72.dp)
+                        MascotArt(72.dp, R.drawable.mascot_action_coin)
                     }
                 }
             }

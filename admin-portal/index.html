@@ -118,8 +118,18 @@
             </article>
             <article class="chart-panel">
               <div class="item-title">用户地区分布</div>
-              <p class="muted">只统计用户主动填写或同步过来的城市；未填写单独展示。</p>
+              <p class="muted">只统计用户主动填写或同步过来的省市；未填写单独展示。</p>
               <div id="regionChart" class="horizontal-chart"></div>
+            </article>
+            <article class="chart-panel">
+              <div class="item-title">年龄分段占比</div>
+              <p class="muted">由用户生日推算；未填写生日的用户单独展示。</p>
+              <div id="ageChart" class="horizontal-chart"></div>
+            </article>
+            <article class="chart-panel">
+              <div class="item-title">性别占比</div>
+              <p class="muted">只展示用户主动填写的资料，不做推断。</p>
+              <div id="genderChart" class="horizontal-chart"></div>
             </article>
             <article class="chart-panel">
               <div class="item-title">设备品牌分布</div>
@@ -166,7 +176,7 @@
                 <button class="filter-chip" data-user-source="app" type="button">只看 App</button>
                 <button class="filter-chip" data-user-source="mini" type="button">只看小程序</button>
               </div>
-              <input id="userSearch" class="search" placeholder="搜索用户名、邮箱、设备、城市或 ID" />
+              <input id="userSearch" class="search" placeholder="搜索用户名、邮箱、设备、地区、签名或 ID" />
             </div>
           </div>
           <div class="table-wrap">
@@ -179,7 +189,7 @@
                   <th>设备品牌</th>
                   <th>性别</th>
                   <th>生日</th>
-                  <th>城市</th>
+                  <th>地区</th>
                   <th>注册时间</th>
                 <th>最后活跃</th>
                 <th>选日活跃</th>
@@ -202,7 +212,14 @@
               <h2>用户反馈</h2>
               <p>来自 App 内在线留言、原“建议或问题”和小程序“帮助与反馈”。QQ 邮箱仅作备用，在线留言才会进入后台。</p>
             </div>
-            <input id="feedbackSearch" class="search" placeholder="搜索邮箱、内容或状态" />
+            <div class="user-tools">
+              <div class="filter-group" aria-label="反馈来源筛选">
+                <button class="filter-chip active" data-source-filter="feedback" data-source-value="all" type="button">全部</button>
+                <button class="filter-chip" data-source-filter="feedback" data-source-value="app" type="button">只看 App</button>
+                <button class="filter-chip" data-source-filter="feedback" data-source-value="mini" type="button">只看小程序</button>
+              </div>
+              <input id="feedbackSearch" class="search" placeholder="搜索邮箱、内容或状态" />
+            </div>
           </div>
           <div class="notice subtle">请优先引导用户在 App 或小程序内提交在线反馈；备用 QQ 邮箱不会自动进入后台。</div>
           <div class="table-wrap">
@@ -213,6 +230,7 @@
                   <th>来源</th>
                   <th>联系方式</th>
                   <th>内容</th>
+                  <th>回复</th>
                   <th>状态</th>
                   <th>操作</th>
                 </tr>
@@ -223,13 +241,31 @@
         </section>
 
         <section id="messagesTab" class="tab-panel hidden">
+          <div class="panel-heading inline">
+            <div>
+              <h2>官方消息</h2>
+              <p>按消息 source_key 区分 App、小程序或通用消息；没有来源标识的老消息只在“全部”里显示。</p>
+            </div>
+            <div class="filter-group" aria-label="官方消息来源筛选">
+              <button class="filter-chip active" data-source-filter="messages" data-source-value="all" type="button">全部</button>
+              <button class="filter-chip" data-source-filter="messages" data-source-value="app" type="button">只看 App</button>
+              <button class="filter-chip" data-source-filter="messages" data-source-value="mini" type="button">只看小程序</button>
+            </div>
+          </div>
           <div class="split">
             <form id="messageForm" class="panel form-panel">
               <h2>发布消息</h2>
               <input id="messageId" type="hidden" />
+              <label>发布范围
+                <select id="messageTarget">
+                  <option value="mini">小程序</option>
+                  <option value="app">App</option>
+                  <option value="all">通用</option>
+                </select>
+              </label>
               <label>标题<input id="messageTitle" required maxlength="80" /></label>
               <label>正文<textarea id="messageBody" required maxlength="2000"></textarea></label>
-              <label>来源标识，可选<input id="messageSourceKey" maxlength="120" placeholder="manual:notice:20260701" /></label>
+              <label>来源标识，可选<input id="messageSourceKey" maxlength="120" placeholder="留空会按发布范围自动生成" /></label>
               <button type="submit">保存消息</button>
               <button id="resetMessageForm" class="ghost" type="button">清空</button>
             </form>
@@ -241,9 +277,26 @@
         </section>
 
         <section id="versionsTab" class="tab-panel hidden">
+          <div class="panel-heading inline">
+            <div>
+              <h2>版本更新</h2>
+              <p>App 版本来自 Android 发布记录；小程序版本预留同一视图，未来有小程序版本记录时会自动进入筛选。</p>
+            </div>
+            <div class="filter-group" aria-label="版本来源筛选">
+              <button class="filter-chip active" data-source-filter="versions" data-source-value="all" type="button">全部</button>
+              <button class="filter-chip" data-source-filter="versions" data-source-value="app" type="button">只看 App</button>
+              <button class="filter-chip" data-source-filter="versions" data-source-value="mini" type="button">只看小程序</button>
+            </div>
+          </div>
           <div class="split">
             <form id="versionForm" class="panel form-panel">
               <h2>版本配置</h2>
+              <label>平台
+                <select id="versionPlatform">
+                  <option value="android">App Android</option>
+                  <option value="mini_program">微信小程序</option>
+                </select>
+              </label>
               <label>versionCode<input id="versionCode" type="number" min="1" required /></label>
               <label>versionName<input id="versionName" placeholder="1.0.6" required maxlength="32" /></label>
               <label>APK URL<input id="apkUrl" type="url" required /></label>
@@ -263,9 +316,27 @@
         </section>
 
         <section id="configTab" class="tab-panel hidden">
+          <div class="panel-heading inline">
+            <div>
+              <h2>远程配置</h2>
+              <p>按配置键前缀区分来源，例如 app_*、android_* 归 App，mini_*、wechat_* 归小程序。</p>
+            </div>
+            <div class="filter-group" aria-label="远程配置来源筛选">
+              <button class="filter-chip active" data-source-filter="config" data-source-value="all" type="button">全部</button>
+              <button class="filter-chip" data-source-filter="config" data-source-value="app" type="button">只看 App</button>
+              <button class="filter-chip" data-source-filter="config" data-source-value="mini" type="button">只看小程序</button>
+            </div>
+          </div>
           <div class="split">
             <form id="configForm" class="panel form-panel">
               <h2>远程配置</h2>
+              <label>配置范围
+                <select id="configTarget">
+                  <option value="mini">小程序</option>
+                  <option value="app">App</option>
+                  <option value="all">通用</option>
+                </select>
+              </label>
               <label>配置键<input id="configKey" placeholder="home_notice" required maxlength="80" /></label>
               <label>JSON 值<textarea id="configValue" required>{}</textarea></label>
               <label>说明<input id="configDescription" maxlength="200" /></label>
@@ -300,6 +371,6 @@
     </div>
 
     <div id="toast" class="toast hidden"></div>
-    <script type="module" src="app.js?v=20260702-activity-portrait"></script>
+    <script type="module" src="app.js?v=20260704-mini-admin"></script>
   </body>
 </html>

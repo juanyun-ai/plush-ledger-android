@@ -135,7 +135,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, onBack: () -> Unit) {
                     val shareText = text.trim().ifBlank { entries.firstOrNull { it.date == editingDate }?.text ?: "今天也值得被温柔记录。" }
                     sharePreview = DiaryShareCard.create(context, selectedDate, displayStatus, shareText, shareQuote)
                 }) { Icon(Icons.Default.Share, "分享日记", tint = palette.pink) }
-                MascotArt(46.dp)
+                MascotArt(46.dp, R.drawable.mascot_action_sleep)
             }
         }
         item {
@@ -146,28 +146,28 @@ fun DiaryScreen(userId: String, quotes: List<String>, onBack: () -> Unit) {
                 border = BorderStroke(1.dp, Color(0xFFFFDEC0)),
                 shadowElevation = 7.dp
             ) {
-                Row(Modifier.height(205.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(0.9f).padding(start = 22.dp, top = 18.dp, bottom = 18.dp)) {
-                        Text("今日日记", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 26.sp)
-                        Text(selectedDate.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)), color = palette.ink, fontSize = 15.sp)
-                        Spacer(Modifier.height(18.dp))
-                        Text(
-                            "“把这刻写下来，\n以后回看也会觉得温暖。”",
-                            color = palette.ink,
-                            fontFamily = FontFamily.Cursive,
-                            fontStyle = FontStyle.Italic,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            lineHeight = 30.sp,
-                            maxLines = 3
-                        )
-                    }
+                Box(Modifier.fillMaxWidth().height(224.dp)) {
                     Image(
-                        painter = painterResource(R.drawable.diary_hero_mascot),
+                        painter = painterResource(R.drawable.diary_hero_reference),
                         contentDescription = "绒绒日记",
-                        modifier = Modifier.weight(1.15f).fillMaxSize(),
+                        modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopStart).padding(start = 24.dp, top = 28.dp),
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color(0xFFFFE8B1).copy(alpha = 0.96f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.72f)),
+                        shadowElevation = 3.dp
+                    ) {
+                        Text(
+                            selectedDate.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
+                            modifier = Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
+                            color = palette.ink,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
         }
@@ -411,7 +411,7 @@ private fun DiaryHistoryCard(entry: DiaryEntry, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
     Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), color = palette.surface, border = BorderStroke(1.dp, palette.border), shadowElevation = 2.dp) {
         Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-            MascotArt(48.dp)
+            MascotArt(48.dp, R.drawable.mascot_action_sleep)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(entry.date, color = palette.muted, fontSize = 11.sp)
@@ -447,7 +447,7 @@ private fun DiaryEditDialog(
         ) {
             Box {
                 Box(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 8.dp)) {
-                    MascotArt(58.dp)
+                    MascotArt(58.dp, R.drawable.mascot_action_record)
                 }
                 Surface(
                     modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 14.dp).size(38.dp).clip(CircleShape).clickable(onClick = onDismiss),
@@ -494,7 +494,7 @@ private fun DiaryEditDialog(
                         shape = RoundedCornerShape(22.dp)
                     )
                     Image(
-                        painterResource(R.drawable.diary_card_mascot),
+                        painterResource(R.drawable.mascot_action_record),
                         contentDescription = null,
                         modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(118.dp).alpha(0.24f),
                         contentScale = ContentScale.Fit
@@ -553,7 +553,7 @@ private fun DiaryStatusDialog(selected: String, onDismiss: () -> Unit, onSelect:
                         Text("设个状态", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 22.sp)
                         Text("只在你的日记里保存", color = palette.muted, fontSize = 11.sp)
                     }
-                    Image(painterResource(R.drawable.diary_card_mascot), null, modifier = Modifier.size(76.dp), contentScale = ContentScale.Fit)
+                    Image(painterResource(R.drawable.mascot_action_sleep), null, modifier = Modifier.size(76.dp), contentScale = ContentScale.Fit)
                 }
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable { onSelect("") },
@@ -732,7 +732,7 @@ private object DiaryShareCard {
         paint.color = AndroidColor.rgb(226, 205, 184)
         canvas.drawLine(360f, 670f, 630f, 670f, paint)
 
-        val mascot = BitmapFactory.decodeResource(context.resources, R.drawable.diary_card_mascot)
+        val mascot = BitmapFactory.decodeResource(context.resources, R.drawable.mascot_action_sleep)
         canvas.drawBitmap(mascot, null, RectF(680f, 564f, 1062f, 965f), paint)
 
         paint.color = AndroidColor.rgb(255, 253, 248)

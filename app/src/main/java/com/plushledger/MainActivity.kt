@@ -286,7 +286,7 @@ private fun AvailableUpdateDialog(
             shadowElevation = 20.dp
         ) {
             Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MascotArt(92.dp)
+                MascotArt(92.dp, R.drawable.mascot_action_like)
                 Text("发现新版本 ${update.versionName}", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 25.sp)
                 Text(update.releaseNotes.ifBlank { "修复问题并改进使用体验。" }, color = palette.ink, fontSize = 14.sp, lineHeight = 21.sp)
                 Text("安装包约 ${update.fileSizeBytes / 1024 / 1024}MB，下载完成后由 Android 系统安装器确认更新。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
@@ -323,7 +323,7 @@ private fun DisableUpdatePromptDialog(onDismiss: () -> Unit, onConfirm: () -> Un
             shadowElevation = 18.dp
         ) {
             Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                MascotArt(76.dp)
+                MascotArt(76.dp, R.drawable.mascot_action_think)
                 Text("关闭自动更新提醒？", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 23.sp)
                 Text("确认后，新版本不再自动弹窗。你仍可在“我的 → 设置 → 检查更新”主动查看和下载。", color = palette.muted, fontSize = 13.sp, lineHeight = 20.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -355,7 +355,7 @@ private fun PlushSnackbar(message: String) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(14.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
                 Image(
-                    painter = painterResource(R.drawable.ic_launcher_transparent),
+                    painter = painterResource(R.drawable.mascot_action_like),
                     contentDescription = null,
                     modifier = Modifier.padding(3.dp).size(42.dp),
                     contentScale = ContentScale.Fit
@@ -391,7 +391,7 @@ private fun UpdateDownloadStatusDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 4.dp) {
                         Image(
-                            painter = painterResource(R.drawable.ic_launcher_transparent),
+                            painter = painterResource(R.drawable.mascot_action_record),
                             contentDescription = null,
                             modifier = Modifier.padding(4.dp).size(72.dp),
                             contentScale = ContentScale.Fit
@@ -483,7 +483,7 @@ private fun WelcomeScreen(onStart: () -> Unit, onPreview: () -> Unit) {
                 Icon(Icons.Default.Favorite, null, tint = Color(0xFFFF9D82), modifier = Modifier.align(Alignment.CenterStart).padding(start = 14.dp, top = 20.dp).size(22.dp))
                 Icon(Icons.Default.Favorite, null, tint = palette.moss, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 26.dp, top = 62.dp).size(20.dp))
                 Image(
-                    painter = painterResource(R.drawable.ic_launcher_transparent),
+                    painter = painterResource(R.drawable.mascot_action_welcome),
                     contentDescription = "绒绒记账",
                     modifier = Modifier.size(276.dp),
                     contentScale = ContentScale.Fit
@@ -574,7 +574,7 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
         item {
             Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
                 Image(
-                    painter = painterResource(R.drawable.ic_launcher_transparent),
+                    painter = painterResource(R.drawable.mascot_action_wave),
                     contentDescription = "绒绒",
                     modifier = Modifier.size(150.dp),
                     contentScale = ContentScale.Fit
@@ -931,7 +931,7 @@ private fun CountryCodePicker(selectedCode: String, onDismiss: () -> Unit, onSel
                         }
                     }
                 }
-                Box(Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 3.dp)) { MascotArt(52.dp) }
+                Box(Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 3.dp)) { MascotArt(52.dp, R.drawable.mascot_action_like) }
             }
         }
     }

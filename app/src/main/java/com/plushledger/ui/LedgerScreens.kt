@@ -220,7 +220,7 @@ fun HomeScreen(
                         contentScale = ContentScale.Fit
                     )
                     Image(
-                        painterResource(R.drawable.ic_launcher_transparent),
+                        painterResource(R.drawable.mascot_action_coin),
                         contentDescription = null,
                         modifier = Modifier.size(68.dp),
                         contentScale = ContentScale.Fit
@@ -412,7 +412,7 @@ private fun AiEntryDialog(
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    MascotArt(58.dp)
+                    MascotArt(58.dp, R.drawable.mascot_action_think)
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onClearDraft, enabled = text.isNotBlank() && !analyzing) {
                         Text("清空", color = palette.coral, fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -527,7 +527,7 @@ private fun AiConfirmationDialog(
                         Spacer(Modifier.height(8.dp))
                         Text(suggestion.sourceText, color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
-                    MascotArt(70.dp)
+                    MascotArt(70.dp, R.drawable.mascot_action_record)
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -631,7 +631,7 @@ private fun AiBatchConfirmationDialog(
                         Spacer(Modifier.height(6.dp))
                         Text("点击任意一条，可以修改金额、日期、分类和账户。", color = palette.muted, fontSize = 12.sp)
                     }
-                    MascotArt(62.dp)
+                    MascotArt(62.dp, R.drawable.mascot_action_record)
                 }
                 Spacer(Modifier.height(12.dp))
                 Column(
@@ -906,7 +906,7 @@ fun BillsScreen(
                             Text(Money.formatCny(monthIncome), color = palette.moss, fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
-                    MascotArt(92.dp)
+                    MascotArt(92.dp, R.drawable.mascot_action_coin)
                 }
             }
         }
@@ -987,7 +987,7 @@ private fun BillDetailScreen(
                             fontWeight = FontWeight.Black
                         )
                     }
-                    MascotArt(112.dp)
+                    MascotArt(112.dp, R.drawable.mascot_action_coin)
                 }
             }
         }
@@ -1001,7 +1001,7 @@ private fun BillDetailScreen(
         }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                MascotArt(86.dp)
+                MascotArt(86.dp, R.drawable.mascot_action_coin)
                 Spacer(Modifier.width(10.dp))
                 Surface(shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
                     Text("每一笔记录，都有它的小故事～", modifier = Modifier.padding(14.dp), color = palette.muted, fontSize = 12.sp)
@@ -1106,6 +1106,12 @@ private fun BrandHeader(
         branded = title == "绒绒记账",
         mascot = title == "账单",
         onMonth = onTrailingClick,
+        mascotRes = when (title) {
+            "绒绒记账" -> R.drawable.mascot_action_welcome
+            "账单" -> R.drawable.mascot_action_coin
+            "统计" -> R.drawable.mascot_action_stats
+            else -> R.drawable.mascot_action_wave
+        },
         trailingAction = trailingAction
     )
 }
@@ -1420,7 +1426,7 @@ fun RecordScreen(
         }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                MascotArt(92.dp)
+                MascotArt(92.dp, R.drawable.mascot_action_record)
                 Surface(shape = RoundedCornerShape(18.dp), color = palette.surface, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
                     Text("每一笔记录，\n都是通往美好生活的一步～", modifier = Modifier.padding(14.dp), color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
                 }
@@ -1919,7 +1925,7 @@ fun CategoryManagementScreen(
         }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                MascotArt(82.dp)
+                MascotArt(82.dp, R.drawable.mascot_action_record)
                 Spacer(Modifier.width(10.dp))
                 Text("分类清楚一点，生活也会更有条理～", color = palette.muted, fontSize = 12.sp)
             }
@@ -1972,7 +1978,7 @@ private fun AccountManagementScreen(
                         Text("总资产", color = palette.muted, fontSize = 12.sp)
                         Text(Money.formatCny(ledger.summary.balanceMinor), color = palette.ink, fontSize = 30.sp, fontWeight = FontWeight.Black)
                     }
-                    MascotArt(92.dp)
+                    MascotArt(92.dp, R.drawable.mascot_action_coin)
                 }
             }
         }
@@ -2026,7 +2032,7 @@ fun BudgetManagementScreen(ledger: LedgerState, onBack: () -> Unit, onBudget: (S
                             BudgetNumber("剩余预算", remainingBudget, if (remainingBudget < 0) palette.coral else palette.rose, Modifier.weight(1f))
                         }
                     }
-                    MascotArt(70.dp)
+                    MascotArt(70.dp, R.drawable.mascot_action_coin)
                 }
                 Spacer(Modifier.height(10.dp))
                 LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(8.dp)), color = palette.rose, trackColor = palette.surfaceAlt)
@@ -2201,7 +2207,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
         item {
             if (chartData.isEmpty()) WarmPanel(Modifier.fillMaxWidth(), padding = 14.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    MascotArt(72.dp)
+                    MascotArt(72.dp, R.drawable.mascot_action_stats)
                     Spacer(Modifier.width(10.dp))
                     Text("${period.title}还没有支出，记一笔后就能看到分类排行～", color = palette.muted, fontSize = 12.sp)
                 }
@@ -2233,7 +2239,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
         }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                MascotArt(78.dp)
+                MascotArt(78.dp, R.drawable.mascot_action_stats)
                 Spacer(Modifier.width(8.dp))
                 Surface(shape = RoundedCornerShape(20.dp), color = palette.surfaceAlt, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
                     Text(
@@ -2335,7 +2341,7 @@ private fun StatsOverviewCard(metricPrefix: String, expense: Long, income: Long,
                 StatsMetric("结余", balance, palette.rose, Modifier.weight(1f))
             }
             Spacer(Modifier.width(4.dp))
-            MascotArt(60.dp)
+            MascotArt(60.dp, R.drawable.mascot_action_stats)
         }
     }
 }

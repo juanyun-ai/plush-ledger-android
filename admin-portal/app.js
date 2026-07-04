@@ -12,6 +12,12 @@ const state = {
   dashboard: null,
   activeTab: "overview",
   userSourceFilter: "all",
+  sourceFilters: {
+    feedback: "all",
+    messages: "all",
+    versions: "all",
+    config: "all",
+  },
   selectedDate: localDateKey(),
 };
 
@@ -43,6 +49,8 @@ const els = {
   transactionChart: byId("transactionChart"),
   feedbackStatusChart: byId("feedbackStatusChart"),
   regionChart: byId("regionChart"),
+  ageChart: byId("ageChart"),
+  genderChart: byId("genderChart"),
   deviceBrandChart: byId("deviceBrandChart"),
   portraitCoverageChart: byId("portraitCoverageChart"),
   activityRows: byId("activityRows"),
@@ -119,6 +127,14 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.userSourceFilter = button.dataset.userSource || "all";
       renderUsers();
+    });
+  });
+  document.querySelectorAll("[data-source-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const group = button.dataset.sourceFilter;
+      if (!group) return;
+      state.sourceFilters[group] = button.dataset.sourceValue || "all";
+      renderSourceFilteredGroup(group);
     });
   });
 
@@ -246,6 +262,8 @@ function renderOverview() {
   renderStackedBars(els.transactionChart, analytics.charts?.transactions_by_day || [], ["App", "小程序"]);
   renderStatusBars(els.feedbackStatusChart, analytics.charts?.feedback_by_status || []);
   renderHorizontalStackedBars(els.regionChart, analytics.charts?.region_distribution || [], ["App", "小程序"]);
+  renderHorizontalStackedBars(els.ageChart, analytics.charts?.age_distribution || [], ["App", "小程序"]);
+  renderHorizontalStackedBars(els.genderChart, analytics.charts?.gender_distribution || [], ["App", "小程序"]);
   renderHorizontalStackedBars(els.deviceBrandChart, analytics.charts?.device_brand_distribution || [], ["App", "小程序"]);
   renderHorizontalStackedBars(els.portraitCoverageChart, analytics.charts?.portrait_coverage || [], ["已采集", "未采集"]);
   renderActivity(analytics.activity || []);
@@ -267,8 +285,13 @@ function renderUsers() {
       item.device_model,
       item.device_platform,
       genderLabel(item.gender),
+      item.gender_text,
       item.birth_date,
+      item.age_bucket,
+      item.province,
       item.city,
+      item.region,
+      item.signature,
       item.role,
     ].join(" ").toLowerCase();
     return !keyword || haystack.includes(keyword);
@@ -292,7 +315,7 @@ function renderUsers() {
       </td>
       <td>${escapeHtml(genderLabel(item.gender))}</td>
       <td>${escapeHtml(item.birth_date || "未填写")}</td>
-      <td>${escapeHtml(item.city || "未填写")}</td>
+      <td>${escapeHtml(item.region || "未填写")}</td>
       <td>${formatTime(item.registered_at)}</td>
       <td>${formatTime(item.last_login_at)}</td>
       <td>${formatBool(item.today_logged_in)}</td>
@@ -311,8 +334,9 @@ function renderUsers() {
 
 function renderFeedback() {
   const keyword = els.feedbackSearch.value.trim().toLowerCase();
-  const rows = (state.dashboard?.feedback || []).filter((item) => {
-    const haystack = `${item.source_label || ""} ${item.email || ""} ${item.content || ""} ${item.status || ""}`.toLowerCase();
+  syncSourceFilterButtons("feedback");
+  const rows = filterByModuleSource(state.dashboard?.feedback || [], "feedback").filter((item) => {
+    const haystack = `${item.source_label || ""} ${item.email || ""} ${item.content || ""} ${item.status || ""} ${moduleSourceLabel(item, "feedback")}`.toLowerCase();
     return !keyword || haystack.includes(keyword);
   });
   els.feedbackRows.innerHTML = rows.map((item) => `
@@ -321,6 +345,13 @@ function renderFeedback() {
       <td><span class="source-tag">${escapeHtml(item.source_label || "App")}</span></td>
       <td>${escapeHtml(item.email || "-")}</td>
       <td class="content-cell">${escapeHtml(item.content || "")}</td>
+      <td class="reply-cell">
+        <textarea data-feedback-reply="${escapeHtml(item.id)}" maxlength="500" placeholder="写给这个用户的点对点回复">${escapeHtml(item.developer_reply || "")}</textarea>
+        <div class="reply-actions">
+          <button data-feedback-reply-save="${escapeHtml(item.id)}" type="button">保存回复</button>
+          <small>${item.replied_at ? `已回复 ${formatTime(item.replied_at)}${item.reply_seen_at ? ` · 已读 ${formatTime(item.reply_seen_at)}` : ""}` : "未回复"}</small>
+        </div>
+      </td>
       <td><span class="status">${statusLabel(item.status)}</span></td>
       <td>
         <select data-feedback-status="${item.id}">
@@ -328,23 +359,42 @@ function renderFeedback() {
         </select>
       </td>
     </tr>
-  `).join("") || `<tr><td colspan="6">暂无反馈</td></tr>`;
+  `).join("") || `<tr><td colspan="7">暂无反馈</td></tr>`;
   document.querySelectorAll("[data-feedback-status]").forEach((select) => {
     select.addEventListener("change", async () => {
       await adminAction("feedback.updateStatus", { id: select.dataset.feedbackStatus, status: select.value });
       await loadDashboard();
     });
   });
+  document.querySelectorAll("[data-feedback-reply-save]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.feedbackReplySave;
+      const textarea = document.querySelector(`[data-feedback-reply="${cssEscape(id)}"]`);
+      const reply = textarea ? textarea.value.trim() : "";
+      button.disabled = true;
+      try {
+        await adminAction("feedback.reply", { id, reply });
+        toast(reply ? "回复已保存" : "回复已清空");
+        await loadDashboard();
+      } catch (error) {
+        toast(error.message || "保存失败", true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 function renderMessages() {
   const list = byId("messageList");
-  list.innerHTML = (state.dashboard?.messages || []).map((item) => `
+  syncSourceFilterButtons("messages");
+  const rows = filterByModuleSource(state.dashboard?.messages || [], "messages");
+  list.innerHTML = rows.map((item) => `
     <article class="item">
       <div class="item-head">
         <div>
           <div class="item-title">${escapeHtml(item.title)}</div>
-          <div class="item-meta">${formatTime(item.created_at)} · ${escapeHtml(item.source_key || "manual")}</div>
+          <div class="item-meta">${formatTime(item.created_at)} · ${escapeHtml(item.source_key || "manual")} · ${sourceBadge(item, "messages")}</div>
         </div>
       </div>
       <p>${escapeHtml(item.body).replace(/\n/g, "<br>")}</p>
@@ -397,12 +447,14 @@ function resetMessageForm() {
 
 function renderVersions() {
   const list = byId("versionList");
-  list.innerHTML = (state.dashboard?.versions || []).map((item) => `
+  syncSourceFilterButtons("versions");
+  const rows = filterByModuleSource(state.dashboard?.versions || [], "versions");
+  list.innerHTML = rows.map((item) => `
     <article class="item">
       <div class="item-head">
         <div>
           <div class="item-title">v${escapeHtml(item.version_name)} (${item.version_code})</div>
-          <div class="item-meta">${item.active ? "启用" : "停用"} · ${item.is_mandatory ? "强制更新" : "普通更新"} · ${formatTime(item.published_at)}</div>
+          <div class="item-meta">${sourceBadge(item, "versions")} · ${item.active ? "启用" : "停用"} · ${item.is_mandatory ? "强制更新" : "普通更新"} · ${formatTime(item.published_at)}</div>
         </div>
       </div>
       <p>${escapeHtml(item.release_notes || "").replace(/\n/g, "<br>")}</p>
@@ -451,12 +503,14 @@ async function saveVersion(event) {
 
 function renderConfig() {
   const list = byId("configList");
-  list.innerHTML = (state.dashboard?.config || []).map((item) => `
+  syncSourceFilterButtons("config");
+  const rows = filterByModuleSource(state.dashboard?.config || [], "config");
+  list.innerHTML = rows.map((item) => `
     <article class="item">
       <div class="item-head">
         <div>
           <div class="item-title">${escapeHtml(item.key)}</div>
-          <div class="item-meta">${item.active ? "启用" : "停用"} · ${formatTime(item.updated_at)}</div>
+          <div class="item-meta">${sourceBadge(item, "config")} · ${item.active ? "启用" : "停用"} · ${formatTime(item.updated_at)}</div>
         </div>
       </div>
       <pre>${escapeHtml(JSON.stringify(item.value, null, 2))}</pre>
@@ -517,6 +571,61 @@ function renderLinks() {
       <span>${escapeHtml(desc)}</span>
     </a>
   `).join("");
+}
+
+function renderSourceFilteredGroup(group) {
+  if (group === "feedback") return renderFeedback();
+  if (group === "messages") return renderMessages();
+  if (group === "versions") return renderVersions();
+  if (group === "config") return renderConfig();
+}
+
+function syncSourceFilterButtons(group) {
+  document.querySelectorAll(`[data-source-filter="${group}"]`).forEach((button) => {
+    const active = button.dataset.sourceValue === (state.sourceFilters[group] || "all");
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function filterByModuleSource(rows, group) {
+  const filter = state.sourceFilters[group] || "all";
+  if (filter === "all") return rows;
+  return rows.filter((item) => moduleSource(item, group) === filter);
+}
+
+function moduleSource(item, group) {
+  if (group === "feedback") {
+    if (String(item.id || "").startsWith("mini:") || String(item.source_label || "").includes("小程序")) return "mini";
+    return "app";
+  }
+  if (group === "versions") {
+    return sourceFromText(item.platform || "");
+  }
+  if (group === "config") {
+    return sourceFromText(item.key || "");
+  }
+  return sourceFromText(item.source_key || "");
+}
+
+function sourceFromText(value) {
+  const text = String(value || "").toLowerCase();
+  if (!text) return "all";
+  if (text.includes("mini") || text.includes("wechat") || text.includes("mp") || text.includes("小程序")) return "mini";
+  if (text.includes("android") || text.includes("app") || text.startsWith("release:")) return "app";
+  return "all";
+}
+
+function moduleSourceLabel(item, group) {
+  return {
+    app: "App",
+    mini: "小程序",
+    all: "通用",
+  }[moduleSource(item, group)] || "通用";
+}
+
+function sourceBadge(item, group) {
+  return moduleSourceLabel(item, group);
 }
 
 function renderStackedBars(target, rows, fields) {
@@ -604,8 +713,10 @@ function openUserModal(key) {
       ${detailItem("设备", deviceLabel(user))}
       ${detailItem("版本", user.app_version ? `v${user.app_version}` : "未收集")}
       ${detailItem("性别", genderLabel(user.gender))}
+      ${detailItem("年龄段", user.age_bucket || "未填写")}
       ${detailItem("生日", user.birth_date || "未填写")}
-      ${detailItem("城市", user.city || "未填写")}
+      ${detailItem("地区", user.region || "未填写")}
+      ${detailItem("个性签名", user.signature || "未填写")}
       ${detailItem("注册时间", formatTime(user.registered_at))}
       ${detailItem("最后活跃", formatTime(user.last_seen_at || user.last_login_at))}
       ${detailItem("选日活跃", formatBool(user.today_logged_in))}
@@ -635,6 +746,7 @@ function openUserModal(key) {
         <article class="feedback-card">
           <div><strong>${statusLabel(item.status)}</strong><span>${formatTime(item.created_at)}</span></div>
           <p>${escapeHtml(item.content || "")}</p>
+          ${item.developer_reply ? `<p class="reply-preview">回复：${escapeHtml(item.developer_reply)}</p>` : ""}
           <small>${escapeHtml(item.source_label || "")} · ${escapeHtml(item.page || "-")}</small>
         </article>
       `).join("") : `<p class="muted">这个用户暂无反馈记录。</p>`}
@@ -801,6 +913,11 @@ function escapeHtml(value) {
   }[char]));
 }
 
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === "function") return window.CSS.escape(String(value));
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
 function localDateKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
   const year = date.getFullYear();
@@ -841,10 +958,7 @@ function genderLabel(value) {
 
 function deviceLabel(item) {
   const brand = String(item.device_brand || "").trim();
-  const model = String(item.device_model || "").trim();
-  if (!brand && !model) return "未收集";
-  if (brand && model && !model.toLowerCase().includes(brand.toLowerCase())) return `${brand} ${model}`;
-  return brand || model;
+  return brand || "未收集";
 }
 
 function shortId(value) {

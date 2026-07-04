@@ -27,6 +27,7 @@ Deno.serve(async (request) => {
 
     if (action === "dashboard") return json(await dashboard(admin, user.id, body), 200, corsHeaders);
     if (action === "feedback.updateStatus") return json(await updateFeedbackStatus(admin, body), 200, corsHeaders);
+    if (action === "feedback.reply") return json(await replyFeedback(admin, body), 200, corsHeaders);
     if (action === "message.upsert") return json(await upsertMessage(admin, body), 200, corsHeaders);
     if (action === "message.delete") return json(await deleteById(admin, "official_messages", body), 200, corsHeaders);
     if (action === "version.upsert") return json(await upsertVersion(admin, body), 200, corsHeaders);
@@ -79,8 +80,8 @@ async function requireAdmin(request: Request, env: ReturnType<typeof readEnv>) {
 
 async function dashboard(admin: ReturnType<typeof createClient>, userId: string, body: Json) {
   const [appFeedback, miniFeedback, messages, versions, config, profile, analytics] = await Promise.all([
-    select(admin, "feedback", "id,user_id,email,content,status,source,page,app_version,created_at,updated_at", "created_at", false, 200),
-    select(admin, "mini_feedback", "id,mini_user_id,contact,content,category,status,source,page,app_version,created_at,updated_at", "created_at", false, 200),
+    select(admin, "feedback", "id,user_id,email,content,status,source,page,app_version,developer_reply,replied_at,reply_seen_at,created_at,updated_at", "created_at", false, 200),
+    select(admin, "mini_feedback", "id,mini_user_id,contact,content,category,status,source,page,app_version,developer_reply,replied_at,reply_seen_at,created_at,updated_at", "created_at", false, 200),
     select(admin, "official_messages", "id,title,body,source_key,created_at,updated_at", "created_at", false, 100),
     select(admin, "app_versions", "id,platform,version_code,version_name,apk_url,backup_apk_url,sha256,file_size_bytes,release_notes,is_mandatory,active,published_at,created_at,updated_at", "version_code", false, 60),
     select(admin, "app_config", "key,value,description,active,updated_at", "updated_at", false, 100),
@@ -118,8 +119,8 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
     versions,
   ] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,age,birth_date,gender,city,device_brand,device_model,device_platform,device_last_seen_at,app_version,created_at,updated_at", "created_at", false, 1000),
-    select(admin, "mini_users", "id,nickname,gender,birth_date,city,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,age,birth_date,gender,province,city,signature,device_brand,device_model,device_platform,device_last_seen_at,app_version,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "mini_users", "id,nickname,email,email_verified_at,gender,birth_date,province,city,signature,birthday_wechat_enabled,birthday_email_enabled,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_sessions", "user_id,created_at,last_used_at", "last_used_at", false, 1000),
     select(admin, "mini_ledger_snapshots", "user_id,payload,created_at,updated_at", "updated_at", false, 1000),
     select(admin, "app_activity_events", "id,user_id,event_type,device_brand,device_model,device_platform,app_version,occurred_at,created_at", "occurred_at", false, 5000),
@@ -245,6 +246,8 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
       ]),
       feedback_by_status: statusBuckets(feedbackRows),
       region_distribution: portrait.regions,
+      age_distribution: portrait.ageBuckets,
+      gender_distribution: portrait.genders,
       device_brand_distribution: portrait.deviceBrands,
       portrait_coverage: portrait.coverage,
     },
@@ -337,21 +340,24 @@ function mergeSeries(series: Array<[string, Array<{ date: string; value: number 
 }
 
 function buildPortraitAnalytics(users: Json[]) {
-  const regionKnown = users.filter((row) => hasText(row.city)).length;
+  const regionKnown = users.filter((row) => hasText(row.region)).length;
   const deviceBrandKnown = users.filter((row) => hasText(row.device_brand)).length;
   const sourceRows = (field: string, emptyLabel: string) => distributionBySource(users, field, emptyLabel, 8);
   const coverage = [
-    coverageRow("地区", users, (row) => hasText(row.city)),
+    coverageRow("地区", users, (row) => hasText(row.region)),
     coverageRow("设备品牌", users, (row) => hasText(row.device_brand)),
     coverageRow("性别", users, (row) => Boolean(genderValue(row.gender))),
     coverageRow("生日", users, (row) => hasText(row.birth_date)),
+    coverageRow("个性签名", users, (row) => hasText(row.signature)),
   ];
   return {
     regionKnown,
     regionUnknown: users.length - regionKnown,
     deviceBrandKnown,
     deviceBrandUnknown: users.length - deviceBrandKnown,
-    regions: sourceRows("city", "未填写"),
+    regions: sourceRows("region", "未填写"),
+    ageBuckets: sourceRows("age_bucket", "未填写"),
+    genders: sourceRows("gender_text", "未填写"),
     deviceBrands: sourceRows("device_brand", "未采集"),
     coverage,
   };
@@ -478,6 +484,11 @@ function buildUserRows(
     const lastLoginAt = dateMs(user.last_sign_in_at);
     const activityRows = appActivityByUser.get(user.id) ?? [];
     const recordRows = appRecordsByUser.get(user.id) ?? [];
+    const gender = genderValue(profile.gender) || genderValue(metadata.gender);
+    const birthDate = stringValue(profile.birth_date, 20) || stringValue(metadata.birth_date, 20);
+    const province = stringValue(profile.province, 80) || stringValue(metadata.province, 80);
+    const city = stringValue(profile.city, 80) || stringValue(metadata.city, 80);
+    const age = ageFromBirthDate(birthDate);
     return {
       source: "App",
       source_key: "app",
@@ -485,13 +496,19 @@ function buildUserRows(
       display_name: stringValue(profile.display_name, 80) || stringValue(metadata.display_name, 80) || stringValue(user.email, 120) || shortId(user.id),
       email: stringValue(user.email, 160) || stringValue(profile.email, 160),
       contact: stringValue(profile.phone, 80),
+      signature: stringValue(profile.signature, 120) || stringValue(metadata.signature, 120),
       device_brand: stringValue(profile.device_brand, 80),
       device_model: stringValue(profile.device_model, 120),
       device_platform: stringValue(profile.device_platform, 32) || "android",
       app_version: stringValue(profile.app_version, 32),
-      gender: genderValue(profile.gender) || genderValue(metadata.gender),
-      birth_date: stringValue(profile.birth_date, 20) || stringValue(metadata.birth_date, 20),
-      city: stringValue(profile.city, 80) || stringValue(metadata.city, 80),
+      gender,
+      gender_text: genderText(gender),
+      birth_date: birthDate,
+      age,
+      age_bucket: ageBucket(age),
+      province,
+      city,
+      region: regionName(province, city),
       registered_at: registeredAt,
       last_login_at: lastLoginAt,
       last_seen_at: activity.last_activity_at,
@@ -523,20 +540,33 @@ function buildUserRows(
     const snapshotProfile = snapshotProfilesById.get(id) ?? {};
     const activityRows = miniActivityByUser.get(id) ?? [];
     const recordRows = miniRecordsByUser.get(id) ?? [];
+    const gender = genderValue(user.gender) || genderValue(snapshotProfile.gender);
+    const birthDate = stringValue(user.birth_date, 20) || stringValue(snapshotProfile.birth_date, 20);
+    const province = stringValue(user.province, 80) || stringValue(snapshotProfile.province, 80);
+    const city = stringValue(user.city, 80) || stringValue(snapshotProfile.city, 80);
+    const age = ageFromBirthDate(birthDate);
     return {
       source: "小程序",
       source_key: "mini",
       user_id: id,
       display_name: stringValue(user.nickname, 80) || `小程序用户 ${shortId(id)}`,
-      email: "",
+      email: user.email_verified_at ? stringValue(user.email, 160) : "",
       contact: "",
+      signature: stringValue(user.signature, 120) || stringValue(snapshotProfile.signature, 120),
       device_brand: stringValue(user.device_brand, 80),
       device_model: stringValue(user.device_model, 120),
       device_platform: stringValue(user.device_platform, 32) || "wechat-mini",
       app_version: stringValue(user.app_version, 32),
-      gender: genderValue(user.gender) || genderValue(snapshotProfile.gender),
-      birth_date: stringValue(user.birth_date, 20) || stringValue(snapshotProfile.birth_date, 20),
-      city: stringValue(user.city, 80) || stringValue(snapshotProfile.city, 80),
+      gender,
+      gender_text: genderText(gender),
+      birth_date: birthDate,
+      age,
+      age_bucket: ageBucket(age),
+      province,
+      city,
+      region: regionName(province, city),
+      birthday_wechat_enabled: Boolean(user.birthday_wechat_enabled),
+      birthday_email_enabled: Boolean(user.birthday_email_enabled),
       registered_at: numberValue(user.created_at),
       last_login_at: activity.last_activity_at,
       last_seen_at: activity.last_activity_at,
@@ -577,7 +607,10 @@ function miniSnapshotProfiles(snapshots: Json[]) {
     rows.set(userId, {
       gender: profile.gender,
       birth_date: profile.birthDate,
+      province: profile.province,
       city: profile.city,
+      signature: profile.signature,
+      email: profile.email,
     });
   }
   return rows;
@@ -852,6 +885,32 @@ async function updateFeedbackStatus(admin: ReturnType<typeof createClient>, body
   return { ok: true };
 }
 
+async function replyFeedback(admin: ReturnType<typeof createClient>, body: Json) {
+  const id = stringValue(body.id, 80);
+  const reply = stringValue(body.reply, 500);
+  if (!id) throw new Error("Invalid feedback id");
+  const patch: Json = {
+    developer_reply: reply || null,
+    replied_at: reply ? Date.now() : null,
+    updated_at: Date.now(),
+  };
+  if (id.startsWith("mini:")) {
+    const miniId = id.slice(5);
+    const { error } = await admin
+      .from("mini_feedback")
+      .update(patch)
+      .eq("id", miniId);
+    if (error) throw new Error(`Unable to reply mini feedback: ${error.message}`);
+    return { ok: true };
+  }
+  const { error } = await admin
+    .from("feedback")
+    .update(patch)
+    .eq("id", id);
+  if (error) throw new Error(`Unable to reply feedback: ${error.message}`);
+  return { ok: true };
+}
+
 function normalizeFeedback(appRows: Json[], miniRows: Json[]) {
   const categoryLabel: Record<string, string> = {
     bug: "遇到问题",
@@ -865,6 +924,9 @@ function normalizeFeedback(appRows: Json[], miniRows: Json[]) {
       email: row.email || (row.source === "app_local" ? "本地模式用户" : ""),
       source_label: row.source === "app_local" ? "App 本地" : "App",
       contact: row.email || "",
+      developer_reply: row.developer_reply || "",
+      replied_at: row.replied_at || null,
+      reply_seen_at: row.reply_seen_at || null,
     })),
     ...miniRows.map((row) => ({
       id: `mini:${row.id}`,
@@ -874,6 +936,9 @@ function normalizeFeedback(appRows: Json[], miniRows: Json[]) {
       content: `[${categoryLabel[String(row.category)] || "小程序反馈"}] ${row.content || ""}`,
       status: row.status,
       source_label: "小程序",
+      developer_reply: row.developer_reply || "",
+      replied_at: row.replied_at || null,
+      reply_seen_at: row.reply_seen_at || null,
       created_at: row.created_at,
       updated_at: row.updated_at,
       page: row.page,
@@ -998,6 +1063,43 @@ function hasText(value: unknown): boolean {
 function genderValue(value: unknown): string {
   const raw = stringValue(value, 24);
   return ["female", "male", "other", "prefer_not"].includes(raw) ? raw : "";
+}
+
+function genderText(value: unknown): string {
+  const gender = genderValue(value);
+  if (gender === "female") return "女";
+  if (gender === "male") return "男";
+  if (gender === "other") return "其他";
+  if (gender === "prefer_not") return "未透露";
+  return "未填写";
+}
+
+function ageFromBirthDate(value: unknown): number | null {
+  const raw = stringValue(value, 20);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [year, month, day] = raw.split("-").map(Number);
+  const now = new Date(Date.now() + chinaOffsetMs);
+  let age = now.getUTCFullYear() - year;
+  const passedBirthday = now.getUTCMonth() + 1 > month || (now.getUTCMonth() + 1 === month && now.getUTCDate() >= day);
+  if (!passedBirthday) age -= 1;
+  return age >= 0 && age < 130 ? age : null;
+}
+
+function ageBucket(age: unknown): string {
+  const value = typeof age === "number" ? age : Number(age);
+  if (!Number.isFinite(value)) return "未填写";
+  if (value < 18) return "18岁以下";
+  if (value <= 24) return "18-24岁";
+  if (value <= 34) return "25-34岁";
+  if (value <= 44) return "35-44岁";
+  return "45岁以上";
+}
+
+function regionName(province: unknown, city: unknown): string {
+  const provinceText = stringValue(province, 80);
+  const cityText = stringValue(city, 80);
+  if (provinceText && cityText && provinceText !== cityText) return `${provinceText} ${cityText}`;
+  return cityText || provinceText;
 }
 
 function positiveInt(value: unknown, field: string): number {

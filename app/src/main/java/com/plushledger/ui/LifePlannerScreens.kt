@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.plushledger.R
 import com.plushledger.data.Money
 import com.plushledger.data.ProfileEntity
 import java.time.DayOfWeek
@@ -231,7 +232,7 @@ fun AnniversaryScreen(userId: String, profile: ProfileEntity?, onBack: () -> Uni
         item {
             Surface(shape = RoundedCornerShape(28.dp), color = Color(0xFFFFF8EE), border = BorderStroke(1.dp, LocalPlushPalette.current.border), shadowElevation = 6.dp) {
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    MascotArt(84.dp)
+                    MascotArt(84.dp, R.drawable.mascot_action_heart)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("最近的温柔提醒", color = LocalPlushPalette.current.ink, fontWeight = FontWeight.Black, fontSize = 20.sp)
@@ -273,7 +274,7 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
         item {
             Surface(shape = RoundedCornerShape(26.dp), color = Color(0xFFFFF7EC), border = BorderStroke(1.dp, LocalPlushPalette.current.border), shadowElevation = 5.dp) {
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    MascotArt(88.dp)
+                    MascotArt(88.dp, R.drawable.mascot_action_heart)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("为生活留一点期待", color = LocalPlushPalette.current.ink, fontWeight = FontWeight.Black, fontSize = 19.sp)
@@ -294,7 +295,7 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回", tint = palette.ink) }
         Column(Modifier.weight(1f)) { Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 28.sp); Text(subtitle, color = palette.muted, fontSize = 12.sp, maxLines = 2) }
-        MascotArt(64.dp)
+        MascotArt(64.dp, R.drawable.mascot_action_wave)
     }
 }
 
@@ -436,7 +437,7 @@ fun GiftWishScreen(userId: String, onBack: () -> Unit) {
 
 @Composable private fun WishCard(wish: WishPlan, onClick: () -> Unit) { val palette = LocalPlushPalette.current; val progress = if (wish.targetMinor == 0L) 0f else (wish.savedMinor.toFloat() / wish.targetMinor).coerceIn(0f, 1f); Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(22.dp), color = palette.surface, border = BorderStroke(1.dp, palette.border), shadowElevation = 4.dp) { Column(Modifier.padding(15.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Surface(shape = RoundedCornerShape(14.dp), color = palette.moss.copy(alpha = 0.14f)) { Icon(Icons.Default.Savings, null, tint = palette.moss, modifier = Modifier.padding(11.dp).size(28.dp)) }; Spacer(Modifier.width(11.dp)); Column(Modifier.weight(1f)) { Text(wish.title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 17.sp); Text(wish.note.ifBlank { "给生活留一个期待" }, color = palette.muted, fontSize = 12.sp, maxLines = 1) }; Icon(Icons.Default.ChevronRight, null, tint = palette.muted) }; Spacer(Modifier.height(12.dp)); androidx.compose.material3.LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp)), color = palette.moss, trackColor = palette.moss.copy(alpha = 0.13f)); Spacer(Modifier.height(7.dp)); Text("已存 ${Money.formatCny(wish.savedMinor)}  /  预算 ${Money.formatCny(wish.targetMinor)}", color = palette.moss, fontWeight = FontWeight.Bold, fontSize = 12.sp) } } }
 
-@Composable private fun PlannerEmpty(message: String) { Surface(shape = RoundedCornerShape(22.dp), color = Color(0xFFFFFAF3), border = BorderStroke(1.dp, LocalPlushPalette.current.border)) { Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) { MascotArt(58.dp); Spacer(Modifier.width(12.dp)); Text(message, color = LocalPlushPalette.current.muted, fontSize = 13.sp) } } }
+@Composable private fun PlannerEmpty(message: String) { Surface(shape = RoundedCornerShape(22.dp), color = Color(0xFFFFFAF3), border = BorderStroke(1.dp, LocalPlushPalette.current.border)) { Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) { MascotArt(58.dp, R.drawable.mascot_action_think); Spacer(Modifier.width(12.dp)); Text(message, color = LocalPlushPalette.current.muted, fontSize = 13.sp) } } }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -459,7 +460,7 @@ private fun LifeEventDialog(initial: LifeEvent?, onDismiss: () -> Unit, onSave: 
             Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(if (initial == null) "添加重要日子" else "编辑重要日子", modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.Black, fontSize = 28.sp)
-                    MascotArt(64.dp)
+                    MascotArt(64.dp, R.drawable.mascot_action_heart)
                 }
                 OutlinedTextField(
                     title,

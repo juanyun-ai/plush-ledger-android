@@ -78,7 +78,7 @@ private fun PlushModalFrame(
         ) {
             Box {
                 Column(Modifier.padding(horizontal = 22.dp, vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    MascotArt(86.dp)
+                    MascotArt(86.dp, R.drawable.mascot_action_heart)
                     Text(title, color = palette.ink, fontWeight = FontWeight.Black, fontSize = 27.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
                     content()

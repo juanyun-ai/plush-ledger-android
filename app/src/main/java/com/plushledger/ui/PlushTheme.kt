@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.plushledger.R
 
 data class PlushPalette(
     val background: Color,
@@ -351,7 +352,7 @@ fun ConfirmDialog(
             shadowElevation = 18.dp
         ) {
             Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                MascotArt(72.dp)
+                MascotArt(72.dp, R.drawable.mascot_action_think)
                 Text(title, fontWeight = FontWeight.Black, color = palette.ink, fontSize = 24.sp)
                 Spacer(Modifier.height(10.dp))
                 Text(message, color = palette.muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 20.sp)
