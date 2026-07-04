@@ -9,7 +9,9 @@ data class DiaryEntry(
     val date: String,
     val text: String,
     val mood: String,
-    val status: String = ""
+    val status: String = "",
+    val updatedAt: Long = System.currentTimeMillis(),
+    val deletedAt: Long? = null
 )
 
 class DiaryStore(context: Context, private val userId: String) {
@@ -29,6 +31,7 @@ class DiaryStore(context: Context, private val userId: String) {
         val updated = (listOf(DiaryEntry(date, text.trim(), mood, status.trim())) + load().filterNot { it.date == date })
             .take(180)
         save(updated)
+        removeDeletedMarker(date)
         clearDraft(date)
         return updated
     }
@@ -36,6 +39,7 @@ class DiaryStore(context: Context, private val userId: String) {
     fun deleteEntry(date: String): List<DiaryEntry> {
         val updated = load().filterNot { it.date == date }
         save(updated)
+        markDeleted(date)
         clearDraft(date)
         return updated
     }
@@ -81,11 +85,35 @@ class DiaryStore(context: Context, private val userId: String) {
                         .put("text", entry.text)
                         .put("mood", entry.mood)
                         .put("status", entry.status)
+                        .put("updated_at", entry.updatedAt)
+                        .put("deleted_at", entry.deletedAt ?: JSONObject.NULL)
                 )
             }
         }
         current.edit().putString("entries", payload.toString()).apply()
     }
+
+    private fun markDeleted(date: String) {
+        val deleted = deletedDates().toMutableMap()
+        deleted[date] = System.currentTimeMillis()
+        val payload = JSONObject()
+        deleted.forEach { (key, value) -> payload.put(key, value) }
+        current.edit().putString("deleted_entries", payload.toString()).apply()
+    }
+
+    private fun removeDeletedMarker(date: String) {
+        val deleted = deletedDates().toMutableMap()
+        if (deleted.remove(date) == null) return
+        val payload = JSONObject()
+        deleted.forEach { (key, value) -> payload.put(key, value) }
+        current.edit().putString("deleted_entries", payload.toString()).apply()
+    }
+
+    private fun deletedDates(): Map<String, Long> = runCatching {
+        val raw = current.getString("deleted_entries", "{}") ?: "{}"
+        val json = JSONObject(raw)
+        json.keys().asSequence().associateWith { key -> json.optLong(key, 0L) }.filterValues { it > 0L }
+    }.getOrDefault(emptyMap())
 
     private fun migrateLegacyEntries() {
         if (current.contains("entries")) return
@@ -102,7 +130,9 @@ class DiaryStore(context: Context, private val userId: String) {
                     date = item.optString("date"),
                     text = item.optString("text").trim(),
                     mood = item.optString("mood", "开心"),
-                    status = item.optString("status")
+                    status = item.optString("status"),
+                    updatedAt = item.optLong("updated_at", 0L).takeIf { it > 0L } ?: 0L,
+                    deletedAt = item.optLong("deleted_at", 0L).takeIf { it > 0L }
                 )
                 if (entry.date.isNotBlank() && entry.text.isNotBlank()) add(entry)
             }

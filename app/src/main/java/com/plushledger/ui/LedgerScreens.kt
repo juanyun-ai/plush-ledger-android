@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -130,6 +131,8 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.atan2
 
 @Composable
 fun HomeScreen(
@@ -2200,7 +2203,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatsDonutPanel(chartData, periodExpense, Modifier.weight(1f).height(316.dp))
+                StatsDonutPanel(chartData, periodExpense, Modifier.weight(1f).height(316.dp)) { detailSpend = it }
                 StatsTrendPanel(period.trendTitle, trendSpend, Modifier.weight(1f).height(316.dp))
             }
         }
@@ -2368,14 +2371,14 @@ private fun StatsMetric(label: String, value: Long, color: Color, modifier: Modi
 }
 
 @Composable
-private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modifier: Modifier = Modifier) {
+private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modifier: Modifier = Modifier, onSelect: (CategorySpend) -> Unit = {}) {
     val palette = LocalPlushPalette.current
     WarmPanel(modifier, padding = 12.dp) {
         ProfileSectionLine("支出构成")
-        DonutChart(spend, compact = true)
+        DonutChart(spend, compact = true, onSelect = onSelect)
         spend.take(6).forEachIndexed { index, item ->
             val percent = item.amountMinor * 1000 / totalExpense.coerceAtLeast(1)
-            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onSelect(item) }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(statsColor(index)))
                 Spacer(Modifier.width(7.dp))
                 Text(item.category.name, color = palette.ink, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2407,14 +2410,33 @@ private fun ProfileSectionLine(title: String) {
 }
 
 @Composable
-private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false) {
+private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false, onSelect: (CategorySpend) -> Unit = {}) {
     val palette = LocalPlushPalette.current
     val rawTotal = spend.sumOf { it.amountMinor }
     val total = rawTotal.coerceAtLeast(1)
     val top = spend.firstOrNull()
     val topPercent = (top?.amountMinor ?: 0L) * 1000 / total
     Box(Modifier.fillMaxWidth().height(if (compact) 150.dp else 210.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(if (compact) 116.dp else 168.dp)) {
+        Canvas(
+            Modifier
+                .size(if (compact) 116.dp else 168.dp)
+                .pointerInput(spend, total) {
+                    detectTapGestures { tap ->
+                        val center = Offset(size.width / 2f, size.height / 2f)
+                        val dx = tap.x - center.x
+                        val dy = tap.y - center.y
+                        var angle = (atan2(dy, dx) * 180f / PI.toFloat()) + 90f
+                        if (angle < 0f) angle += 360f
+                        var start = 0f
+                        spend.take(6).firstOrNull { item ->
+                            val sweep = item.amountMinor.toFloat() / total * 360f
+                            val hit = angle >= start && angle <= start + sweep
+                            start += sweep
+                            hit
+                        }?.let(onSelect)
+                    }
+                }
+        ) {
             val stroke = (if (compact) 18.dp else 26.dp).toPx()
             drawArc(
                 palette.surfaceAlt,

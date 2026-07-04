@@ -7,14 +7,14 @@
 
   一款本地优先、可云同步的 3D 毛绒风 Android 记账与日记应用。
 
-  ![Version](https://img.shields.io/badge/version-1.0.9-FFA126?style=for-the-badge)
+  ![Version](https://img.shields.io/badge/version-1.1.0-FFA126?style=for-the-badge)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=for-the-badge)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=for-the-badge)
   ![License](https://img.shields.io/badge/license-Noncommercial-EA7C73?style=for-the-badge)
 
   <br>
 
-  <a href="https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.0.9.apk"><b>下载 Android APK</b></a>
+  <a href="https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.1.0.apk"><b>下载 Android APK</b></a>
   ·
   <a href="https://juanyun-ai.github.io/plush-ledger-android/"><b>产品网页</b></a>
   ·
@@ -52,7 +52,7 @@
 
 ## 当前状态
 
-- Android App 是当前完整版本，当前源码版本和最新已发布 APK 均为 **1.0.9**。
+- Android App 是当前完整版本，当前源码版本和最新已发布 APK 均为 **1.1.0**。
 - 微信小程序已上线，当前维护版本为 **1.4.9**；由于个人主体小程序类目和隐私合规限制，小程序版收敛了生活日历、资料上传、手机绑定等入口，AI 快记采用本机规则解析。
 - 两端共用“本地优先、可选云同步、用户确认后入账”的产品原则，但功能页面并不完全一致；Android 版保留更完整的 AI、日记、生活日历和应用内更新体验。
 - 项目从 2026-06-06 开始制作，前三到五天完成基础记账产品，随后围绕真实使用、设计稿、下载更新、导入导出、云同步、合规和小程序提审持续迭代约三周。
@@ -64,7 +64,7 @@
 - 管理后台：[admin.xiaoxing.online](https://admin.xiaoxing.online/)，默认连接绒绒记账 Supabase 项目，登录管理员账号后可管理反馈、官方消息、版本和远程配置。
 - 小程序用户在管理后台优先显示用户自设昵称；微信 openid 仅用于内部账号绑定，不作为公开用户名展示。
 - 运营看板只展示数据库可证明的数据：App 打开事件来自 `app_activity_events`，旧版本没有记录时不会倒填假活跃；记账发生日和同步日分开看。
-- 最新 APK：[rongrong-ledger-1.0.9.apk](https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.0.9.apk)
+- 最新 APK：[rongrong-ledger-1.1.0.apk](https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.1.0.apk)
 - 国内访问长期方案：优先用 Cloudflare Pages 或 Vercel 避开腾讯云接入备案阻塞；如后续需要大陆加速，再考虑腾讯云 EdgeOne 和接入备案。
 
 ## 功能
@@ -78,6 +78,7 @@
 - Room 本地优先存储，离线仍可正常记账。
 - 邮箱验证码注册、邮箱密码/一次性验证码登录、手机号验证码入口和独立本地模式。
 - 登录后使用 Supabase 同步账本、资料和私有头像。
+- 绒绒日记支持登录后云端同步，同一账号在不同设备间可恢复历史日记。
 - 稳定的本地头像缓存、昵称、年龄、生日、性别和邮箱/手机号换绑。
 - 应用信箱、用户反馈和管理员身份；公测期间现有功能全部免费。
 - PIN、生物识别、隐私防截图、数据导出和账号注销。
@@ -150,6 +151,14 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载由 Android 系统下载服务负责，应用读取真实字节和进度；主线路失败后会自动重试并切换备用线路，所有线路不可用时可交给系统浏览器下载。安装前必须通过 SHA-256 校验，校验失败不会进入安装流程。GitHub Release 与 Supabase Storage 互为主备，发布时按实测网络表现设置主线路。
+
+### v1.1.0
+
+1. 绒绒日记接入登录账号云同步，同一账号换设备后可恢复已保存日记，并保留删除同步。
+2. 手机号验证码登录链路补强：验证成功后会把当前设备的本地模式或旧账号数据合并到新云账号，减少换登录方式后的数据割裂。
+3. App 固定浅色模式，“免费用户”改为“永久用户”，关于我们新增小程序入口并更新真实可收件联系邮箱。
+4. 统计圆环图支持点击查看分类明细；分享卡片改为省份插图高清版，并叠加真实日期。
+5. 官网底部小程序二维码更新为正式小程序码，APK 下载地址同步到 1.1.0。
 
 ### v1.0.9
 

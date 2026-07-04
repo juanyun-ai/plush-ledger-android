@@ -206,7 +206,7 @@ private fun PlushLedgerApp(
         }
     }
 
-    PlushLedgerTheme(state.darkMode, state.themeTone) {
+    PlushLedgerTheme(false, state.themeTone) {
         Surface(Modifier.fillMaxSize(), color = LocalPlushPalette.current.background) {
             Box(Modifier.fillMaxSize()) {
                 FabricBackdrop()

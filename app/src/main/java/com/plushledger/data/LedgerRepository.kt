@@ -585,6 +585,79 @@ class LedgerRepository(
         }.getOrThrow()
     }
 
+    suspend fun mergeLocalWorkspaceIntoRemote(sourceUserId: String?, targetUserId: String) {
+        val source = sourceUserId?.takeIf { it.isNotBlank() && it != targetUserId } ?: return
+        if (dao.getProfile(source) == null && dao.transactionsSnapshot(source).isEmpty()) return
+        ensureUserWorkspace(targetUserId, sessionStore.currentSession()?.displayName ?: "绒绒用户", sessionStore.currentSession()?.phone, sessionStore.currentSession()?.email)
+        val targetBook = dao.getDefaultBook(targetUserId) ?: return
+        val now = now()
+
+        val targetAccountsByName = dao.accountsSnapshot(targetUserId).associateBy { it.name }.toMutableMap()
+        val sourceAccounts = dao.accountsSnapshot(source)
+        sourceAccounts.forEach { account ->
+            if (targetAccountsByName[account.name] == null) {
+                val copied = account.copy(id = mergedId(targetUserId, account.id), userId = targetUserId, bookId = targetBook.id, updatedAt = now, syncState = SYNC_DIRTY)
+                dao.upsertAccount(copied)
+                targetAccountsByName[copied.name] = copied
+            }
+        }
+
+        val targetCategoriesByKey = dao.categoriesSnapshot(targetUserId).associateBy { "${it.kind}:${it.name}" }.toMutableMap()
+        val sourceCategories = dao.categoriesSnapshot(source)
+        sourceCategories.sortedBy { it.parentId != null }.forEach { category ->
+            val key = "${category.kind}:${category.name}"
+            if (targetCategoriesByKey[key] == null) {
+                val parent = category.parentId?.let { parentId ->
+                    sourceCategories.firstOrNull { it.id == parentId }?.let { parent -> targetCategoriesByKey["${parent.kind}:${parent.name}"] }
+                }
+                val copied = category.copy(
+                    id = mergedId(targetUserId, category.id),
+                    userId = targetUserId,
+                    bookId = targetBook.id,
+                    parentId = parent?.id,
+                    updatedAt = now,
+                    syncState = SYNC_DIRTY
+                )
+                dao.upsertCategory(copied)
+                targetCategoriesByKey[key] = copied
+            }
+        }
+
+        val accountBySourceId = sourceAccounts.associate { sourceAccount ->
+            sourceAccount.id to (targetAccountsByName[sourceAccount.name]?.id ?: targetAccountsByName.values.firstOrNull()?.id)
+        }
+        val categoryBySourceId = sourceCategories.associate { sourceCategory ->
+            sourceCategory.id to targetCategoriesByKey["${sourceCategory.kind}:${sourceCategory.name}"]?.id
+        }
+        val mergedTransactions = dao.transactionsSnapshot(source).mapNotNull { transaction ->
+            val accountId = accountBySourceId[transaction.accountId] ?: return@mapNotNull null
+            transaction.copy(
+                id = mergedId(targetUserId, transaction.id),
+                userId = targetUserId,
+                bookId = targetBook.id,
+                accountId = accountId,
+                toAccountId = transaction.toAccountId?.let(accountBySourceId::get),
+                categoryId = transaction.categoryId?.let(categoryBySourceId::get),
+                updatedAt = now,
+                syncState = SYNC_DIRTY
+            )
+        }
+        dao.upsertTransactions(mergedTransactions)
+
+        val mergedBudgets = dao.budgetsSnapshot(source).map { budget ->
+            budget.copy(
+                id = mergedId(targetUserId, budget.id),
+                userId = targetUserId,
+                bookId = targetBook.id,
+                categoryId = budget.categoryId?.let(categoryBySourceId::get),
+                updatedAt = now,
+                syncState = SYNC_DIRTY
+            )
+        }
+        dao.upsertBudgets(mergedBudgets)
+        mergeLocalDiaries(source, targetUserId)
+    }
+
     private suspend fun syncWithToken(userId: String, token: String): String {
         val results = mutableListOf<SyncTableResult>()
         val profiles = dao.dirtyProfiles(userId).map { it.sanitizedForCloud() }
@@ -595,6 +668,7 @@ class LedgerRepository(
         results += syncTable("categories", categories, token, { it.id }, { it.kind in setOf("expense", "income") }).also { if (it.syncedIds.isNotEmpty()) dao.markCategoriesSynced(it.syncedIds) }
         results += syncTable("transactions", dao.dirtyTransactions(userId), token, { it.id }, { it.amountMinor > 0 && it.type in setOf("expense", "income", "transfer") }).also { if (it.syncedIds.isNotEmpty()) dao.markTransactionsSynced(it.syncedIds) }
         results += syncTable("budgets", dao.dirtyBudgets(userId), token, { it.id }, { it.limitMinor > 0 && it.month.matches(Regex("^\\d{4}-\\d{2}$")) }).also { if (it.syncedIds.isNotEmpty()) dao.markBudgetsSynced(it.syncedIds) }
+        syncDiaryEntries(userId, token)
         runCatching { supabaseClient.updateProfileClientInfo(token, userId) }
         restoreFromCloud(token)
         val skipped = results.sumOf { it.skippedCount }
@@ -726,7 +800,103 @@ class LedgerRepository(
         val budgets = supabaseClient.fetchRows("budgets", token).map { it.toBudget() }
         dao.upsertBudgets(budgets)
         budgets.map { it.id }.takeIf { it.isNotEmpty() }?.let { dao.markBudgetsSynced(it) }
+
+        sessionStore.currentSession()?.userId?.let { userId ->
+            restoreDiaryEntries(userId, token)
+        }
     }
+
+    private suspend fun syncDiaryEntries(userId: String, token: String) {
+        val remote = runCatching { supabaseClient.fetchRows("diary_entries", token) }.getOrElse { return }
+        val merged = mergeDiaryRows(localDiaryRows(userId), remote)
+        saveLocalDiaryRows(userId, merged)
+        supabaseClient.upsertJsonRows("diary_entries", merged.map { it.toCloudDiaryRow(userId) }, token)
+    }
+
+    private suspend fun restoreDiaryEntries(userId: String, token: String) {
+        val remote = runCatching { supabaseClient.fetchRows("diary_entries", token) }.getOrElse { return }
+        saveLocalDiaryRows(userId, mergeDiaryRows(localDiaryRows(userId), remote))
+    }
+
+    private fun mergeLocalDiaries(sourceUserId: String, targetUserId: String) {
+        val merged = mergeDiaryRows(localDiaryRows(targetUserId), localDiaryRows(sourceUserId))
+        saveLocalDiaryRows(targetUserId, merged)
+    }
+
+    private fun localDiaryPrefs(userId: String) =
+        context.getSharedPreferences("rongrong_diary_$userId", Context.MODE_PRIVATE)
+
+    private fun localDiaryRows(userId: String): List<JSONObject> {
+        val prefs = localDiaryPrefs(userId)
+        val entries = runCatching {
+            val array = JSONArray(prefs.getString("entries", "[]") ?: "[]")
+            List(array.length()) { index -> array.getJSONObject(index) }
+        }.getOrDefault(emptyList())
+        val deleted = runCatching {
+            val json = JSONObject(prefs.getString("deleted_entries", "{}") ?: "{}")
+            json.keys().asSequence().map { date ->
+                JSONObject()
+                    .put("date", date)
+                    .put("text", "")
+                    .put("mood", "开心")
+                    .put("status", "")
+                    .put("updated_at", json.optLong(date))
+                    .put("deleted_at", json.optLong(date))
+            }.toList()
+        }.getOrDefault(emptyList())
+        return entries + deleted
+    }
+
+    private fun mergeDiaryRows(a: List<JSONObject>, b: List<JSONObject>): List<JSONObject> =
+        (a + b)
+            .filter { it.optString("date").isNotBlank() }
+            .groupBy { it.optString("date") }
+            .map { (_, rows) -> rows.maxBy { it.optLong("updated_at", it.optLong("created_at", 0L)) } }
+            .sortedByDescending { it.optString("date") }
+            .take(240)
+
+    private fun saveLocalDiaryRows(userId: String, rows: List<JSONObject>) {
+        val entries = JSONArray()
+        val deleted = JSONObject()
+        rows.forEach { row ->
+            val date = row.optString("date")
+            val deletedAt = row.optLong("deleted_at", 0L)
+            if (deletedAt > 0L) {
+                deleted.put(date, deletedAt)
+            } else if (row.optString("text").isNotBlank()) {
+                entries.put(
+                    JSONObject()
+                        .put("date", date)
+                        .put("text", row.optString("text").trim())
+                        .put("mood", row.optString("mood", "开心"))
+                        .put("status", row.optString("status"))
+                        .put("updated_at", row.optLong("updated_at", now()))
+                )
+            }
+        }
+        localDiaryPrefs(userId).edit()
+            .putString("entries", entries.toString())
+            .putString("deleted_entries", deleted.toString())
+            .apply()
+    }
+
+    private fun JSONObject.toCloudDiaryRow(userId: String): JSONObject {
+        val date = optString("date")
+        val updatedAt = optLong("updated_at", now()).takeIf { it > 0L } ?: now()
+        return JSONObject()
+            .put("id", mergedId(userId, "diary:$date"))
+            .put("user_id", userId)
+            .put("date", date)
+            .put("text", optString("text").take(1000))
+            .put("mood", optString("mood", "开心").take(40))
+            .put("status", optString("status").take(40))
+            .put("created_at", optLong("created_at", updatedAt).takeIf { it > 0L } ?: updatedAt)
+            .put("updated_at", updatedAt)
+            .put("deleted_at", optLong("deleted_at", 0L).takeIf { it > 0L } ?: JSONObject.NULL)
+    }
+
+    private fun mergedId(userId: String, seed: String): String =
+        UUID.nameUUIDFromBytes("rongrong-ledger:$userId:$seed".toByteArray()).toString()
 
     private suspend fun <T> syncTable(
         table: String,
@@ -915,46 +1085,52 @@ class LedgerRepository(
         val createdAt = now()
         return listOf(
             OfficialMessage(
+                id = "release_1_1_0_builtin",
+                title = "绒绒记账 v1.1.0 更新",
+                body = "1. 绒绒日记登录后支持云端同步，同一账号换设备也能看到已保存日记。\n2. 手机号验证码登录链路补强，登录后会把当前设备的本地/旧账号账本合并到新云账号。\n3. App 固定浅色模式，用户身份文案改为“永久用户”，关于我们新增小程序入口并更新联系邮箱。\n4. 统计圆环图支持点击查看分类明细，日记分享卡换成省份插图高清版并显示真实日期。",
+                createdAt = createdAt
+            ),
+            OfficialMessage(
                 id = "release_1_0_9_builtin",
                 title = "绒绒记账 v1.0.9 更新",
                 body = "1. 管理后台新增 App / 小程序来源筛选，反馈、官方消息、版本更新和远程配置都能分开查看。\n2. App 多个页面换上不同动作的绒绒形象，欢迎、记账、统计、日记和设置页更有区分度。\n3. 绒绒日记主视觉换成小程序同款风格，并使用透明动作图避免白底和边框。\n4. 后台布局优化，官方消息和版本更新的左侧表单不再被右侧列表撑得过长。",
-                createdAt = createdAt
+                createdAt = createdAt - 1
             ),
             OfficialMessage(
                 id = "release_1_0_8_builtin",
                 title = "绒绒记账 v1.0.8 更新",
                 body = "1. AI 记账增强日期和退费识别，支持“7月1号收到退费”这类表达。\n2. 收入分类新增“退税退费”和“其他”，并补上对应毛绒风图标。\n3. 记账与编辑页不再要求精确时间，只保留日期。\n4. 统计页新增月报、季度报和年度报，底部提示会按真实账目动态生成。",
-                createdAt = createdAt - 1
+                createdAt = createdAt - 2
             ),
             OfficialMessage(
                 id = "release_1_0_7_builtin",
                 title = "绒绒记账 v1.0.7 更新",
                 body = "1. 本地模式和登录模式的用户反馈都改为 App 内直达开发者后台，不再依赖邮箱。\n2. 关于我们页新增在线留言框，支持清空、暂存、取消和发送。\n3. 联系与注销说明改为优先使用 App 内在线留言，避免用户反馈丢失。",
-                createdAt = createdAt - 2
+                createdAt = createdAt - 3
             ),
             OfficialMessage(
                 id = "release_1_0_6_builtin",
                 title = "绒绒记账 v1.0.6 更新",
                 body = "1. 分类图标更新：买菜、咖啡、早餐、晚餐、飞机、轮渡和生日礼物换成新版毛绒风图标。\n2. 餐饮分类调整为早餐、午餐、晚餐和咖啡，交通新增飞机和轮渡，日常新增买菜，人情社交新增生日礼物。\n3. 我的页“连续记账”改为“累计记账”，按真实记账日期数展示；货币单位选择恢复国旗显示。",
-                createdAt = createdAt - 3
+                createdAt = createdAt - 4
             ),
             OfficialMessage(
                 id = "release_1_0_5_builtin",
                 title = "绒绒记账 v1.0.5 更新",
                 body = "1. AI 软件订阅分类图标换成新版毛绒风图标。\n2. 绒绒日记首卡文案、编辑弹窗和社交分享卡片按新设计重新排版。\n3. QQ 登录和绑定图标改为矢量企鹅，避免出现剪贴小方块。\n4. 主题选择页继续优化毛绒双列布局，并新增产品下载页作为下载兜底。",
-                createdAt = createdAt - 4
+                createdAt = createdAt - 5
             ),
             OfficialMessage(
                 id = "release_1_0_4_builtin",
                 title = "绒绒记账 v1.0.4 更新",
                 body = "1. 预算管理支持剩余预算显示为负数，并展示超出预算比例。\n2. 学习工作新增 AI 软件订阅分类，AI 识别也会优先匹配常见 AI 订阅支出。\n3. 绒绒日记支持近期日记左滑删除，状态可选择不设置，清空按钮显示更稳定。\n4. 日记首页卡片和社交分享卡片重新排版，二维码保持真实可扫。",
-                createdAt = createdAt - 4
+                createdAt = createdAt - 6
             ),
             OfficialMessage(
                 id = "release_1_0_3_builtin",
                 title = "绒绒记账 v1.0.3 更新",
                 body = "1. AI 记账暂存后会提示并自动关闭弹窗，同时新增清空输入。\n2. 生活日历增加节气、休班角标、周末蓝色日期、今日按钮和法定假期倒计时。\n3. 纪念日拆分为独立专区，历史日记改为弹窗编辑，日记支持暂存和一键清空。\n4. 状态选择和日记分享卡片继续按新设计优化，二维码保持真实可扫。",
-                createdAt = createdAt - 5
+                createdAt = createdAt - 7
             ),
             OfficialMessage(
                 id = "release_1_0_2_builtin",

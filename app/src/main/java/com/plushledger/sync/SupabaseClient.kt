@@ -343,6 +343,19 @@ class SupabaseClient {
         )
     }
 
+    suspend fun upsertJsonRows(table: String, rows: List<JSONObject>, accessToken: String) {
+        if (rows.isEmpty()) return
+        val payload = JSONArray()
+        rows.forEach(payload::put)
+        request(
+            method = "POST",
+            path = "/rest/v1/$table?on_conflict=id",
+            body = payload,
+            accessToken = accessToken,
+            prefer = "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
     suspend fun fetchRows(table: String, accessToken: String): List<JSONObject> {
         val text = request(
             method = "GET",

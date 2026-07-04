@@ -45,7 +45,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.EditNote
@@ -68,6 +67,7 @@ import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
@@ -124,7 +124,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 
-private const val SUPPORT_EMAIL = "support@xiaoxing.online"
+private const val SUPPORT_EMAIL = "2998319435@qq.com"
 
 private fun openSupportEmail(context: android.content.Context, content: String = "") {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
@@ -303,6 +303,7 @@ fun MyScreen(
         MyPage.DIARY -> DiaryScreen(
             userId = state.session?.userId ?: state.ledger.profile?.id ?: "local-diary",
             quotes = rememberQuoteCollection(),
+            onChanged = viewModel::syncNow,
             onBack = { page = MyPage.ROOT }
         )
     }
@@ -419,10 +420,6 @@ private fun MyRoot(
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 Box(Modifier.fillMaxWidth().clickable { showExportDialog = true }.padding(6.dp)) {
                     MenuRow(Icons.Default.Download, "数据导出", "", palette.rose)
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                Box(Modifier.fillMaxWidth().clickable { onDarkMode(!state.darkMode) }.padding(6.dp)) {
-                    MenuRow(Icons.Default.DarkMode, "深色模式", if (state.darkMode) "已开启" else "跟随系统", palette.lilac)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 Box(Modifier.fillMaxWidth().clickable(onClick = onInbox).padding(6.dp)) {
@@ -574,6 +571,26 @@ private fun AboutScreen(
                     AboutValue(Icons.Default.EditNote, "轻松记录", palette.rose, Modifier.weight(1f))
                     AboutValue(Icons.Default.Security, "安心守护", palette.moss, Modifier.weight(1f))
                     AboutValue(Icons.Default.Badge, "生活有序", palette.blue, Modifier.weight(1f))
+                }
+            }
+        }
+        item {
+            PlushCard(padding = 16.dp) {
+                SectionTitle("小程序版本", Icons.Default.QrCode2)
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("也可以在微信里使用绒绒记账", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text("适合临时记一笔、换设备快速打开；App 和小程序功能会按平台规则逐步对齐。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Image(
+                        painter = painterResource(R.drawable.miniprogram_code),
+                        contentDescription = "绒绒记账小程序码",
+                        modifier = Modifier.size(118.dp).clip(RoundedCornerShape(18.dp)),
+                        contentScale = ContentScale.Fit
+                    )
                 }
             }
         }
@@ -1490,8 +1507,6 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                 ProfileSectionTitle("通用设置")
                 SettingsValueRow(Icons.Default.Palette, "主题", plushThemeName(state.themeTone), palette.rose) { showTheme = true }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                ToggleRow(Icons.Default.DarkMode, "深色模式", state.darkMode, viewModel::setDarkMode)
-                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 SettingsValueRow(Icons.Default.Notifications, "记账提醒", if (reminderEnabled) "每天 21:00" else "已关闭", palette.coral) { showReminder = true }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
                 SettingsValueRow(Icons.Default.Paid, "货币单位", currency, palette.moss) { showCurrency = true }
@@ -2155,7 +2170,7 @@ private fun String.maskIf(enabled: Boolean): String {
 private fun membershipLabel(role: String?, tier: String?): String = when {
     role == "admin" -> "管理员"
     tier == "permanent" -> "永久会员"
-    else -> "免费用户"
+    else -> "永久用户"
 }
 
 private fun badgeColor(role: String?, tier: String?): Color = when {

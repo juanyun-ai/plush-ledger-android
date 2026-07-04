@@ -47,6 +47,9 @@ interface LedgerDao {
     @Query("SELECT * FROM books WHERE user_id = :userId AND deleted_at IS NULL ORDER BY created_at LIMIT 1")
     suspend fun getDefaultBook(userId: String): BookEntity?
 
+    @Query("SELECT * FROM books WHERE user_id = :userId AND deleted_at IS NULL ORDER BY created_at")
+    suspend fun booksSnapshot(userId: String): List<BookEntity>
+
     @Query("SELECT COUNT(*) FROM categories WHERE user_id = :userId AND deleted_at IS NULL")
     suspend fun categoryCount(userId: String): Int
 
@@ -73,6 +76,9 @@ interface LedgerDao {
 
     @Query("SELECT * FROM budgets WHERE user_id = :userId AND month = :month AND deleted_at IS NULL ORDER BY created_at")
     fun observeBudgets(userId: String, month: String): Flow<List<BudgetEntity>>
+
+    @Query("SELECT * FROM budgets WHERE user_id = :userId AND deleted_at IS NULL ORDER BY created_at")
+    suspend fun budgetsSnapshot(userId: String): List<BudgetEntity>
 
     @Query("SELECT * FROM transactions WHERE user_id = :userId AND deleted_at IS NULL ORDER BY occurred_at DESC, created_at DESC")
     suspend fun transactionsSnapshot(userId: String): List<TransactionEntity>

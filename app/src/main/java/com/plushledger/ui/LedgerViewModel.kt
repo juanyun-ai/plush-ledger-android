@@ -880,12 +880,15 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private suspend fun completeSignIn(session: UserSession, message: String) {
+        val previousSession = state.value.session
         var syncWarning: String? = null
+        ledger.ensureUserWorkspace(session.userId, session.displayName, session.phone, session.email)
+        runCatching { ledger.mergeLocalWorkspaceIntoRemote(previousSession?.userId, session.userId) }
+            .onFailure { syncWarning = "登录成功，本机旧账本合并时遇到问题；原本地数据仍安全保留" }
         session.accessToken?.let { token ->
             runCatching { ledger.restoreFromCloud(token) }
                 .onFailure { syncWarning = "登录成功，但首次云恢复失败；本地数据仍安全保留" }
         }
-        ledger.ensureUserWorkspace(session.userId, session.displayName, session.phone, session.email)
         ledger.recordAppActivity("sign_in")
         app.enqueueImmediateSync()
         state.value = state.value.copy(

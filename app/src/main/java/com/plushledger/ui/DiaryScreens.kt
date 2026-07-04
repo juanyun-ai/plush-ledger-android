@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -78,8 +77,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
 import com.plushledger.R
 import java.io.File
 import java.io.FileOutputStream
@@ -98,12 +95,12 @@ private val diaryStatuses = listOf(
 )
 
 @Composable
-fun DiaryScreen(userId: String, quotes: List<String>, onBack: () -> Unit) {
+fun DiaryScreen(userId: String, quotes: List<String>, onChanged: () -> Unit = {}, onBack: () -> Unit) {
     val context = LocalContext.current
     val palette = LocalPlushPalette.current
     val store = remember(userId) { DiaryStore(context.applicationContext, userId) }
     var entries by remember(userId) { mutableStateOf(store.load()) }
-    val today = remember { LocalDate.now() }
+    val today = LocalDate.now()
     val todayEntry = entries.firstOrNull { it.date == today.toString() }
     val todayDraft = remember(userId) { store.draft(today.toString()) }
     var editingDate by rememberSaveable(userId) { mutableStateOf(today.toString()) }
@@ -132,8 +129,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, onBack: () -> Unit) {
                     Text("把今天的心情，轻轻写下来。", color = palette.muted, fontSize = 12.sp)
                 }
                 IconButton(onClick = {
-                    val shareText = text.trim().ifBlank { entries.firstOrNull { it.date == editingDate }?.text ?: "今天也值得被温柔记录。" }
-                    sharePreview = DiaryShareCard.create(context, selectedDate, displayStatus, shareText, shareQuote)
+                    sharePreview = DiaryShareCard.create(context, selectedDate)
                 }) { Icon(Icons.Default.Share, "分享日记", tint = palette.pink) }
                 MascotArt(46.dp, R.drawable.mascot_action_sleep)
             }
@@ -224,6 +220,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, onBack: () -> Unit) {
                     }
                     DiaryActionButton("保存", Icons.Default.Save, palette.pink, Modifier.weight(1f), enabled = text.trim().isNotBlank()) {
                         entries = store.saveEntry(editingDate, text, displayStatus, status)
+                        onChanged()
                         savedNotice = true
                     }
                 }
@@ -244,6 +241,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, onBack: () -> Unit) {
                     onClick = { editingEntry = entry },
                     onDelete = {
                         entries = store.deleteEntry(entry.date)
+                        onChanged()
                         Toast.makeText(context, "已删除这篇日记", Toast.LENGTH_SHORT).show()
                     }
                 )
@@ -275,6 +273,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, onBack: () -> Unit) {
             },
             onSave = { saved ->
                 entries = store.saveEntry(saved.date, saved.text, saved.mood, saved.status)
+                onChanged()
                 editingEntry = null
             }
         )
@@ -659,110 +658,39 @@ private fun matchingQuote(mood: String, quotes: List<String>): String {
 }
 
 private object DiaryShareCard {
-    private const val WIDTH = 1254
-    private const val HEIGHT = 1254
+    private const val WIDTH = 1122
+    private const val HEIGHT = 1402
 
-    fun create(context: Context, date: LocalDate, mood: String, diary: String, quote: String): Bitmap {
+    fun create(context: Context, date: LocalDate, locationHint: String = ""): Bitmap {
         val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        canvas.drawColor(AndroidColor.rgb(255, 250, 244))
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val brown = AndroidColor.rgb(82, 61, 48)
-        val border = AndroidColor.rgb(248, 218, 180)
-
-        drawSoftCircle(canvas, paint, 102f, 1030f, 74f, AndroidColor.rgb(255, 246, 232))
-        drawSoftCircle(canvas, paint, 1150f, 245f, 64f, AndroidColor.rgb(255, 244, 226))
-        drawHeart(canvas, paint, 940f, 205f, 20f, AndroidColor.rgb(255, 184, 166))
-        drawStar(canvas, paint, 922f, 300f, 36f, AndroidColor.rgb(255, 198, 72))
-        drawHeart(canvas, paint, 184f, 1052f, 22f, AndroidColor.rgb(255, 152, 118))
-
-        val logo = BitmapFactory.decodeResource(context.resources, R.drawable.brand_logo_transparent)
-        canvas.drawBitmap(logo, Rect(0, 0, logo.width, logo.height * 3 / 5), RectF(396f, 42f, 504f, 150f), paint)
-        paint.color = brown
-        paint.textSize = 62f
-        paint.isFakeBoldText = true
-        paint.textAlign = Paint.Align.LEFT
-        canvas.drawText("绒绒记账", 535f, 122f, paint)
+        val art = BitmapFactory.decodeResource(context.resources, shareArt(locationHint))
+        canvas.drawBitmap(art, null, Rect(0, 0, WIDTH, HEIGHT), paint)
+        paint.color = 0xF9FFF8EE.toInt()
+        canvas.drawRoundRect(RectF(706f, 118f, 1010f, 229f), 24f, 24f, paint)
+        paint.color = 0xFF7D5B46.toInt()
         paint.textAlign = Paint.Align.CENTER
-        paint.textSize = 27f
         paint.isFakeBoldText = false
-        paint.color = AndroidColor.rgb(160, 128, 104)
-        canvas.drawText("♥  温暖每一笔，记录每一天  ♥", WIDTH / 2f, 180f, paint)
-
-        paint.color = AndroidColor.rgb(255, 253, 248)
-        canvas.drawRoundRect(RectF(238f, 218f, 1016f, 1002f), 58f, 58f, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2.5f
-        paint.color = AndroidColor.rgb(246, 224, 197)
-        canvas.drawRoundRect(RectF(238f, 218f, 1016f, 1002f), 58f, 58f, paint)
-        paint.style = Paint.Style.FILL
-
-        paint.color = AndroidColor.rgb(220, 174, 140)
-        paint.textSize = 80f
-        paint.isFakeBoldText = true
-        paint.textAlign = Paint.Align.LEFT
-        canvas.drawText("“", 282f, 330f, paint)
-        paint.textSize = 32f
-        paint.isFakeBoldText = false
-        paint.textAlign = Paint.Align.CENTER
-        paint.color = AndroidColor.rgb(130, 103, 83)
-        canvas.drawText(date.format(DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.CHINA)), WIDTH / 2f, 318f, paint)
-        paint.color = AndroidColor.rgb(228, 197, 166)
-        paint.strokeWidth = 2f
-        canvas.drawLine(548f, 348f, 604f, 348f, paint)
-        canvas.drawCircle(627f, 348f, 4f, paint)
-        canvas.drawLine(650f, 348f, 706f, 348f, paint)
-        paint.textAlign = Paint.Align.LEFT
-        paint.textSize = 56f
-        paint.color = brown
-        paint.isFakeBoldText = true
-        paint.typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL)
-        drawWrappedText(canvas, quote.ifBlank { "平凡的一天，也值得被温柔记录。" }, 366f, 430f, 420f, 80f, paint, 3)
-        paint.typeface = null
-        paint.isFakeBoldText = false
-
-        paint.color = AndroidColor.rgb(113, 185, 148)
-        canvas.drawCircle(322f, 618f, 10f, paint)
-        paint.textSize = 28f
-        paint.textAlign = Paint.Align.LEFT
-        paint.color = AndroidColor.rgb(130, 103, 83)
-        canvas.drawText("今日状态 ·", 360f, 636f, paint)
-        paint.color = AndroidColor.rgb(255, 112, 91)
-        canvas.drawText(if (mood.isBlank()) "未设置" else mood, 532f, 636f, paint)
-        paint.color = AndroidColor.rgb(226, 205, 184)
-        canvas.drawLine(360f, 670f, 630f, 670f, paint)
-
-        val mascot = BitmapFactory.decodeResource(context.resources, R.drawable.mascot_action_sleep)
-        canvas.drawBitmap(mascot, null, RectF(680f, 564f, 1062f, 965f), paint)
-
-        paint.color = AndroidColor.rgb(255, 253, 248)
-        canvas.drawRoundRect(RectF(280f, 786f, 748f, 896f), 24f, 24f, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2f
-        paint.color = AndroidColor.rgb(248, 224, 200)
-        canvas.drawRoundRect(RectF(280f, 786f, 748f, 896f), 24f, 24f, paint)
-        paint.style = Paint.Style.FILL
-        paint.textAlign = Paint.Align.LEFT
-        paint.color = AndroidColor.rgb(130, 103, 83)
+        paint.textSize = 38f
+        canvas.drawText(date.format(DateTimeFormatter.ofPattern("yyyy年 M 月 d 日", Locale.CHINA)), 858f, 166f, paint)
         paint.textSize = 25f
-        drawWrappedText(canvas, diary.ifBlank { "今天也值得被温柔记录。" }, 330f, 835f, 370f, 35f, paint, 2)
-
-        val qr = qrBitmap(downloadUrl(), 205)
-        paint.color = AndroidColor.WHITE
-        canvas.drawRoundRect(RectF(522f, 994f, 732f, 1204f), 28f, 28f, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2f
-        paint.color = AndroidColor.rgb(246, 224, 197)
-        canvas.drawRoundRect(RectF(522f, 994f, 732f, 1204f), 28f, 28f, paint)
-        paint.style = Paint.Style.FILL
-        canvas.drawBitmap(qr, null, RectF(540f, 1012f, 714f, 1186f), paint)
-        paint.textAlign = Paint.Align.CENTER
-        paint.color = brown
-        paint.textSize = 20f
-        canvas.drawText("扫码下载绒绒记账", WIDTH / 2f, 1230f, paint)
+        paint.color = 0xFF9F7F66.toInt()
+        canvas.drawText(date.format(DateTimeFormatter.ofPattern("EEEE", Locale.CHINA)), 858f, 205f, paint)
         return bitmap
     }
 
+    private fun shareArt(locationHint: String): Int {
+        val hint = locationHint.trim()
+        return when {
+            hint.contains("上海") -> R.drawable.share_province_shanghai
+            hint.contains("山东") || hint.contains("济南") || hint.contains("青岛") -> R.drawable.share_province_shandong
+            hint.contains("江苏") || hint.contains("南京") || hint.contains("苏州") -> R.drawable.share_province_jiangsu
+            hint.contains("河南") || hint.contains("郑州") || hint.contains("洛阳") -> R.drawable.share_province_henan
+            hint.contains("浙江") || hint.contains("杭州") || hint.contains("宁波") -> R.drawable.share_province_zhejiang
+            else -> R.drawable.share_province_default
+        }
+    }
     fun share(context: Context, bitmap: Bitmap) {
         val directory = File(context.cacheDir, "share").apply { mkdirs() }
         val file = File(directory, "rongrong-diary-${LocalDate.now()}.png")
@@ -773,50 +701,5 @@ private object DiaryShareCard {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }, "分享绒绒日记"))
-    }
-
-    private fun downloadUrl(): String = "https://juanyun-ai.github.io/plush-ledger-android/"
-
-    private fun drawSoftCircle(canvas: Canvas, paint: Paint, x: Float, y: Float, radius: Float, color: Int) {
-        paint.color = color
-        canvas.drawCircle(x, y, radius, paint)
-    }
-
-    private fun drawStar(canvas: Canvas, paint: Paint, x: Float, y: Float, size: Float, color: Int) {
-        paint.color = color
-        paint.textSize = size
-        paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("★", x, y, paint)
-    }
-
-    private fun drawHeart(canvas: Canvas, paint: Paint, x: Float, y: Float, size: Float, color: Int) {
-        paint.color = color
-        paint.textSize = size
-        paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("♥", x, y, paint)
-    }
-
-    private fun qrBitmap(content: String, size: Int): Bitmap {
-        val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size)
-        val pixels = IntArray(size * size)
-        for (y in 0 until size) for (x in 0 until size) {
-            pixels[y * size + x] = if (matrix[x, y]) AndroidColor.BLACK else AndroidColor.WHITE
-        }
-        return Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888)
-    }
-
-    private fun drawWrappedText(canvas: Canvas, text: String, x: Float, y: Float, maxWidth: Float, lineHeight: Float, paint: Paint, maxLines: Int) {
-        var line = ""
-        var lineIndex = 0
-        for (character in text) {
-            val candidate = line + character
-            if (paint.measureText(candidate) > maxWidth && line.isNotEmpty()) {
-                canvas.drawText(line, x, y + lineIndex * lineHeight, paint)
-                lineIndex++
-                if (lineIndex >= maxLines) return
-                line = character.toString()
-            } else line = candidate
-        }
-        if (line.isNotEmpty() && lineIndex < maxLines) canvas.drawText(line, x, y + lineIndex * lineHeight, paint)
     }
 }
