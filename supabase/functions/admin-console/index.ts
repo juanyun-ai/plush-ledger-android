@@ -127,7 +127,7 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
     select(admin, "transactions", "id,user_id,type,amount_minor,occurred_at,created_at,updated_at,deleted_at", "created_at", false, 2000),
     select(admin, "feedback", "id,user_id,status,source,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_feedback", "id,mini_user_id,status,created_at,updated_at", "created_at", false, 1000),
-    select(admin, "app_versions", "version_code,version_name,apk_url,file_size_bytes,active,published_at,updated_at", "version_code", false, 20),
+    select(admin, "app_versions", "platform,version_code,version_name,apk_url,file_size_bytes,active,published_at,updated_at", "version_code", false, 20),
   ]);
   if (authUsersResult.error) throw new Error(`Unable to load auth users: ${authUsersResult.error.message}`);
 
@@ -161,7 +161,8 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
   const incomeMinor = liveTransactions
     .filter((row: Json) => row.type === "income")
     .reduce((sum: number, row: Json) => sum + numberValue(row.amount_minor), 0);
-  const latestVersion = versions.find((row: Json) => row.active !== false) ?? versions[0] ?? null;
+  const appVersions = versions.filter((row: Json) => platformValue(row.platform) === "android");
+  const latestVersion = appVersions.find((row: Json) => row.active !== false) ?? appVersions[0] ?? null;
   const latestVersionSize = latestVersion ? numberValue(latestVersion.file_size_bytes) : 0;
   const feedbackRows = [...appFeedbackRows, ...miniFeedbackRows];
   const users = buildUserRows(
@@ -951,7 +952,8 @@ async function upsertMessage(admin: ReturnType<typeof createClient>, body: Json)
   const id = stringValue(body.id, 80);
   const title = stringValue(body.title, 80);
   const messageBody = stringValue(body.body, 2000);
-  const sourceKey = stringValue(body.source_key, 120) || null;
+  const target = messageTargetValue(body.target);
+  const sourceKey = stringValue(body.source_key, 120) || `manual:${target}:${Date.now()}`;
   if (!title || !messageBody) throw new Error("Message title and body are required");
   const payload: Json = {
     title,
@@ -974,22 +976,23 @@ async function deleteById(admin: ReturnType<typeof createClient>, table: string,
 }
 
 async function upsertVersion(admin: ReturnType<typeof createClient>, body: Json) {
+  const platform = platformValue(body.platform);
   const payload = {
-    platform: "android",
+    platform,
     version_code: positiveInt(body.version_code, "version_code"),
     version_name: stringValue(body.version_name, 32),
-    apk_url: urlValue(body.apk_url, "apk_url"),
+    apk_url: platform === "android" ? urlValue(body.apk_url, "apk_url") : optionalUrlValue(body.apk_url),
     backup_apk_url: optionalUrlValue(body.backup_apk_url),
-    sha256: sha256Value(body.sha256),
-    file_size_bytes: positiveInt(body.file_size_bytes, "file_size_bytes"),
+    sha256: platform === "android" ? sha256Value(body.sha256) : optionalSha256Value(body.sha256),
+    file_size_bytes: platform === "android" ? positiveInt(body.file_size_bytes, "file_size_bytes") : optionalPositiveInt(body.file_size_bytes, "file_size_bytes"),
     release_notes: stringValue(body.release_notes, 3000),
-    is_mandatory: Boolean(body.is_mandatory),
+    is_mandatory: platform === "android" && Boolean(body.is_mandatory),
     active: body.active !== false,
     updated_at: Date.now(),
     published_at: Date.now(),
   };
   if (!payload.version_name) throw new Error("version_name is required");
-  const { error } = await admin.from("app_versions").upsert(payload, { onConflict: "version_code" });
+  const { error } = await admin.from("app_versions").upsert(payload, { onConflict: "platform,version_code" });
   if (error) throw new Error(`Unable to save app version: ${error.message}`);
   return { ok: true };
 }
@@ -1108,6 +1111,23 @@ function positiveInt(value: unknown, field: string): number {
   return number;
 }
 
+function optionalPositiveInt(value: unknown, field: string): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  return positiveInt(value, field);
+}
+
+function platformValue(value: unknown): string {
+  const raw = stringValue(value, 40);
+  return raw === "mini_program" ? "mini_program" : "android";
+}
+
+function messageTargetValue(value: unknown): string {
+  const raw = stringValue(value, 40);
+  if (raw === "app") return "app";
+  if (raw === "all" || raw === "global") return "global";
+  return "mini";
+}
+
 function urlValue(value: unknown, field: string): string {
   const raw = stringValue(value, 600);
   if (!/^https:\/\//i.test(raw)) throw new Error(`${field} must be an HTTPS URL`);
@@ -1123,4 +1143,9 @@ function sha256Value(value: unknown): string {
   const raw = stringValue(value, 64).toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(raw)) throw new Error("sha256 must be 64 hex characters");
   return raw;
+}
+
+function optionalSha256Value(value: unknown): string | null {
+  const raw = stringValue(value, 64);
+  return raw ? sha256Value(raw) : null;
 }

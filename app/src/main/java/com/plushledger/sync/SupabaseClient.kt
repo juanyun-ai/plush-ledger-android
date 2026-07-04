@@ -287,6 +287,7 @@ class SupabaseClient {
         )
         val array = if (text.isBlank()) JSONArray() else JSONArray(text)
         return List(array.length()) { index -> array.getJSONObject(index) }
+            .filter { it.isAppVisibleOfficialMessage() }
     }
 
     suspend fun fetchLatestAppVersion(): AppVersionInfo? {
@@ -455,6 +456,15 @@ private fun JSONObject.toMembershipOrderInfo() = MembershipOrderInfo(
     providerOrderId = optString("provider_order_id").takeIf(String::isNotBlank),
     createdAt = getLong("created_at")
 )
+
+private fun JSONObject.isAppVisibleOfficialMessage(): Boolean {
+    val source = optString("source_key").lowercase()
+    if (source.isBlank()) return true
+    if (source.contains("mini") || source.contains("wechat") || source.contains("小程序") || Regex("(^|[:_-])mp($|[:_-])").containsMatchIn(source)) {
+        return false
+    }
+    return true
+}
 
 private fun Any.toJson(): JSONObject = when (this) {
     is ProfileEntity -> JSONObject()

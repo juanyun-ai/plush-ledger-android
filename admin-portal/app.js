@@ -84,6 +84,9 @@ function init() {
   els.dateFilter.value = state.selectedDate;
   renderLinks();
   bindEvents();
+  resetMessageForm();
+  resetVersionForm();
+  resetConfigForm();
   renderShell();
   if (isReady()) loadDashboard();
 }
@@ -135,6 +138,7 @@ function bindEvents() {
       if (!group) return;
       state.sourceFilters[group] = button.dataset.sourceValue || "all";
       renderSourceFilteredGroup(group);
+      syncFormTargetForGroup(group);
     });
   });
 
@@ -146,6 +150,9 @@ function bindEvents() {
   els.messageForm.addEventListener("submit", saveMessage);
   els.versionForm.addEventListener("submit", saveVersion);
   els.configForm.addEventListener("submit", saveConfig);
+  byId("messageTarget").addEventListener("change", updateMessageSourcePlaceholder);
+  byId("versionPlatform").addEventListener("change", updateVersionPlatformFields);
+  byId("configTarget").addEventListener("change", updateConfigKeyPlaceholder);
   els.closeUserModal.addEventListener("click", closeUserModal);
   els.userModal.addEventListener("click", (event) => {
     if (event.target === els.userModal) closeUserModal();
@@ -348,8 +355,8 @@ function renderFeedback() {
       <td class="reply-cell">
         <textarea data-feedback-reply="${escapeHtml(item.id)}" maxlength="500" placeholder="写给这个用户的点对点回复">${escapeHtml(item.developer_reply || "")}</textarea>
         <div class="reply-actions">
-          <button data-feedback-reply-save="${escapeHtml(item.id)}" type="button">保存回复</button>
-          <small>${item.replied_at ? `已回复 ${formatTime(item.replied_at)}${item.reply_seen_at ? ` · 已读 ${formatTime(item.reply_seen_at)}` : ""}` : "未回复"}</small>
+          <button data-feedback-reply-save="${escapeHtml(item.id)}" type="button">${item.developer_reply ? "更新回复" : "发送回复"}</button>
+          <small>${item.replied_at ? `用户打开反馈页后可见 · ${formatTime(item.replied_at)}${item.reply_seen_at ? ` · 已读 ${formatTime(item.reply_seen_at)}` : ""}` : "未回复"}</small>
         </div>
       </td>
       <td><span class="status">${statusLabel(item.status)}</span></td>
@@ -374,7 +381,7 @@ function renderFeedback() {
       button.disabled = true;
       try {
         await adminAction("feedback.reply", { id, reply });
-        toast(reply ? "回复已保存" : "回复已清空");
+        toast(reply ? "回复已发送/保存，用户打开反馈页后可见" : "回复已清空");
         await loadDashboard();
       } catch (error) {
         toast(error.message || "保存失败", true);
@@ -403,7 +410,7 @@ function renderMessages() {
         <button class="small ghost danger" data-delete-message="${item.id}" type="button">删除</button>
       </div>
     </article>
-  `).join("") || `<p class="muted">暂无消息</p>`;
+  `).join("") || `<p class="muted">${emptySourceText("messages")}</p>`;
   bindMessageActions();
 }
 
@@ -416,6 +423,8 @@ function bindMessageActions() {
       byId("messageTitle").value = item.title || "";
       byId("messageBody").value = item.body || "";
       byId("messageSourceKey").value = item.source_key || "";
+      byId("messageTarget").value = moduleSource(item, "messages");
+      updateMessageSourcePlaceholder();
       switchTab("messages");
     });
   });
@@ -430,11 +439,13 @@ function bindMessageActions() {
 
 async function saveMessage(event) {
   event.preventDefault();
+  const target = byId("messageTarget").value || "mini";
   await adminAction("message.upsert", {
     id: byId("messageId").value || undefined,
+    target,
     title: byId("messageTitle").value.trim(),
     body: byId("messageBody").value.trim(),
-    source_key: byId("messageSourceKey").value.trim() || undefined,
+    source_key: sourceKeyForTarget(target, byId("messageSourceKey").value),
   });
   resetMessageForm();
   await loadDashboard();
@@ -443,6 +454,8 @@ async function saveMessage(event) {
 function resetMessageForm() {
   els.messageForm.reset();
   byId("messageId").value = "";
+  byId("messageTarget").value = defaultTargetForGroup("messages");
+  updateMessageSourcePlaceholder();
 }
 
 function renderVersions() {
@@ -459,18 +472,23 @@ function renderVersions() {
       </div>
       <p>${escapeHtml(item.release_notes || "").replace(/\n/g, "<br>")}</p>
       <div class="item-actions">
-        <button class="small ghost" data-edit-version="${item.version_code}" type="button">填入表单</button>
+        <button class="small ghost" data-edit-version="${escapeHtml(`${item.platform || "android"}:${item.version_code}`)}" type="button">填入表单</button>
       </div>
     </article>
-  `).join("") || `<p class="muted">暂无版本</p>`;
+  `).join("") || `<p class="muted">${emptySourceText("versions")}</p>`;
   document.querySelectorAll("[data-edit-version]").forEach((button) => {
     button.addEventListener("click", () => fillVersion(button.dataset.editVersion));
   });
 }
 
-function fillVersion(versionCode) {
-  const item = state.dashboard.versions.find((row) => String(row.version_code) === String(versionCode));
+function fillVersion(versionKey) {
+  const [platform, versionCode] = String(versionKey || "").split(":");
+  const item = state.dashboard.versions.find((row) =>
+    String(row.platform || "android") === String(platform || "android") &&
+    String(row.version_code) === String(versionCode || versionKey)
+  );
   if (!item) return;
+  byId("versionPlatform").value = item.platform || "android";
   byId("versionCode").value = item.version_code || "";
   byId("versionName").value = item.version_name || "";
   byId("apkUrl").value = item.apk_url || "";
@@ -480,24 +498,27 @@ function fillVersion(versionCode) {
   byId("releaseNotes").value = item.release_notes || "";
   byId("mandatory").checked = Boolean(item.is_mandatory);
   byId("active").checked = item.active !== false;
+  updateVersionPlatformFields();
   switchTab("versions");
 }
 
 async function saveVersion(event) {
   event.preventDefault();
+  const platform = byId("versionPlatform").value || "android";
+  const fileSizeText = byId("fileSizeBytes").value.trim();
   await adminAction("version.upsert", {
+    platform,
     version_code: Number(byId("versionCode").value),
     version_name: byId("versionName").value.trim(),
-    apk_url: byId("apkUrl").value.trim(),
+    apk_url: byId("apkUrl").value.trim() || null,
     backup_apk_url: byId("backupApkUrl").value.trim() || null,
-    sha256: byId("sha256").value.trim(),
-    file_size_bytes: Number(byId("fileSizeBytes").value),
+    sha256: byId("sha256").value.trim() || null,
+    file_size_bytes: fileSizeText ? Number(fileSizeText) : null,
     release_notes: byId("releaseNotes").value.trim(),
     is_mandatory: byId("mandatory").checked,
     active: byId("active").checked,
   });
-  els.versionForm.reset();
-  byId("active").checked = true;
+  resetVersionForm();
   await loadDashboard();
 }
 
@@ -520,7 +541,7 @@ function renderConfig() {
         <button class="small ghost danger" data-delete-config="${item.key}" type="button">删除</button>
       </div>
     </article>
-  `).join("") || `<p class="muted">暂无配置</p>`;
+  `).join("") || `<p class="muted">${emptySourceText("config")}</p>`;
   bindConfigActions();
 }
 
@@ -533,6 +554,8 @@ function bindConfigActions() {
       byId("configValue").value = JSON.stringify(item.value, null, 2);
       byId("configDescription").value = item.description || "";
       byId("configActive").checked = item.active !== false;
+      byId("configTarget").value = moduleSource(item, "config");
+      updateConfigKeyPlaceholder();
     });
   });
   document.querySelectorAll("[data-delete-config]").forEach((button) => {
@@ -552,16 +575,31 @@ async function saveConfig(event) {
   } catch {
     return toast("JSON 值格式不正确", true);
   }
+  const target = byId("configTarget").value || "mini";
   await adminAction("config.upsert", {
-    key: byId("configKey").value.trim(),
+    target,
+    key: normalizeConfigKey(byId("configKey").value, target),
     value,
     description: byId("configDescription").value.trim(),
     active: byId("configActive").checked,
   });
+  resetConfigForm();
+  await loadDashboard();
+}
+
+function resetVersionForm() {
+  els.versionForm.reset();
+  byId("versionPlatform").value = defaultTargetForGroup("versions") === "mini" ? "mini_program" : "android";
+  byId("active").checked = true;
+  updateVersionPlatformFields();
+}
+
+function resetConfigForm() {
   els.configForm.reset();
+  byId("configTarget").value = defaultTargetForGroup("config");
   byId("configValue").value = "{}";
   byId("configActive").checked = true;
-  await loadDashboard();
+  updateConfigKeyPlaceholder();
 }
 
 function renderLinks() {
@@ -578,6 +616,12 @@ function renderSourceFilteredGroup(group) {
   if (group === "messages") return renderMessages();
   if (group === "versions") return renderVersions();
   if (group === "config") return renderConfig();
+}
+
+function syncFormTargetForGroup(group) {
+  if (group === "messages" && !byId("messageId").value) resetMessageForm();
+  if (group === "versions" && !byId("versionCode").value) resetVersionForm();
+  if (group === "config" && !byId("configKey").value) resetConfigForm();
 }
 
 function syncSourceFilterButtons(group) {
@@ -611,9 +655,85 @@ function moduleSource(item, group) {
 function sourceFromText(value) {
   const text = String(value || "").toLowerCase();
   if (!text) return "all";
-  if (text.includes("mini") || text.includes("wechat") || text.includes("mp") || text.includes("小程序")) return "mini";
-  if (text.includes("android") || text.includes("app") || text.startsWith("release:")) return "app";
+  if (text.includes("mini") || text.includes("wechat") || text.includes("小程序") || /(^|[:_-])mp($|[:_-])/.test(text)) return "mini";
+  if (text.includes("android") || /(^|[:_-])app($|[:_-])/.test(text) || text.startsWith("release:android:")) return "app";
   return "all";
+}
+
+function defaultTargetForGroup(group) {
+  const filter = state.sourceFilters[group] || "all";
+  if (filter === "app") return "app";
+  if (filter === "all") return "mini";
+  return filter;
+}
+
+function emptySourceText(group) {
+  const filter = state.sourceFilters[group] || "all";
+  const source = filter === "mini" ? "小程序" : filter === "app" ? "App" : "";
+  if (group === "messages") return source ? `暂无${source}消息。发布消息时请选择“${source}”。` : "暂无消息";
+  if (group === "versions") return source ? `暂无${source}版本记录。保存版本时请选择对应平台。` : "暂无版本";
+  if (group === "config") return source ? `暂无${source}远程配置。保存配置时请选择对应范围。` : "暂无配置";
+  return "暂无数据";
+}
+
+function sourceKeyForTarget(target, rawValue) {
+  const current = String(rawValue || "").trim();
+  if (current) return current;
+  const normalized = target === "app" ? "app" : target === "all" ? "global" : "mini";
+  return `manual:${normalized}:${compactTimestamp()}`;
+}
+
+function normalizeConfigKey(rawValue, target) {
+  const key = String(rawValue || "").trim();
+  if (!key) return key;
+  const source = sourceFromText(key);
+  if (source !== "all" || target === "all") return key;
+  return `${target === "app" ? "app" : "mini"}_${key}`;
+}
+
+function compactTimestamp() {
+  const date = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join("");
+}
+
+function updateMessageSourcePlaceholder() {
+  const target = byId("messageTarget").value || "mini";
+  const hint = target === "app" ? "manual:app:..." : target === "all" ? "manual:global:..." : "manual:mini:...";
+  byId("messageSourceKey").placeholder = `留空自动生成 ${hint}`;
+}
+
+function updateVersionPlatformFields() {
+  const isMini = byId("versionPlatform").value === "mini_program";
+  const optionalFields = [
+    ["apkUrl", "小程序版本不需要 APK 地址"],
+    ["backupApkUrl", "小程序版本不需要备用 APK"],
+    ["sha256", "小程序版本不需要 SHA-256"],
+    ["fileSizeBytes", "小程序版本不需要文件大小"],
+  ];
+  optionalFields.forEach(([id, placeholder]) => {
+    const input = byId(id);
+    input.required = !isMini && id !== "backupApkUrl";
+    input.placeholder = isMini ? placeholder : "";
+  });
+  byId("mandatory").disabled = isMini;
+  if (isMini) byId("mandatory").checked = false;
+}
+
+function updateConfigKeyPlaceholder() {
+  const target = byId("configTarget").value || "mini";
+  byId("configKey").placeholder = target === "app"
+    ? "app_home_notice"
+    : target === "all"
+      ? "home_notice"
+      : "mini_home_notice";
 }
 
 function moduleSourceLabel(item, group) {

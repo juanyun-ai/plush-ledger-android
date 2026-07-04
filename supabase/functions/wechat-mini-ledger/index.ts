@@ -108,7 +108,15 @@ async function listMessages(): Promise<Response> {
     "GET",
     "/rest/v1/official_messages?select=id,title,body,source_key,created_at,updated_at&order=created_at.desc&limit=50",
   );
-  return json({ ok: true, messages: rows });
+  return json({ ok: true, messages: rows.filter(isMiniVisibleMessage) });
+}
+
+function isMiniVisibleMessage(row: Json): boolean {
+  const source = String(row.source_key ?? "").toLowerCase();
+  if (!source) return true;
+  if (source.includes("mini") || source.includes("wechat") || source.includes("小程序") || /(^|[:_-])mp($|[:_-])/.test(source)) return true;
+  if (source.includes("android") || /(^|[:_-])app($|[:_-])/.test(source) || source.startsWith("release:")) return false;
+  return true;
 }
 
 async function submitFeedback(req: Request, body: Json): Promise<Response> {

@@ -10,9 +10,9 @@
 - 用户明细按 App Auth 与小程序 mini_users 分开显示；小程序用户优先显示用户自设昵称，不做可能重复的合并。
 - 运营总览支持选择日期，App 活跃只展示 `app_activity_events`、Auth 最后登录和 profile 设备同步能证明的数据，不把记账发生日伪装成登录。
 - 可点开单个用户查看画像、反馈记录、近 7 日 / 近 30 日 / 近 12 月活动和记账趋势；没有事件流水的旧版本数据会明确标注证据边界。
-- 发布、编辑、删除官方消息。
-- 创建或更新 Android 版本更新配置。
-- 管理预留的远程配置项，供后续 App 版本读取。
+- 发布、编辑、删除官方消息，并按 App / 小程序 / 通用区分发布范围。
+- 创建或更新 App Android 与微信小程序版本记录。
+- 管理预留的远程配置项，并按 App / 小程序 / 通用区分配置范围。
 - 汇总常用运维入口。
 
 ## 部署
@@ -21,8 +21,8 @@
 
 - `app_config` 和 `mini_feedback` 表已创建。
 - `app_activity_events` 表已创建，用于后续 Android 版本记录轻量 App 打开事件。
-- `admin-console` Edge Function 已部署并为 ACTIVE，当前版本为 v10。
-- `wechat-mini-ledger` Edge Function 已部署并为 ACTIVE，当前版本为 v9，支持小程序反馈提交、远程官方消息、小程序昵称同步和 last_seen 更新。
+- `admin-console` Edge Function 需要部署当前源码后，才支持小程序版本记录、分渠道消息和分渠道远程配置。
+- `wechat-mini-ledger` Edge Function 需要部署当前源码后，才会过滤 App 专属官方消息，只返回小程序和通用消息。
 - 未登录访问会返回 401，非允许浏览器来源会返回 403。
 
 静态托管侧：
