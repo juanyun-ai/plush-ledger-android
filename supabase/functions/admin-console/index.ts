@@ -122,7 +122,7 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
   ] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,account_no,age,birth_date,gender,province,city,signature,device_brand,device_model,device_platform,device_last_seen_at,app_version,created_at,updated_at", "created_at", false, 1000),
-    select(admin, "mini_users", "id,account_no,nickname,email,email_verified_at,gender,birth_date,province,city,signature,birthday_wechat_enabled,birthday_email_enabled,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "mini_users", "id,account_no,nickname,email,email_verified_at,gender,birth_date,province,city,district,signature,birthday_wechat_enabled,birthday_email_enabled,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_sessions", "user_id,created_at,last_used_at", "last_used_at", false, 1000),
     select(admin, "mini_ledger_snapshots", "user_id,payload,created_at,updated_at", "updated_at", false, 1000),
     select(admin, "app_activity_events", "id,user_id,event_type,device_brand,device_model,device_platform,app_version,occurred_at,created_at", "occurred_at", false, 5000),
@@ -557,6 +557,7 @@ function buildUserRows(
     const birthDate = stringValue(user.birth_date, 20) || stringValue(snapshotProfile.birth_date, 20);
     const province = stringValue(user.province, 80) || stringValue(snapshotProfile.province, 80);
     const city = stringValue(user.city, 80) || stringValue(snapshotProfile.city, 80);
+    const district = stringValue(user.district, 80) || stringValue(snapshotProfile.district, 80);
     const age = ageFromBirthDate(birthDate);
     return {
       source: "小程序",
@@ -578,7 +579,8 @@ function buildUserRows(
       age_bucket: ageBucket(age),
       province,
       city,
-      region: regionName(province, city),
+      district,
+      region: regionName(province, city, district),
       birthday_wechat_enabled: Boolean(user.birthday_wechat_enabled),
       birthday_email_enabled: Boolean(user.birthday_email_enabled),
       registered_at: numberValue(user.created_at),
@@ -624,6 +626,7 @@ function miniSnapshotProfiles(snapshots: Json[]) {
       birth_date: profile.birthDate,
       province: profile.province,
       city: profile.city,
+      district: profile.district,
       signature: profile.signature,
       email: profile.email,
     });
@@ -1141,11 +1144,14 @@ function ageBucket(age: unknown): string {
   return "45岁以上";
 }
 
-function regionName(province: unknown, city: unknown): string {
+function regionName(province: unknown, city: unknown, district: unknown = ""): string {
   const provinceText = stringValue(province, 80);
   const cityText = stringValue(city, 80);
-  if (provinceText && cityText && provinceText !== cityText) return `${provinceText} ${cityText}`;
-  return cityText || provinceText;
+  const districtText = stringValue(district, 80);
+  const parts = [provinceText, cityText, districtText]
+    .filter(Boolean)
+    .filter((item, index, list) => list.indexOf(item) === index);
+  return parts.join(" ");
 }
 
 function positiveInt(value: unknown, field: string): number {
