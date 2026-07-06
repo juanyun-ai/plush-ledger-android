@@ -1,7 +1,8 @@
 alter table public.mini_users
   add column if not exists account_no text,
   add column if not exists account_no_changed_year text,
-  add column if not exists account_no_changed_count integer not null default 0;
+  add column if not exists account_no_changed_count integer not null default 0,
+  add column if not exists district text;
 
 create unique index if not exists mini_users_account_no_unique_idx
 on public.mini_users (lower(account_no))
@@ -25,6 +26,15 @@ grant select, insert, update, delete on public.mini_profile_name_history to serv
 create index if not exists mini_profile_name_history_user_changed_idx
 on public.mini_profile_name_history(user_id, changed_at desc);
 
+update public.mini_users as user_row
+set district = coalesce(
+  nullif(left(btrim(snapshot.payload #>> '{profile,district}'), 80), ''),
+  user_row.district
+)
+from public.mini_ledger_snapshots as snapshot
+where snapshot.user_id = user_row.id;
+
 comment on column public.mini_users.account_no is 'User-facing mini-program ID, 4-12 chars, generated on first cloud login and user-editable at most twice per year.';
 comment on column public.mini_users.account_no_changed_year is 'Calendar year for account_no_changed_count.';
 comment on column public.mini_users.account_no_changed_count is 'User-facing ID changes used in account_no_changed_year.';
+comment on column public.mini_users.district is 'Optional user-selected district/county from the WeChat mini-program region picker.';

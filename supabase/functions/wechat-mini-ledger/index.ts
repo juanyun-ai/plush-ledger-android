@@ -230,7 +230,7 @@ async function sendDueBirthdayGreetings(req: Request, body: Json): Promise<Respo
   const monthDay = today.slice(5);
   const rows = await rest(
     "GET",
-    "/rest/v1/mini_users?select=id,openid,nickname,email,email_verified_at,province,city,birth_date,birthday_wechat_enabled,birthday_email_enabled,last_birthday_wechat_year,last_birthday_email_year&birth_date=not.is.null&limit=1000",
+    "/rest/v1/mini_users?select=id,openid,nickname,email,email_verified_at,province,city,district,birth_date,birthday_wechat_enabled,birthday_email_enabled,last_birthday_wechat_year,last_birthday_email_year&birth_date=not.is.null&limit=1000",
   );
   const due = rows.filter((row) => String(row.birth_date || "").slice(5) === monthDay);
   let emailSent = 0;
@@ -333,6 +333,7 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
   const birthDate = birthDateValue(profile.birthDate);
   const province = stringValue(profile.province, 80);
   const city = stringValue(profile.city, 80);
+  const district = stringValue(profile.district, 80);
   const signature = stringValue(profile.signature, 120);
   const patch: Json = {
     ...clientPatch(clientInfo),
@@ -347,6 +348,7 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
   if (birthDate) patch.birth_date = birthDate;
   if (province) patch.province = province;
   if (city) patch.city = city;
+  if (district) patch.district = district;
   if (signature) patch.signature = signature;
   patch.birthday_wechat_enabled = Boolean(profile.birthdayWechatSubscribeEnabled);
   patch.birthday_email_enabled = Boolean(profile.birthdayEmailEnabled);
