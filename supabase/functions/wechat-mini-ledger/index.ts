@@ -14,6 +14,7 @@ const defaultWechatMiniAppId = "wx3124ddc53c168286";
 const wechatAppId = Deno.env.get("WECHAT_MINI_APPID") ?? defaultWechatMiniAppId;
 const wechatSecret = Deno.env.get("WECHAT_MINI_SECRET") ?? Deno.env.get("密钥") ?? "";
 const chinaOffsetMs = 8 * 60 * 60 * 1000;
+const nicknameWindowMs = 180 * 24 * 60 * 60 * 1000;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return json({ ok: true });
@@ -339,7 +340,9 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
     last_seen_at: now,
   };
   if (accountNo) applyAccountNoPatch(patch, current, accountNo, now);
-  if (nickname) patch.nickname = nickname;
+  const nicknameHistory = nickname
+    ? await applyNicknamePatch(patch, current, nickname, userId, profile.nicknameHistory, now)
+    : profile.nicknameHistory;
   if (gender) patch.gender = gender;
   if (birthDate) patch.birth_date = birthDate;
   if (province) patch.province = province;
@@ -353,7 +356,7 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
     patch,
     { Prefer: "return=minimal" },
   );
-  await syncMiniNameHistory(userId, profile.nicknameHistory);
+  await syncMiniNameHistory(userId, nicknameHistory);
 }
 
 async function loadMiniUser(userId: unknown): Promise<Json> {
@@ -376,7 +379,8 @@ async function assignMiniAccountNo(userId: unknown): Promise<string> {
       );
       return accountNo;
     } catch (error) {
-      if (!String(error instanceof Error ? error.message : error).includes("duplicate")) throw error;
+      const message = String(error instanceof Error ? error.message : error).toLowerCase();
+      if (!message.includes("duplicate") && !message.includes("unique") && !message.includes("23505")) throw error;
     }
   }
   throw new Error("用户ID生成失败，请稍后再试");
@@ -395,6 +399,47 @@ function applyAccountNoPatch(patch: Json, current: Json, accountNo: string, now:
   patch.account_no = accountNo;
   patch.account_no_changed_year = year;
   patch.account_no_changed_count = used + 1;
+}
+
+async function applyNicknamePatch(
+  patch: Json,
+  current: Json,
+  nickname: string,
+  userId: unknown,
+  historyValue: unknown,
+  now: number,
+): Promise<unknown> {
+  const currentNickname = stringValue(current.nickname, 80);
+  if (!currentNickname) {
+    patch.nickname = nickname;
+    return historyValue;
+  }
+  if (currentNickname === nickname) return historyValue;
+  const since = now - nicknameWindowMs;
+  const recentRows = await rest(
+    "GET",
+    `/rest/v1/mini_profile_name_history?select=id&user_id=eq.${encodeURIComponent(String(userId))}&changed_at=gte.${since}&limit=4`,
+  );
+  if (recentRows.length >= 3) throw new Error("昵称180天内已修改3次，云端未保存本次修改");
+  patch.nickname = nickname;
+  const rows = Array.isArray(historyValue) ? historyValue : [];
+  const alreadyRecorded = rows.some((item) => {
+    const row = item && typeof item === "object" ? item as Json : {};
+    const oldName = stringValue(row.oldNickname ?? row.old_display_name, 80);
+    const newName = stringValue(row.newNickname ?? row.new_display_name, 80);
+    return oldName === currentNickname && newName === nickname;
+  });
+  if (alreadyRecorded) return historyValue;
+  return [
+    {
+      id: `name-server-${now}-${randomToken().slice(0, 8)}`,
+      oldNickname: currentNickname,
+      newNickname: nickname,
+      changedAt: now,
+      source: "mini",
+    },
+    ...rows,
+  ];
 }
 
 async function syncMiniNameHistory(userId: unknown, value: unknown): Promise<void> {
