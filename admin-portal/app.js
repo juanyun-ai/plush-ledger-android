@@ -313,7 +313,7 @@ function renderUsers() {
       <td><span class="source-tag">${escapeHtml(item.source || "-")}</span></td>
       <td>
         <strong>${escapeHtml(item.display_name || "-")}</strong>
-        <div class="item-meta">${escapeHtml(shortId(item.user_id || ""))}</div>
+        <div class="item-meta">${escapeHtml(item.account_no || shortId(item.user_id || ""))}</div>
       </td>
       <td>${escapeHtml(item.email || item.contact || "-")}</td>
       <td>
@@ -828,7 +828,8 @@ function openUserModal(key) {
   els.userModalTitle.textContent = user.display_name || shortId(user.user_id);
   els.userModalBody.innerHTML = `
     <section class="detail-grid">
-      ${detailItem("用户 ID", shortId(user.user_id))}
+      ${detailItem("用户 ID", user.account_no || "未设置")}
+      ${detailItem("云端编号", shortId(user.user_id))}
       ${detailItem("联系方式", user.email || user.contact || "未填写")}
       ${detailItem("设备", deviceLabel(user))}
       ${detailItem("版本", user.app_version ? `v${user.app_version}` : "未收集")}
@@ -859,6 +860,15 @@ function openUserModal(key) {
         ["近 30 日记账", user.record_month || []],
         ["近 12 月记账", user.record_year || []],
       ])}
+    </section>
+    <section class="detail-section">
+      <h3>昵称改名记录</h3>
+      ${(user.name_history || []).length ? (user.name_history || []).map((item) => `
+        <article class="feedback-card">
+          <div><strong>${escapeHtml(item.old_display_name || "-")} → ${escapeHtml(item.new_display_name || "-")}</strong><span>${formatTime(item.changed_at)}</span></div>
+          <small>${escapeHtml(item.source || "android")}</small>
+        </article>
+      `).join("") : `<p class="muted">暂无改名记录。</p>`}
     </section>
     <section class="detail-section">
       <h3>反馈记录</h3>
@@ -925,14 +935,18 @@ async function adminAction(action, payload) {
 }
 
 async function adminRequest(action, payload) {
-  return fetch(`${state.settings.supabaseUrl}/functions/v1/admin-console`, {
-    method: "POST",
-    headers: {
-      ...baseHeaders(),
-      Authorization: `Bearer ${state.session.access_token}`,
-    },
-    body: JSON.stringify({ action, ...payload }),
-  });
+  try {
+    return await fetch(`${state.settings.supabaseUrl}/functions/v1/admin-console`, {
+      method: "POST",
+      headers: {
+        ...baseHeaders(),
+        Authorization: `Bearer ${state.session.access_token}`,
+      },
+      body: JSON.stringify({ action, ...payload }),
+    });
+  } catch (error) {
+    throw new Error("无法连接管理函数：请检查网络、admin-console 是否已部署，以及 Supabase CORS/域名是否允许当前后台。");
+  }
 }
 
 async function ensureFreshSession(force = false) {

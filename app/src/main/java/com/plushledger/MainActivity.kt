@@ -629,7 +629,7 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
                                 viewModel.signInLocal(localName, localPassword)
                             }
                             Spacer(Modifier.height(10.dp))
-                            Text("本地模式无需注册，数据只保存在当前设备。", color = palette.muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                            Text("本地模式无需注册，数据只保存在当前设备。如切换为邮箱登录，需自行 CSV 格式导出数据。", color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                         }
                         "phone" -> {
                             Text("手机号验证码登录", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 20.sp)
@@ -646,13 +646,17 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
                                 )
                             }
                             Spacer(Modifier.height(10.dp))
-                            OtpEntryRow(phoneOtp, { phoneOtp = it }, state.otpCooldown, state.isBusy, serviceEnabled = false) { }
+                            OtpEntryRow(phoneOtp, { phoneOtp = it }, state.otpCooldown, state.isBusy) {
+                                viewModel.sendLoginOtp("phone", "$phoneCountryCode$phone")
+                            }
                             Spacer(Modifier.height(12.dp))
-                            AuthPrimaryButton("手机号登录（暂未开放）", Icons.Default.Phone, enabled = false) { }
+                            AuthPrimaryButton("手机号登录", Icons.Default.Phone, enabled = !state.isBusy && phone.isNotBlank() && phoneOtp.isNotBlank()) {
+                                viewModel.verifyLoginOtp("phone", "$phoneCountryCode$phone", phoneOtp)
+                            }
                             Spacer(Modifier.height(12.dp))
                             Surface(shape = RoundedCornerShape(16.dp), color = palette.surfaceAlt, border = BorderStroke(1.dp, palette.border)) {
                                 Text(
-                                    "手机号注册、绑定和短信验证码服务暂未开放。当前请使用邮箱或本地模式，填写的手机号不会提交。",
+                                    "手机号会通过 Supabase 短信验证码登录；如果收不到短信，请先在后台配置真实短信服务商。",
                                     modifier = Modifier.padding(12.dp),
                                     color = palette.muted,
                                     fontSize = 12.sp,

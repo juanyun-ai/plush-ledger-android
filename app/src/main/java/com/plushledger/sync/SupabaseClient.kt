@@ -161,6 +161,35 @@ class SupabaseClient {
         return text.trim().equals("true", ignoreCase = true)
     }
 
+    suspend fun countNicknameHistorySince(accessToken: String, userId: String, since: Long): Int {
+        val text = request(
+            method = "GET",
+            path = "/rest/v1/profile_name_history?select=id&user_id=eq.$userId&changed_at=gte.$since",
+            accessToken = accessToken
+        )
+        val array = if (text.isBlank()) JSONArray() else JSONArray(text)
+        return array.length()
+    }
+
+    suspend fun insertNicknameHistory(accessToken: String, userId: String, oldName: String, newName: String, changedAt: Long) {
+        val payload = JSONArray().put(
+            JSONObject()
+                .put("id", "$userId:$changedAt")
+                .put("user_id", userId)
+                .put("old_display_name", oldName)
+                .put("new_display_name", newName)
+                .put("changed_at", changedAt)
+                .put("source", "android")
+        )
+        request(
+            method = "POST",
+            path = "/rest/v1/profile_name_history?on_conflict=id",
+            body = payload,
+            accessToken = accessToken,
+            prefer = "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
     suspend fun recordAppActivity(accessToken: String, userId: String, eventType: String = "app_open") {
         val now = System.currentTimeMillis()
         val event = clientInfoPayload()

@@ -2,6 +2,7 @@ package com.plushledger.ui
 
 import android.content.Context
 import java.time.LocalDate
+import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -10,6 +11,8 @@ data class DiaryEntry(
     val text: String,
     val mood: String,
     val status: String = "",
+    val id: String = newDiaryId(date),
+    val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val deletedAt: Long? = null
 )
@@ -25,22 +28,64 @@ class DiaryStore(context: Context, private val userId: String) {
     fun load(): List<DiaryEntry> = decode(current.getString("entries", "[]"))
 
     fun saveToday(text: String, mood: String, status: String = ""): List<DiaryEntry> =
-        saveEntry(LocalDate.now().toString(), text, mood, status)
+        addEntry(LocalDate.now().toString(), text, mood, status)
 
-    fun saveEntry(date: String, text: String, mood: String, status: String = ""): List<DiaryEntry> {
-        val updated = (listOf(DiaryEntry(date, text.trim(), mood, status.trim())) + load().filterNot { it.date == date })
+    fun addEntry(date: String, text: String, mood: String, status: String = ""): List<DiaryEntry> {
+        val entry = DiaryEntry(date = date, text = text.trim(), mood = mood, status = status.trim())
+        val updated = (listOf(entry) + load())
             .take(180)
         save(updated)
-        removeDeletedMarker(date)
         clearDraft(date)
         return updated
     }
 
-    fun deleteEntry(date: String): List<DiaryEntry> {
-        val updated = load().filterNot { it.date == date }
+    fun saveEntry(entry: DiaryEntry): List<DiaryEntry> {
+        val now = System.currentTimeMillis()
+        val normalized = entry.copy(
+            id = entry.id.ifBlank { newDiaryId(entry.date) },
+            text = entry.text.trim(),
+            mood = entry.mood,
+            status = entry.status.trim(),
+            updatedAt = now
+        )
+        val updated = (listOf(normalized) + load().filterNot { it.id == normalized.id })
+            .sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
+            .take(180)
         save(updated)
-        markDeleted(date)
-        clearDraft(date)
+        return updated
+    }
+
+    fun saveEntry(date: String, text: String, mood: String, status: String = ""): List<DiaryEntry> =
+        addEntry(date, text, mood, status)
+
+    fun deleteEntry(entry: DiaryEntry): List<DiaryEntry> {
+        val updated = load().filterNot { it.id == entry.id }
+        save(updated)
+        markDeleted(entry)
+        clearDraft(entry.date)
+        return updated
+    }
+
+    fun mergeEntries(ids: Set<String>): List<DiaryEntry> {
+        val all = load()
+        val selected = all.filter { it.id in ids }.sortedWith(compareBy<DiaryEntry> { it.date }.thenBy { it.createdAt })
+        if (selected.size < 2 || selected.map { it.date }.distinct().size != 1) return all
+        val date = selected.first().date
+        val latest = selected.maxBy { it.updatedAt }
+        val merged = DiaryEntry(
+            date = date,
+            text = selected.joinToString("\n\n") { it.text },
+            mood = latest.mood,
+            status = latest.status,
+            id = newDiaryId(date),
+            createdAt = selected.minOf { it.createdAt },
+            updatedAt = System.currentTimeMillis()
+        )
+        selected.forEach(::markDeleted)
+        val updated = (listOf(merged) + all.filterNot { it.id in ids })
+            .sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
+            .take(180)
+        save(updated)
         return updated
     }
 
@@ -82,9 +127,11 @@ class DiaryStore(context: Context, private val userId: String) {
                 put(
                     JSONObject()
                         .put("date", entry.date)
+                        .put("id", entry.id)
                         .put("text", entry.text)
                         .put("mood", entry.mood)
                         .put("status", entry.status)
+                        .put("created_at", entry.createdAt)
                         .put("updated_at", entry.updatedAt)
                         .put("deleted_at", entry.deletedAt ?: JSONObject.NULL)
                 )
@@ -93,26 +140,49 @@ class DiaryStore(context: Context, private val userId: String) {
         current.edit().putString("entries", payload.toString()).apply()
     }
 
-    private fun markDeleted(date: String) {
-        val deleted = deletedDates().toMutableMap()
-        deleted[date] = System.currentTimeMillis()
+    private fun markDeleted(entry: DiaryEntry) {
+        val deleted = deletedEntries().toMutableMap()
+        deleted[entry.id] = entry.copy(text = "", deletedAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis())
         val payload = JSONObject()
-        deleted.forEach { (key, value) -> payload.put(key, value) }
+        deleted.forEach { (key, value) ->
+            payload.put(
+                key,
+                JSONObject()
+                    .put("id", value.id)
+                    .put("date", value.date)
+                    .put("updated_at", value.updatedAt)
+                    .put("deleted_at", value.deletedAt ?: value.updatedAt)
+            )
+        }
         current.edit().putString("deleted_entries", payload.toString()).apply()
     }
 
-    private fun removeDeletedMarker(date: String) {
-        val deleted = deletedDates().toMutableMap()
-        if (deleted.remove(date) == null) return
-        val payload = JSONObject()
-        deleted.forEach { (key, value) -> payload.put(key, value) }
-        current.edit().putString("deleted_entries", payload.toString()).apply()
-    }
-
-    private fun deletedDates(): Map<String, Long> = runCatching {
+    private fun deletedEntries(): Map<String, DiaryEntry> = runCatching {
         val raw = current.getString("deleted_entries", "{}") ?: "{}"
         val json = JSONObject(raw)
-        json.keys().asSequence().associateWith { key -> json.optLong(key, 0L) }.filterValues { it > 0L }
+        json.keys().asSequence().mapNotNull { key ->
+            val value = json.opt(key)
+            if (value is JSONObject) {
+                val id = value.optString("id", key)
+                val date = value.optString("date").ifBlank { key.takeIf { it.length == 10 } ?: LocalDate.now().toString() }
+                id to DiaryEntry(
+                    date = date,
+                    text = "",
+                    mood = "开心",
+                    id = id,
+                    createdAt = value.optLong("created_at", value.optLong("updated_at", 0L)),
+                    updatedAt = value.optLong("updated_at", value.optLong("deleted_at", 0L)),
+                    deletedAt = value.optLong("deleted_at", 0L).takeIf { it > 0L }
+                )
+            } else {
+                val deletedAt = json.optLong(key, 0L)
+                if (deletedAt > 0L) {
+                    key to DiaryEntry(date = key, text = "", mood = "开心", id = "legacy:$key", updatedAt = deletedAt, deletedAt = deletedAt)
+                } else {
+                    null
+                }
+            }
+        }.toMap()
     }.getOrDefault(emptyMap())
 
     private fun migrateLegacyEntries() {
@@ -131,11 +201,16 @@ class DiaryStore(context: Context, private val userId: String) {
                     text = item.optString("text").trim(),
                     mood = item.optString("mood", "开心"),
                     status = item.optString("status"),
+                    id = item.optString("id").ifBlank { "legacy:${item.optString("date")}:${item.optLong("updated_at", 0L)}" },
+                    createdAt = item.optLong("created_at", 0L).takeIf { it > 0L } ?: item.optLong("updated_at", 0L).takeIf { it > 0L } ?: 0L,
                     updatedAt = item.optLong("updated_at", 0L).takeIf { it > 0L } ?: 0L,
                     deletedAt = item.optLong("deleted_at", 0L).takeIf { it > 0L }
                 )
                 if (entry.date.isNotBlank() && entry.text.isNotBlank()) add(entry)
             }
-        }.sortedByDescending { it.date }
+        }.sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
     }.getOrDefault(emptyList())
 }
+
+private fun newDiaryId(date: String): String =
+    "diary:${date}:${UUID.randomUUID()}"

@@ -1299,7 +1299,9 @@ fun RecordScreen(
         item {
             Row(Modifier.fillMaxWidth().height(50.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = palette.ink) }
-                Text("记一笔", modifier = Modifier.weight(1f), color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Box(Modifier.weight(1f).height(50.dp), contentAlignment = Alignment.Center) {
+                    Text("记一笔", color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
                 IconButton(onClick = { showManage = !showManage }) { Icon(Icons.Default.Search, contentDescription = "搜索", tint = palette.ink) }
             }
         }
@@ -2390,9 +2392,15 @@ private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modi
     val selected = spend.firstOrNull { it.category.id == selectedId } ?: spend.firstOrNull()
     WarmPanel(modifier, padding = 14.dp) {
         ProfileSectionLine("支出构成")
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            DonutChart(spend, compact = false, selectedId = selected?.category?.id, modifier = Modifier.weight(0.86f), onSelect = onSelect)
-            Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 210.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                DonutChart(spend, compact = false, selectedId = selected?.category?.id, modifier = Modifier.fillMaxWidth(), onSelect = onSelect)
+            }
+            Column(Modifier.weight(1f).padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 spend.take(6).forEachIndexed { index, item ->
                     val percent = item.amountMinor * 1000 / totalExpense.coerceAtLeast(1)
                     val isSelected = item.category.id == selected?.category?.id
@@ -2409,19 +2417,6 @@ private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modi
                         Spacer(Modifier.width(7.dp))
                         Text(item.category.name, color = palette.ink, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Black else FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${percent / 10}.${percent % 10}%", color = if (isSelected) palette.rose else palette.muted, fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal, fontSize = 12.sp)
-                    }
-                }
-                selected?.let { item ->
-                    Surface(shape = RoundedCornerShape(16.dp), color = palette.surfaceAlt, border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
-                        Text(
-                            "${item.category.name} · ${Money.formatCny(item.amountMinor)}",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                            color = palette.ink,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                     }
                 }
             }
@@ -2457,7 +2452,12 @@ private fun DonutChart(spend: List<CategorySpend>, compact: Boolean = false, sel
     val total = rawTotal.coerceAtLeast(1)
     val top = spend.firstOrNull { it.category.id == selectedId } ?: spend.firstOrNull()
     val topPercent = (top?.amountMinor ?: 0L) * 1000 / total
-    Box(modifier.fillMaxWidth().height(if (compact) 150.dp else 210.dp), contentAlignment = Alignment.Center) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .then(if (compact) Modifier.height(150.dp) else Modifier.aspectRatio(1f)),
+        contentAlignment = Alignment.Center
+    ) {
         Canvas(
             Modifier
                 .size(if (compact) 116.dp else 176.dp)

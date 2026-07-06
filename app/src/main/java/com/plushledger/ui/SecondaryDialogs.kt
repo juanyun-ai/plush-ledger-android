@@ -32,14 +32,20 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Paid
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +65,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.plushledger.R
+import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 private fun PlushModalFrame(
@@ -276,38 +284,78 @@ fun ContactSupportDialog(email: String, onDismiss: () -> Unit, onOpenEmail: () -
     }
 }
 
-private data class ThemeOption(val key: String, val label: String, val color: Color, val surface: Color)
-
 @Composable
 fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String) -> Unit) {
     val palette = LocalPlushPalette.current
-    val options = listOf(
-        ThemeOption("warm", "奶油黄（经典款）", Color(0xFFFFA126), Color(0xFFFFF1D6)),
-        ThemeOption("pink", "樱花粉", Color(0xFFFF7EAA), Color(0xFFFFE7EF)),
-        ThemeOption("green", "薄荷绿", Color(0xFF69C79A), Color(0xFFE1F7EC)),
-        ThemeOption("blue", "天空蓝", Color(0xFF73B4F3), Color(0xFFE4F2FF)),
-        ThemeOption("purple", "薰衣草紫", Color(0xFFA184E7), Color(0xFFF0EAFF)),
-        ThemeOption("orange", "蜜桃橙", Color(0xFFFF9560), Color(0xFFFFEBDD)),
-        ThemeOption("brown", "可可棕", Color(0xFF9B6B4B), Color(0xFFF3E6D9)),
-        ThemeOption("mono", "牛奶白", Color(0xFFB7A18F), Color(0xFFFFFCF5))
-    )
+    var query by remember { mutableStateOf("") }
+    var typeFilter by remember { mutableStateOf("全部") }
+    val selectedSpec = plushThemeSpec(current)
+    val options = remember(query, typeFilter) {
+        plushThemeCatalog.filter { spec ->
+            (typeFilter == "全部" || spec.type == typeFilter) && spec.matchesThemeQuery(query)
+        }
+    }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxWidth(0.9f).heightIn(max = 820.dp), shape = RoundedCornerShape(34.dp), color = Color(0xFFFFFCF7), border = BorderStroke(2.dp, Color(0xFFFFD8A0)), shadowElevation = 22.dp) {
+        Surface(Modifier.fillMaxWidth(0.94f).heightIn(max = 820.dp), shape = RoundedCornerShape(34.dp), color = Color(0xFFFFFCF7), border = BorderStroke(2.dp, Color(0xFFFFD8A0)), shadowElevation = 22.dp) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Hi~", color = Color(0xFFFFA126), fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("绒绒 · 主题", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 32.sp)
-                        Text("♥  不同心情，不同颜色  ♥", color = Color(0xFF9A7865), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("绒绒 · 限定色卡", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 30.sp)
+                        Text("♥  国内外 58 款真实配色  ♥", color = Color(0xFF9A7865), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Close, "关闭", tint = palette.muted) }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it.take(24) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = palette.muted) },
+                    placeholder = { Text("搜索地区、色卡名或关键词", color = palette.muted) },
+                    shape = RoundedCornerShape(22.dp)
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("全部", "国内", "国外").forEach { filter ->
+                        ThemeFilterPill(filter, selected = typeFilter == filter, modifier = Modifier.weight(1f)) { typeFilter = filter }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = (selectedSpec?.secondary ?: palette.rose).copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, (selectedSpec?.primary ?: palette.rose).copy(alpha = 0.32f))
+                ) {
+                    Column(Modifier.padding(13.dp)) {
+                        Text("当前主题", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(plushThemeName(current), color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (selectedSpec == null) {
+                            Text("选中任意限定色卡后，全 App 会切换到对应国家/地区配色。", color = palette.muted, fontSize = 12.sp)
+                        } else {
+                            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ThemeHexChip("主色", selectedSpec.primary)
+                                ThemeHexChip("辅助", selectedSpec.secondary)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
                 LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (options.isEmpty()) {
+                        item {
+                            Text("没有找到匹配的色卡，换个关键词试试。", modifier = Modifier.fillMaxWidth().padding(18.dp), color = palette.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
+                        }
+                    }
                     items(options.chunked(2)) { row ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             row.forEach { option ->
-                                ThemeChoiceCard(option, current == option.key, Modifier.weight(1f)) { onChoose(option.key) }
+                                ThemeCatalogCard(option, current == option.key, Modifier.weight(1f)) { onChoose(option.key) }
+                            }
+                            if (row.size == 1) {
+                                Spacer(Modifier.weight(1f))
                             }
                         }
                     }
@@ -318,47 +366,101 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
 }
 
 @Composable
-private fun ThemeChoiceCard(option: ThemeOption, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun ThemeFilterPill(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
-    Box(
-        modifier = modifier
-            .height(194.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.TopCenter
+    Surface(
+        modifier = modifier.height(40.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) palette.rose else Color.White,
+        border = BorderStroke(1.dp, if (selected) palette.rose else palette.border)
     ) {
-        ThemeMascotPreview(
-            color = option.color,
-            surface = option.surface,
-            modifier = Modifier.padding(top = 2.dp).size(142.dp)
-        )
-        Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.86f),
-            shape = RoundedCornerShape(18.dp),
-            color = if (selected) option.color else Color(0xFFFFFCF7),
-            border = BorderStroke(1.dp, if (selected) option.color else Color(0xFFFFD7A1)),
-            shadowElevation = if (selected) 5.dp else 0.dp
+        Box(contentAlignment = Alignment.Center) {
+            Text(label, color = if (selected) Color.White else palette.ink, fontSize = 13.sp, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+@Composable
+private fun ThemeCatalogCard(option: PlushThemeSpec, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = modifier.height(236.dp).clip(RoundedCornerShape(26.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(26.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.5.dp, if (selected) option.primary else option.secondary.copy(alpha = 0.68f)),
+        shadowElevation = if (selected) 8.dp else 2.dp
+    ) {
+        Column(
+            Modifier
+                .background(Brush.verticalGradient(listOf(option.secondary.copy(alpha = 0.34f), Color.White, option.primary.copy(alpha = 0.10f))))
+                .padding(11.dp)
         ) {
-            Row(
-                Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    option.label,
-                    color = if (selected) Color.White else palette.ink,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (selected) {
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Icons.Default.CheckCircle, "已选中", tint = Color.White, modifier = Modifier.size(17.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(999.dp), color = Color.White.copy(alpha = 0.82f), border = BorderStroke(1.dp, option.secondary.copy(alpha = 0.56f))) {
+                    Text(option.type, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Black)
                 }
+                Spacer(Modifier.weight(1f))
+                if (selected) {
+                    Icon(Icons.Default.CheckCircle, "已选中", tint = option.primary, modifier = Modifier.size(19.dp))
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(90.dp), contentAlignment = Alignment.Center) {
+                ThemeMascotPreview(
+                    color = option.primary,
+                    surface = option.secondary.copy(alpha = 0.86f),
+                    modifier = Modifier.size(102.dp)
+                )
+            }
+            Text("${option.region} · ${option.name}", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(option.logic, color = palette.muted, fontSize = 11.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ThemeHexChip("主", option.primary, Modifier.weight(1f))
+                ThemeHexChip("辅", option.secondary, Modifier.weight(1f))
             }
         }
     }
+}
+
+@Composable
+private fun ThemeHexChip(label: String, color: Color, modifier: Modifier = Modifier) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = modifier.height(34.dp),
+        shape = RoundedCornerShape(999.dp),
+        color = Color.White.copy(alpha = 0.76f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.46f))
+    ) {
+        Row(
+            Modifier.padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Box(Modifier.size(14.dp).clip(CircleShape).background(color))
+            Text(
+                "$label ${themeHex(color)}",
+                color = palette.ink,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+private fun PlushThemeSpec.matchesThemeQuery(query: String): Boolean {
+    val trimmed = query.trim()
+    if (trimmed.isBlank()) return true
+    val lower = trimmed.lowercase(Locale.ROOT)
+    return listOf(type, region, name, logic, keywords, key).any { it.contains(trimmed, ignoreCase = true) || it.lowercase(Locale.ROOT).contains(lower) }
+}
+
+private fun themeHex(color: Color): String {
+    val red = (color.red * 255).roundToInt().coerceIn(0, 255)
+    val green = (color.green * 255).roundToInt().coerceIn(0, 255)
+    val blue = (color.blue * 255).roundToInt().coerceIn(0, 255)
+    return String.format(Locale.US, "#%02X%02X%02X", red, green, blue)
 }
 
 @Composable

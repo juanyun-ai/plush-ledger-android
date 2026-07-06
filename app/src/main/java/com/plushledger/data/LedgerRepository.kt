@@ -258,12 +258,14 @@ class LedgerRepository(
     ) {
         val current = dao.getProfile(userId) ?: return
         val normalizedAccountNo = accountNo?.trim()?.takeIf { it.isNotBlank() } ?: current.accountNo ?: defaultAccountNo(userId)
-        require(normalizedAccountNo.matches(Regex("^[A-Za-z0-9_]{4,18}$"))) { "账号编号仅支持 4-18 位字母、数字或下划线" }
-        val monthKey = YearMonth.now().toString()
-        val changedMonth = if (current.accountNoChangedMonth == monthKey) current.accountNoChangedMonth else monthKey
-        val baseChangeCount = if (current.accountNoChangedMonth == monthKey) current.accountNoChangedCount else 0
+        require(normalizedAccountNo.matches(Regex("^[A-Za-z0-9_]{4,12}$"))) { "用户ID仅支持 4-12 位字母、数字或下划线" }
+        val yearKey = LocalDate.now().year.toString()
+        val changedYear = if (current.accountNoChangedMonth == yearKey) current.accountNoChangedMonth else yearKey
+        val baseChangeCount = if (current.accountNoChangedMonth == yearKey) current.accountNoChangedCount else 0
         val accountChanged = !current.accountNo.equals(normalizedAccountNo, ignoreCase = true)
-        if (accountChanged && baseChangeCount >= 2) error("账号编号每月最多修改 2 次")
+        if (accountChanged && baseChangeCount >= 2) error("用户ID一年最多修改 2 次")
+        val nextDisplayName = displayName.trim().ifBlank { current.displayName }
+        val nicknameChanged = nextDisplayName != current.displayName
         val session = sessionStore.currentSession()
         if (accountChanged && session?.accessToken != null) {
             val available = withFreshAccessToken { token ->
@@ -271,22 +273,44 @@ class LedgerRepository(
             }
             if (!available) error("这个账号编号已经被使用了，请换一个")
         }
+        if (nicknameChanged) {
+            val since = now() - 180L * 24L * 60L * 60L * 1000L
+            val localCount = nicknameHistory(userId).count { it >= since }
+            val remoteCount = if (session?.accessToken != null) {
+                runCatching {
+                    withFreshAccessToken { token -> supabaseClient.countNicknameHistorySince(token, userId, since) }
+                }.getOrDefault(localCount)
+            } else {
+                localCount
+            }
+            if (maxOf(localCount, remoteCount) >= 3) error("昵称每 180 天最多修改 3 次")
+        }
         dao.upsertProfile(
             current.copy(
-                displayName = displayName.trim().ifBlank { current.displayName },
+                displayName = nextDisplayName,
                 age = age,
                 birthDate = birthDate,
                 gender = gender,
                 province = province?.trim()?.takeIf { it.isNotBlank() },
                 city = city?.trim()?.takeIf { it.isNotBlank() },
                 accountNo = normalizedAccountNo,
-                accountNoChangedMonth = if (accountChanged) changedMonth else current.accountNoChangedMonth,
+                accountNoChangedMonth = if (accountChanged) changedYear else current.accountNoChangedMonth,
                 accountNoChangedCount = if (accountChanged) baseChangeCount + 1 else current.accountNoChangedCount,
                 updatedAt = now(),
                 syncState = SYNC_DIRTY
             )
         )
-        sessionStore.updateDisplayName(displayName.trim().ifBlank { current.displayName })
+        if (nicknameChanged) {
+            rememberNicknameChange(userId)
+            if (session?.accessToken != null) {
+                runCatching {
+                    withFreshAccessToken { token ->
+                        supabaseClient.insertNicknameHistory(token, userId, current.displayName, nextDisplayName, now())
+                    }
+                }
+            }
+        }
+        sessionStore.updateDisplayName(nextDisplayName)
     }
 
     suspend fun saveAvatar(userId: String, jpegBytes: ByteArray): String {
@@ -863,14 +887,27 @@ class LedgerRepository(
         }.getOrDefault(emptyList())
         val deleted = runCatching {
             val json = JSONObject(prefs.getString("deleted_entries", "{}") ?: "{}")
-            json.keys().asSequence().map { date ->
-                JSONObject()
-                    .put("date", date)
-                    .put("text", "")
-                    .put("mood", "开心")
-                    .put("status", "")
-                    .put("updated_at", json.optLong(date))
-                    .put("deleted_at", json.optLong(date))
+            json.keys().asSequence().map { key ->
+                val value = json.opt(key)
+                if (value is JSONObject) {
+                    JSONObject()
+                        .put("id", value.optString("id", key))
+                        .put("date", value.optString("date").ifBlank { key.takeIf { it.length == 10 } ?: LocalDate.now().toString() })
+                        .put("text", "")
+                        .put("mood", "开心")
+                        .put("status", "")
+                        .put("updated_at", value.optLong("updated_at", value.optLong("deleted_at", now())))
+                        .put("deleted_at", value.optLong("deleted_at", value.optLong("updated_at", now())))
+                } else {
+                    JSONObject()
+                        .put("id", "legacy:$key")
+                        .put("date", key)
+                        .put("text", "")
+                        .put("mood", "开心")
+                        .put("status", "")
+                        .put("updated_at", json.optLong(key))
+                        .put("deleted_at", json.optLong(key))
+                }
             }.toList()
         }.getOrDefault(emptyList())
         return entries + deleted
@@ -879,9 +916,9 @@ class LedgerRepository(
     private fun mergeDiaryRows(a: List<JSONObject>, b: List<JSONObject>): List<JSONObject> =
         (a + b)
             .filter { it.optString("date").isNotBlank() }
-            .groupBy { it.optString("date") }
+            .groupBy { it.optString("id").ifBlank { "legacy:${it.optString("date")}" } }
             .map { (_, rows) -> rows.maxBy { it.optLong("updated_at", it.optLong("created_at", 0L)) } }
-            .sortedByDescending { it.optString("date") }
+            .sortedWith(compareByDescending<JSONObject> { it.optString("date") }.thenByDescending { it.optLong("updated_at", 0L) })
             .take(240)
 
     private fun saveLocalDiaryRows(userId: String, rows: List<JSONObject>) {
@@ -889,16 +926,26 @@ class LedgerRepository(
         val deleted = JSONObject()
         rows.forEach { row ->
             val date = row.optString("date")
+            val id = row.optString("id").ifBlank { mergedId(userId, "diary:$date:${row.optLong("created_at", row.optLong("updated_at", 0L))}") }
             val deletedAt = row.optLong("deleted_at", 0L)
             if (deletedAt > 0L) {
-                deleted.put(date, deletedAt)
+                deleted.put(
+                    id,
+                    JSONObject()
+                        .put("id", id)
+                        .put("date", date)
+                        .put("updated_at", row.optLong("updated_at", deletedAt))
+                        .put("deleted_at", deletedAt)
+                )
             } else if (row.optString("text").isNotBlank()) {
                 entries.put(
                     JSONObject()
+                        .put("id", id)
                         .put("date", date)
                         .put("text", row.optString("text").trim())
                         .put("mood", row.optString("mood", "开心"))
                         .put("status", row.optString("status"))
+                        .put("created_at", row.optLong("created_at", row.optLong("updated_at", now())))
                         .put("updated_at", row.optLong("updated_at", now()))
                 )
             }
@@ -912,8 +959,9 @@ class LedgerRepository(
     private fun JSONObject.toCloudDiaryRow(userId: String): JSONObject {
         val date = optString("date")
         val updatedAt = optLong("updated_at", now()).takeIf { it > 0L } ?: now()
+        val id = optString("id").ifBlank { mergedId(userId, "diary:$date:${optLong("created_at", updatedAt)}:${optString("text").hashCode()}") }
         return JSONObject()
-            .put("id", mergedId(userId, "diary:$date"))
+            .put("id", id)
             .put("user_id", userId)
             .put("date", date)
             .put("text", optString("text").take(1000))
@@ -1059,6 +1107,22 @@ class LedgerRepository(
     }
 
     private fun now() = System.currentTimeMillis()
+    private fun nicknamePrefs() =
+        context.getSharedPreferences("rongrong_profile_limits", Context.MODE_PRIVATE)
+
+    private fun nicknameHistory(userId: String): List<Long> =
+        nicknamePrefs()
+            .getString("nickname_history_$userId", "")
+            .orEmpty()
+            .split(",")
+            .mapNotNull { it.toLongOrNull() }
+
+    private fun rememberNicknameChange(userId: String) {
+        val since = now() - 180L * 24L * 60L * 60L * 1000L
+        val history = (nicknameHistory(userId).filter { it >= since } + now()).takeLast(6)
+        nicknamePrefs().edit().putString("nickname_history_$userId", history.joinToString(",")).apply()
+    }
+
     private fun newId() = UUID.randomUUID().toString()
     private fun deterministicImportId(userId: String, provider: String, sourceId: String): String =
         UUID.nameUUIDFromBytes("rongrong-ledger:import:$userId:$provider:$sourceId".toByteArray()).toString()

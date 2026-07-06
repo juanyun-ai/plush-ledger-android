@@ -4,10 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Rect
-import android.graphics.RectF
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -23,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -47,6 +44,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -102,19 +100,23 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
     val store = remember(userId) { DiaryStore(context.applicationContext, userId) }
     var entries by remember(userId) { mutableStateOf(store.load()) }
     val today = LocalDate.now()
-    val todayEntry = entries.firstOrNull { it.date == today.toString() }
     val todayDraft = remember(userId) { store.draft(today.toString()) }
     var editingDate by rememberSaveable(userId) { mutableStateOf(today.toString()) }
-    var text by rememberSaveable(userId) { mutableStateOf(todayDraft?.text ?: todayEntry?.text.orEmpty()) }
-    var mood by rememberSaveable(userId) { mutableStateOf(todayDraft?.mood ?: todayEntry?.mood ?: "开心") }
-    var status by rememberSaveable(userId) { mutableStateOf(todayDraft?.status ?: todayEntry?.status.orEmpty()) }
+    var text by rememberSaveable(userId) { mutableStateOf(todayDraft?.text.orEmpty()) }
+    var mood by rememberSaveable(userId) { mutableStateOf(todayDraft?.mood ?: "开心") }
+    var status by rememberSaveable(userId) { mutableStateOf(todayDraft?.status.orEmpty()) }
     var showStatusPicker by rememberSaveable { mutableStateOf(false) }
     var sharePreview by remember { mutableStateOf<Bitmap?>(null) }
+    var showSharePicker by rememberSaveable { mutableStateOf(false) }
+    var shareSearch by rememberSaveable { mutableStateOf("") }
     var savedNotice by rememberSaveable { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<DiaryEntry?>(null) }
+    var selectedDiaryIds by remember(userId) { mutableStateOf<Set<String>>(emptySet()) }
     val selectedDate = remember(editingDate) { runCatching { LocalDate.parse(editingDate) }.getOrDefault(today) }
     val displayStatus = status.ifBlank { mood }
     val shareQuote = remember(displayStatus, quotes) { matchingQuote(displayStatus, quotes) }
+    val selectedEntries = entries.filter { it.id in selectedDiaryIds }
+    val canMerge = selectedEntries.size >= 2 && selectedEntries.map { it.date }.distinct().size == 1
 
     BackHandler(onBack = onBack)
     LazyColumn(
@@ -130,7 +132,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
                     Text("把今天的心情，轻轻写下来。", color = palette.muted, fontSize = 12.sp)
                 }
                 IconButton(onClick = {
-                    sharePreview = DiaryShareCard.create(context, selectedDate, displayStatus, locationHint)
+                    showSharePicker = true
                 }) { Icon(Icons.Default.Share, "分享日记", tint = palette.pink) }
                 MascotArt(46.dp, R.drawable.mascot_action_sleep)
             }
@@ -151,13 +153,13 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
                         contentScale = ContentScale.Crop
                     )
                     Surface(
-                        modifier = Modifier.align(Alignment.TopStart).padding(start = 70.dp, top = 55.dp),
+                        modifier = Modifier.align(Alignment.TopStart).padding(start = 44.dp, top = 55.dp),
                         shape = RoundedCornerShape(999.dp),
-                        color = Color(0xFFFDE7B8).copy(alpha = 0.94f)
+                        color = Color(0xFFFDE7B8).copy(alpha = 0.98f)
                     ) {
                         Text(
                             selectedDate.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
-                            modifier = Modifier.padding(horizontal = 13.dp, vertical = 5.dp),
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
                             color = palette.ink,
                             fontWeight = FontWeight.Black,
                             fontSize = 12.sp
@@ -218,28 +220,52 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
                         Toast.makeText(context, "日记草稿已暂存", Toast.LENGTH_SHORT).show()
                     }
                     DiaryActionButton("保存", Icons.Default.Save, palette.pink, Modifier.weight(1f), enabled = text.trim().isNotBlank()) {
-                        entries = store.saveEntry(editingDate, text, displayStatus, status)
+                        entries = store.addEntry(editingDate, text, displayStatus, status)
+                        text = ""
+                        selectedDiaryIds = emptySet()
+                        store.clearDraft(editingDate)
                         onChanged()
                         savedNotice = true
                     }
                 }
                 if (savedNotice) {
                     Spacer(Modifier.height(8.dp))
-                    Text("今天的绒绒日记已保存", modifier = Modifier.fillMaxWidth(), color = palette.moss, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("已新增一篇绒绒日记", modifier = Modifier.fillMaxWidth(), color = palette.moss, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
               }
             }
         }
         item { Text("近期日记", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 22.sp) }
+        if (selectedDiaryIds.isNotEmpty()) {
+            item {
+                Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFFFFF3E6), border = BorderStroke(1.dp, Color(0xFFFFD7A3))) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("已选择 ${selectedDiaryIds.size} 篇", color = palette.ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { selectedDiaryIds = emptySet() }) { Text("取消", color = palette.muted) }
+                        PlushButton("合并", Icons.Default.Save, color = palette.pink, enabled = canMerge) {
+                            entries = store.mergeEntries(selectedDiaryIds)
+                            selectedDiaryIds = emptySet()
+                            onChanged()
+                            Toast.makeText(context, "同一天日记已合并", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
         if (entries.isEmpty()) {
             item { Text("第一篇日记，会从今天开始。", color = palette.muted, fontSize = 13.sp) }
         } else {
-            items(entries.take(20), key = { it.date }) { entry ->
+            items(entries.take(20), key = { it.id }) { entry ->
                 SwipeDeleteDiaryHistoryCard(
                     entry = entry,
+                    selected = entry.id in selectedDiaryIds,
+                    onSelectionChange = {
+                        selectedDiaryIds = if (entry.id in selectedDiaryIds) selectedDiaryIds - entry.id else selectedDiaryIds + entry.id
+                    },
                     onClick = { editingEntry = entry },
                     onDelete = {
-                        entries = store.deleteEntry(entry.date)
+                        entries = store.deleteEntry(entry)
+                        selectedDiaryIds = selectedDiaryIds - entry.id
                         onChanged()
                         Toast.makeText(context, "已删除这篇日记", Toast.LENGTH_SHORT).show()
                     }
@@ -271,21 +297,65 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
                 editingEntry = null
             },
             onSave = { saved ->
-                entries = store.saveEntry(saved.date, saved.text, saved.mood, saved.status)
+                entries = store.saveEntry(saved)
                 onChanged()
                 editingEntry = null
             }
         )
     }
 
+    if (showSharePicker) {
+        val options = remember(locationHint, shareSearch) { DiaryShareCard.options(locationHint, shareSearch) }
+        Dialog(onDismissRequest = { showSharePicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(0.92f),
+                shape = RoundedCornerShape(28.dp),
+                color = Color(0xFFFFFCF7),
+                border = BorderStroke(1.dp, Color(0xFFFFD7A3)),
+                shadowElevation = 18.dp
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("选择分享卡片", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                    OutlinedTextField(
+                        value = shareSearch,
+                        onValueChange = { shareSearch = it.take(24) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("搜索省份、城市或首字母，例如 sd / hz") },
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                    LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(options, key = { it.key }) { option ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable {
+                                    sharePreview = DiaryShareCard.create(context, selectedDate, displayStatus, option.resId)
+                                    showSharePicker = false
+                                },
+                                shape = RoundedCornerShape(18.dp),
+                                color = if (option.preferred) palette.pink.copy(alpha = 0.12f) else Color.White,
+                                border = BorderStroke(1.dp, if (option.preferred) palette.pink else palette.border)
+                            ) {
+                                Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(option.label, color = palette.ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                    Text(option.kind, color = palette.muted, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                    Text("会优先按城市匹配，其次省份，找不到时使用默认卡。", color = palette.muted, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+
     sharePreview?.let { bitmap ->
         Dialog(onDismissRequest = { sharePreview = null }) {
             Surface(shape = RoundedCornerShape(28.dp), color = Color(0xFFFFFCF7), border = BorderStroke(1.5.dp, Color(0xFFFFDAB4)), shadowElevation = 18.dp) {
-                Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.padding(14.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
                     Image(
                         bitmap.asImageBitmap(),
                         "日记分享卡片",
-                        Modifier.fillMaxWidth().aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat()),
+                        Modifier.fillMaxWidth().heightIn(max = 560.dp).aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat()),
                         contentScale = ContentScale.Fit
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -363,10 +433,10 @@ private fun DiaryOutlineActionButton(
 }
 
 @Composable
-private fun SwipeDeleteDiaryHistoryCard(entry: DiaryEntry, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun SwipeDeleteDiaryHistoryCard(entry: DiaryEntry, selected: Boolean, onSelectionChange: () -> Unit, onClick: () -> Unit, onDelete: () -> Unit) {
     val palette = LocalPlushPalette.current
     val reveal = with(LocalDensity.current) { 86.dp.toPx() }
-    var offsetX by remember(entry.date) { mutableStateOf(0f) }
+    var offsetX by remember(entry.id) { mutableStateOf(0f) }
     Box(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().height(74.dp),
@@ -395,7 +465,7 @@ private fun SwipeDeleteDiaryHistoryCard(entry: DiaryEntry, onClick: () -> Unit, 
         Box(
             modifier = Modifier
                 .offset { IntOffset(offsetX.roundToInt(), 0) }
-                .pointerInput(entry.date) {
+                .pointerInput(entry.id) {
                     detectHorizontalDragGestures(
                         onDragEnd = { offsetX = if (offsetX < -reveal / 2f) -reveal else 0f },
                         onDragCancel = { offsetX = 0f }
@@ -404,16 +474,17 @@ private fun SwipeDeleteDiaryHistoryCard(entry: DiaryEntry, onClick: () -> Unit, 
                     }
                 }
         ) {
-            DiaryHistoryCard(entry, onClick)
+            DiaryHistoryCard(entry, selected, onSelectionChange, onClick)
         }
     }
 }
 
 @Composable
-private fun DiaryHistoryCard(entry: DiaryEntry, onClick: () -> Unit) {
+private fun DiaryHistoryCard(entry: DiaryEntry, selected: Boolean, onSelectionChange: () -> Unit, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
     Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), color = palette.surface, border = BorderStroke(1.dp, palette.border), shadowElevation = 2.dp) {
         Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = selected, onCheckedChange = { onSelectionChange() })
             MascotArt(48.dp, R.drawable.mascot_action_sleep)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -435,10 +506,10 @@ private fun DiaryEditDialog(
     onSave: (DiaryEntry) -> Unit
 ) {
     val palette = LocalPlushPalette.current
-    var text by rememberSaveable(initial.date) { mutableStateOf(initial.text) }
-    var mood by rememberSaveable(initial.date) { mutableStateOf(initial.mood) }
-    var status by rememberSaveable(initial.date) { mutableStateOf(initial.status) }
-    var showStatus by rememberSaveable(initial.date) { mutableStateOf(false) }
+    var text by rememberSaveable(initial.id) { mutableStateOf(initial.text) }
+    var mood by rememberSaveable(initial.id) { mutableStateOf(initial.mood) }
+    var status by rememberSaveable(initial.id) { mutableStateOf(initial.status) }
+    var showStatus by rememberSaveable(initial.id) { mutableStateOf(false) }
     val displayStatus = status.ifBlank { mood }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
@@ -661,54 +732,79 @@ private fun matchingQuote(mood: String, quotes: List<String>): String {
     return quotes.firstOrNull { quote -> quote.contains(mood) } ?: preferred
 }
 
+private data class ShareCardOption(
+    val key: String,
+    val label: String,
+    val kind: String,
+    val search: String,
+    val resId: Int,
+    val preferred: Boolean = false
+)
+
 private object DiaryShareCard {
-    fun create(context: Context, date: LocalDate, mood: String, locationHint: String = ""): Bitmap {
-        val art = BitmapFactory.decodeResource(context.resources, shareArt(locationHint))
-        val width = art.width
-        val height = art.height
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        canvas.drawBitmap(art, null, Rect(0, 0, width, height), paint)
+    fun create(context: Context, date: LocalDate, mood: String, locationHint: String = ""): Bitmap =
+        create(context, date, mood, preferredOption(locationHint).resId)
 
-        val dateBox = RectF(width * 0.646f, height * 0.102f, width * 0.930f, height * 0.154f)
-        paint.color = 0xF6FFF5DF.toInt()
-        canvas.drawRoundRect(dateBox, 28f, 28f, paint)
-        paint.color = 0xFFA86B21.toInt()
-        paint.textAlign = Paint.Align.CENTER
-        paint.isFakeBoldText = true
-        paint.textSize = width * 0.026f
-        canvas.drawText(date.format(DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.CHINA)), dateBox.centerX(), dateBox.centerY() + width * 0.010f, paint)
-
-        val moodBox = RectF(width * 0.076f, height * 0.216f, width * 0.552f, height * 0.280f)
-        paint.color = 0xF8FFF6E9.toInt()
-        canvas.drawRoundRect(moodBox, 22f, 22f, paint)
-        paint.color = 0xFF7D5B46.toInt()
-        paint.textSize = width * 0.030f
-        paint.isFakeBoldText = false
-        canvas.drawText(mood.ifBlank { "设置状态" }.take(10), moodBox.centerX(), moodBox.centerY() + width * 0.011f, paint)
-
-        val qr = BitmapFactory.decodeResource(context.resources, R.drawable.miniprogram_code)
-        val qrSize = (width * 0.265f).toInt()
-        val qrLeft = (width * 0.665f).toInt()
-        val qrTop = (height * 0.704f).toInt()
-        paint.color = 0xFFFFFCF4.toInt()
-        canvas.drawRoundRect(RectF(qrLeft - 10f, qrTop - 10f, qrLeft + qrSize + 10f, qrTop + qrSize + 10f), 24f, 24f, paint)
-        canvas.drawBitmap(qr, null, Rect(qrLeft, qrTop, qrLeft + qrSize, qrTop + qrSize), paint)
-        return bitmap
+    fun create(context: Context, date: LocalDate, mood: String, artResId: Int): Bitmap {
+        val art = BitmapFactory.decodeResource(context.resources, artResId)
+        return art.copy(Bitmap.Config.ARGB_8888, false)
     }
 
-    private fun shareArt(locationHint: String): Int {
-        val hint = locationHint.trim()
-        return when {
-            hint.contains("上海") -> R.drawable.share_province_shanghai
-            hint.contains("山东") || hint.contains("济南") || hint.contains("青岛") -> R.drawable.share_province_shandong
-            hint.contains("江苏") || hint.contains("南京") || hint.contains("苏州") -> R.drawable.share_province_jiangsu
-            hint.contains("河南") || hint.contains("郑州") || hint.contains("洛阳") -> R.drawable.share_province_henan
-            hint.contains("浙江") || hint.contains("杭州") || hint.contains("宁波") -> R.drawable.share_province_zhejiang
-            else -> R.drawable.share_province_default
+    fun options(locationHint: String, query: String): List<ShareCardOption> {
+        val preferred = preferredOption(locationHint)
+        val normalized = query.trim().lowercase(Locale.ROOT)
+        val list = shareOptions.map { it.copy(preferred = it.key == preferred.key) }
+            .sortedWith(compareByDescending<ShareCardOption> { it.preferred }.thenBy { if (it.kind == "城市") 0 else if (it.kind == "省级") 1 else 2 }.thenBy { it.label })
+        if (normalized.isBlank()) return list
+        return list.filter { option ->
+            option.label.contains(query.trim(), ignoreCase = true) || option.search.lowercase(Locale.ROOT).contains(normalized)
         }
     }
+
+    private fun preferredOption(locationHint: String): ShareCardOption {
+        val hint = locationHint.trim()
+        if (hint.isBlank()) return shareOptions.first()
+        return shareOptions.firstOrNull { hint.contains(it.label) }
+            ?: shareOptions.firstOrNull { it.label == "港澳" && (hint.contains("香港") || hint.contains("澳门")) }
+            ?: shareOptions.first()
+    }
+
+    private val shareOptions = listOf(
+        ShareCardOption("province_beijing", "北京", "省级", "beijing bj", R.drawable.share_card_province_beijing),
+        ShareCardOption("province_tianjin", "天津", "省级", "tianjin tj", R.drawable.share_card_province_tianjin),
+        ShareCardOption("province_shanghai", "上海", "省级", "shanghai sh", R.drawable.share_card_province_shanghai),
+        ShareCardOption("province_chongqing", "重庆", "省级", "chongqing cq", R.drawable.share_card_province_chongqing),
+        ShareCardOption("province_hebei", "河北", "省级", "hebei hb", R.drawable.share_card_province_hebei),
+        ShareCardOption("province_shanxi", "山西", "省级", "shanxi sx", R.drawable.share_card_province_shanxi),
+        ShareCardOption("province_liaoning", "辽宁", "省级", "liaoning ln", R.drawable.share_card_province_liaoning),
+        ShareCardOption("province_jilin", "吉林", "省级", "jilin jl", R.drawable.share_card_province_jilin),
+        ShareCardOption("province_heilongjiang", "黑龙江", "省级", "heilongjiang hlj", R.drawable.share_card_province_heilongjiang),
+        ShareCardOption("province_jiangsu", "江苏", "省级", "jiangsu js nanjing suzhou", R.drawable.share_card_province_jiangsu),
+        ShareCardOption("province_zhejiang", "浙江", "省级", "zhejiang zj hangzhou ningbo", R.drawable.share_card_province_zhejiang),
+        ShareCardOption("province_anhui", "安徽", "省级", "anhui ah", R.drawable.share_card_province_anhui),
+        ShareCardOption("province_fujian", "福建", "省级", "fujian fj xiamen fuzhou", R.drawable.share_card_province_fujian),
+        ShareCardOption("province_jiangxi", "江西", "省级", "jiangxi jx", R.drawable.share_card_province_jiangxi),
+        ShareCardOption("province_shandong", "山东", "省级", "shandong sd jinan qingdao", R.drawable.share_card_province_shandong),
+        ShareCardOption("province_henan", "河南", "省级", "henan hn zhengzhou luoyang", R.drawable.share_card_province_henan),
+        ShareCardOption("province_hubei", "湖北", "省级", "hubei hb wuhan", R.drawable.share_card_province_hubei),
+        ShareCardOption("province_hunan", "湖南", "省级", "hunan hn changsha", R.drawable.share_card_province_hunan),
+        ShareCardOption("province_guangdong", "广东", "省级", "guangdong gd guangzhou shenzhen", R.drawable.share_card_province_guangdong),
+        ShareCardOption("province_hainan", "海南", "省级", "hainan hi", R.drawable.share_card_province_hainan),
+        ShareCardOption("province_sichuan", "四川", "省级", "sichuan sc", R.drawable.share_card_province_sichuan),
+        ShareCardOption("province_guizhou", "贵州", "省级", "guizhou gz", R.drawable.share_card_province_guizhou),
+        ShareCardOption("province_yunnan", "云南", "省级", "yunnan yn", R.drawable.share_card_province_yunnan),
+        ShareCardOption("province_shaanxi", "陕西", "省级", "shaanxi sx xian", R.drawable.share_card_province_shaanxi),
+        ShareCardOption("province_gansu", "甘肃", "省级", "gansu gs lanzhou", R.drawable.share_card_province_gansu),
+        ShareCardOption("province_qinghai", "青海", "省级", "qinghai qh", R.drawable.share_card_province_qinghai),
+        ShareCardOption("province_taiwan", "台湾", "省级", "taiwan tw", R.drawable.share_card_province_taiwan),
+        ShareCardOption("province_neimenggu", "内蒙古", "省级", "neimenggu nmg", R.drawable.share_card_province_neimenggu),
+        ShareCardOption("province_guangxi", "广西", "省级", "guangxi gx", R.drawable.share_card_province_guangxi),
+        ShareCardOption("province_xizang", "西藏", "省级", "xizang xz tibet", R.drawable.share_card_province_xizang),
+        ShareCardOption("province_ningxia", "宁夏", "省级", "ningxia nx", R.drawable.share_card_province_ningxia),
+        ShareCardOption("province_xinjiang", "新疆", "省级", "xinjiang xj", R.drawable.share_card_province_xinjiang),
+        ShareCardOption("province_gangao", "港澳", "省级", "gangao ga hongkong xianggang hk macao aomen mo", R.drawable.share_card_province_gangao)
+    )
+
     fun share(context: Context, bitmap: Bitmap) {
         val directory = File(context.cacheDir, "share").apply { mkdirs() }
         val file = File(directory, "rongrong-diary-${LocalDate.now()}.png")

@@ -812,7 +812,7 @@ private fun ProfileScreen(
                     showNicknameEditor = true
                 })
                 ProfileDivider()
-                ProfileListRow(Icons.Default.Badge, "用户 ID / 账号编号", accountNo.ifBlank { "未设置" }, palette.rose, onClick = {
+                ProfileListRow(Icons.Default.Badge, "用户ID", accountNo.ifBlank { "未设置" }, palette.rose, onClick = {
                     editMode = true
                     showAccountNoEditor = true
                 })
@@ -968,8 +968,8 @@ private fun ProfileScreen(
         ProfileTextEditDialog(
             title = "修改账号编号",
             value = accountNo,
-            label = "4-18 位字母、数字或下划线",
-            maxLength = 18,
+            label = "4-12 位字母、数字或下划线，一年最多改 2 次",
+            maxLength = 12,
             filter = { it.filter { ch -> ch.isLetterOrDigit() || ch == '_' } },
             onDismiss = { showAccountNoEditor = false },
             onConfirm = { accountNo = it.trim(); showAccountNoEditor = false }
@@ -1369,38 +1369,98 @@ private fun RegionEditDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
 ) {
-    var nextProvince by rememberSaveable { mutableStateOf(province) }
-    var nextCity by rememberSaveable { mutableStateOf(city) }
+    val initialProvince = province.takeIf { it in regionPickerCities.keys } ?: regionPickerCities.keys.first()
+    var nextProvince by rememberSaveable { mutableStateOf(initialProvince) }
+    val cityOptions = regionPickerCities[nextProvince].orEmpty()
+    var nextCity by rememberSaveable(nextProvince) {
+        mutableStateOf(city.takeIf { it in cityOptions }.orEmpty())
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("设置地区", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = nextProvince,
-                    onValueChange = { nextProvince = it.take(20) },
-                    label = { Text("省份") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp)
-                )
-                OutlinedTextField(
-                    value = nextCity,
-                    onValueChange = { nextCity = it.take(24) },
-                    label = { Text("城市") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp)
-                )
-                Text("地区会用于分享卡片自动选择省份插图。", color = LocalPlushPalette.current.muted, fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth().height(300.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(regionPickerCities.keys.toList()) { item ->
+                            RegionPickerChip(item, item == nextProvince) {
+                                nextProvince = item
+                                nextCity = ""
+                            }
+                        }
+                    }
+                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            RegionPickerChip("不选城市", nextCity.isBlank()) { nextCity = "" }
+                        }
+                        items(cityOptions) { item ->
+                            RegionPickerChip(item, item == nextCity) { nextCity = item }
+                        }
+                    }
+                }
+                Text("地区会保存到资料数据库，并用于分享卡片优先匹配城市、再匹配省份。", color = LocalPlushPalette.current.muted, fontSize = 12.sp)
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(nextProvince.trim(), nextCity.trim()) }) {
+            TextButton(onClick = { onConfirm(nextProvince, nextCity) }) {
                 Text("保存")
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
+
+@Composable
+private fun RegionPickerChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) palette.rose.copy(alpha = 0.14f) else Color.White,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) palette.rose else palette.border)
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            color = if (selected) palette.rose else palette.ink,
+            fontWeight = if (selected) FontWeight.Black else FontWeight.SemiBold,
+            fontSize = 13.sp
+        )
+    }
+}
+
+private val regionPickerCities = linkedMapOf(
+    "上海" to listOf("上海"),
+    "重庆" to listOf("重庆"),
+    "山东" to listOf("济南", "青岛", "烟台", "潍坊", "临沂"),
+    "江苏" to listOf("南京", "苏州", "无锡", "常州", "扬州"),
+    "浙江" to listOf("杭州", "宁波", "温州", "绍兴", "嘉兴"),
+    "河南" to listOf("郑州", "洛阳", "开封", "南阳"),
+    "广东" to listOf("广州", "深圳", "佛山", "东莞", "珠海"),
+    "四川" to listOf("成都", "绵阳", "乐山", "宜宾"),
+    "湖北" to listOf("武汉", "宜昌", "襄阳"),
+    "湖南" to listOf("长沙", "株洲", "湘潭"),
+    "安徽" to listOf("合肥", "芜湖", "黄山"),
+    "福建" to listOf("福州", "厦门", "泉州"),
+    "江西" to listOf("南昌", "九江", "景德镇"),
+    "河北" to listOf("石家庄", "秦皇岛", "唐山"),
+    "辽宁" to listOf("沈阳", "大连"),
+    "吉林" to listOf("长春"),
+    "黑龙江" to listOf("哈尔滨"),
+    "陕西" to listOf("西安"),
+    "甘肃" to listOf("兰州"),
+    "青海" to listOf("西宁"),
+    "云南" to listOf("昆明", "大理"),
+    "贵州" to listOf("贵阳"),
+    "海南" to listOf("海口", "三亚"),
+    "广西" to listOf("南宁", "桂林"),
+    "宁夏" to listOf("银川"),
+    "新疆" to listOf("乌鲁木齐"),
+    "内蒙古" to listOf("呼和浩特"),
+    "西藏" to listOf("拉萨"),
+    "台湾" to listOf("台北"),
+    "港澳" to listOf("香港", "澳门")
+)
 
 @Composable
 private fun ProfileTextEditDialog(

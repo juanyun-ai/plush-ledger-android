@@ -116,17 +116,21 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
     transactions,
     appFeedbackRows,
     miniFeedbackRows,
+    nameHistoryRows,
+    miniNameHistoryRows,
     versions,
   ] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,age,birth_date,gender,province,city,signature,device_brand,device_model,device_platform,device_last_seen_at,app_version,created_at,updated_at", "created_at", false, 1000),
-    select(admin, "mini_users", "id,nickname,email,email_verified_at,gender,birth_date,province,city,signature,birthday_wechat_enabled,birthday_email_enabled,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,account_no,age,birth_date,gender,province,city,signature,device_brand,device_model,device_platform,device_last_seen_at,app_version,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "mini_users", "id,account_no,nickname,email,email_verified_at,gender,birth_date,province,city,signature,birthday_wechat_enabled,birthday_email_enabled,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_sessions", "user_id,created_at,last_used_at", "last_used_at", false, 1000),
     select(admin, "mini_ledger_snapshots", "user_id,payload,created_at,updated_at", "updated_at", false, 1000),
     select(admin, "app_activity_events", "id,user_id,event_type,device_brand,device_model,device_platform,app_version,occurred_at,created_at", "occurred_at", false, 5000),
     select(admin, "transactions", "id,user_id,type,amount_minor,occurred_at,created_at,updated_at,deleted_at", "created_at", false, 2000),
     select(admin, "feedback", "id,user_id,status,source,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_feedback", "id,mini_user_id,status,created_at,updated_at", "created_at", false, 1000),
+    selectOptional(admin, "profile_name_history", "id,user_id,old_display_name,new_display_name,changed_at,source,created_at", "changed_at", false, 2000),
+    selectOptional(admin, "mini_profile_name_history", "id,user_id,old_display_name,new_display_name,changed_at,source,created_at", "changed_at", false, 2000),
     select(admin, "app_versions", "platform,version_code,version_name,apk_url,file_size_bytes,active,published_at,updated_at", "version_code", false, 20),
   ]);
   if (authUsersResult.error) throw new Error(`Unable to load auth users: ${authUsersResult.error.message}`);
@@ -175,6 +179,8 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
     liveTransactions,
     appFeedbackRows,
     miniFeedbackRows,
+    nameHistoryRows,
+    miniNameHistoryRows,
     selectedStart,
     selectedDate,
   );
@@ -456,6 +462,8 @@ function buildUserRows(
   liveTransactions: Json[],
   appFeedbackRows: Json[],
   miniFeedbackRows: Json[],
+  nameHistoryRows: Json[],
+  miniNameHistoryRows: Json[],
   selectedStart: number,
   selectedDate: string,
 ) {
@@ -474,6 +482,8 @@ function buildUserRows(
   const miniActivityByUser = groupActivityByUser(miniActivity);
   const appRecordsByUser = groupRecordEventsByUser(liveTransactions);
   const miniRecordsByUser = groupMiniRecordEventsByUser(snapshots);
+  const nameHistoryByUser = groupRowsByField(nameHistoryRows, "user_id");
+  const miniNameHistoryByUser = groupRowsByField(miniNameHistoryRows, "user_id");
 
   const appRows = authUsers.map((user) => {
     const profile = profilesById.get(user.id) ?? {};
@@ -494,6 +504,7 @@ function buildUserRows(
       source: "App",
       source_key: "app",
       user_id: user.id,
+      account_no: stringValue(profile.account_no, 20),
       display_name: stringValue(profile.display_name, 80) || stringValue(metadata.display_name, 80) || stringValue(user.email, 120) || shortId(user.id),
       email: stringValue(user.email, 160) || stringValue(profile.email, 160),
       contact: stringValue(profile.phone, 80),
@@ -521,6 +532,7 @@ function buildUserRows(
       last_sync_at: tx.last_sync_at,
       feedback_count: feedback.feedback_count,
       last_feedback_at: feedback.last_feedback_at,
+      name_history: (nameHistoryByUser.get(user.id) ?? []).sort((a, b) => numberValue(b.changed_at) - numberValue(a.changed_at)),
       role: stringValue(profile.role, 32) || "user",
       membership_tier: stringValue(profile.membership_tier, 32) || "free",
       activity_week: seriesByDay(activityRows, selectedStart, 7),
@@ -550,6 +562,7 @@ function buildUserRows(
       source: "小程序",
       source_key: "mini",
       user_id: id,
+      account_no: stringValue(user.account_no, 20),
       display_name: stringValue(user.nickname, 80) || `小程序用户 ${shortId(id)}`,
       email: user.email_verified_at ? stringValue(user.email, 160) : "",
       contact: "",
@@ -579,6 +592,7 @@ function buildUserRows(
       last_sync_at: tx.last_sync_at,
       feedback_count: feedback.feedback_count,
       last_feedback_at: feedback.last_feedback_at,
+      name_history: (miniNameHistoryByUser.get(id) ?? []).sort((a, b) => numberValue(b.changed_at) - numberValue(a.changed_at)),
       role: "mini_user",
       membership_tier: "",
       activity_week: seriesByDay(activityRows, selectedStart, 7),
@@ -732,6 +746,18 @@ function mapBy(rows: Json[], field: string) {
   return new Map(rows.map((row) => [String(row[field] ?? ""), row]).filter(([key]) => key));
 }
 
+function groupRowsByField(rows: Json[], field: string) {
+  const grouped = new Map<string, Json[]>();
+  for (const row of rows) {
+    const key = String(row[field] ?? "");
+    if (!key) continue;
+    const list = grouped.get(key) ?? [];
+    list.push(row);
+    grouped.set(key, list);
+  }
+  return grouped;
+}
+
 function statusBuckets(rows: Json[]) {
   return ["new", "triaged", "done", "ignored"].map((status) => ({
     status,
@@ -862,6 +888,23 @@ async function select(
     .order(order, { ascending })
     .limit(limit);
   if (error) throw new Error(`Unable to load ${table}: ${error.message}`);
+  return data ?? [];
+}
+
+async function selectOptional(
+  admin: ReturnType<typeof createClient>,
+  table: string,
+  columns: string,
+  order: string,
+  ascending: boolean,
+  limit: number,
+) {
+  const { data, error } = await admin
+    .from(table)
+    .select(columns)
+    .order(order, { ascending })
+    .limit(limit);
+  if (error) return [];
   return data ?? [];
 }
 

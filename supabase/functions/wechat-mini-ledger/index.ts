@@ -57,6 +57,7 @@ async function login(body: Json): Promise<Response> {
   }], {
     Prefer: "resolution=merge-duplicates,return=representation",
   }).then((rows) => rows[0]);
+  const accountNo = stringValue(user.account_no, 12) || await assignMiniAccountNo(user.id);
 
   const token = randomToken();
   const tokenHash = await sha256(token);
@@ -73,6 +74,7 @@ async function login(body: Json): Promise<Response> {
   return json({
     token,
     userId: user.id,
+    accountNo,
     expiresAt,
     ledger: snapshot?.payload ?? null,
   });
@@ -323,6 +325,8 @@ async function loadSnapshot(userId: string): Promise<Json | null> {
 
 async function updateMiniUserProfile(userId: unknown, payload: unknown, now: number, clientInfo: Json): Promise<void> {
   const profile = profileFromPayload(payload);
+  const current = await loadMiniUser(userId);
+  const accountNo = accountNoValue(profile.accountNo);
   const nickname = profileNickname(profile);
   const gender = genderValue(profile.gender);
   const birthDate = birthDateValue(profile.birthDate);
@@ -334,6 +338,7 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
     updated_at: now,
     last_seen_at: now,
   };
+  if (accountNo) applyAccountNoPatch(patch, current, accountNo, now);
   if (nickname) patch.nickname = nickname;
   if (gender) patch.gender = gender;
   if (birthDate) patch.birth_date = birthDate;
@@ -348,6 +353,71 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
     patch,
     { Prefer: "return=minimal" },
   );
+  await syncMiniNameHistory(userId, profile.nicknameHistory);
+}
+
+async function loadMiniUser(userId: unknown): Promise<Json> {
+  const rows = await rest(
+    "GET",
+    `/rest/v1/mini_users?select=id,account_no,account_no_changed_year,account_no_changed_count,nickname&id=eq.${encodeURIComponent(String(userId))}&limit=1`,
+  );
+  return rows[0] ?? {};
+}
+
+async function assignMiniAccountNo(userId: unknown): Promise<string> {
+  for (let index = 0; index < 8; index += 1) {
+    const accountNo = randomAccountNo();
+    try {
+      await rest(
+        "PATCH",
+        `/rest/v1/mini_users?id=eq.${encodeURIComponent(String(userId))}`,
+        { account_no: accountNo, updated_at: Date.now() },
+        { Prefer: "return=minimal" },
+      );
+      return accountNo;
+    } catch (error) {
+      if (!String(error instanceof Error ? error.message : error).includes("duplicate")) throw error;
+    }
+  }
+  throw new Error("用户ID生成失败，请稍后再试");
+}
+
+function applyAccountNoPatch(patch: Json, current: Json, accountNo: string, now: number): void {
+  const currentAccountNo = accountNoValue(current.account_no);
+  if (!currentAccountNo) {
+    patch.account_no = accountNo;
+    return;
+  }
+  if (currentAccountNo.toLowerCase() === accountNo.toLowerCase()) return;
+  const year = new Date(now + chinaOffsetMs).getUTCFullYear().toString();
+  const used = String(current.account_no_changed_year || "") === year ? numberValue(current.account_no_changed_count) : 0;
+  if (used >= 2) throw new Error("用户ID今年已修改2次，云端未保存本次修改");
+  patch.account_no = accountNo;
+  patch.account_no_changed_year = year;
+  patch.account_no_changed_count = used + 1;
+}
+
+async function syncMiniNameHistory(userId: unknown, value: unknown): Promise<void> {
+  if (!Array.isArray(value) || value.length === 0) return;
+  const rows = value
+    .map((item) => item && typeof item === "object" ? item as Json : {})
+    .map((item) => ({
+      id: stringValue(item.id, 80),
+      user_id: userId,
+      old_display_name: stringValue(item.oldNickname ?? item.old_display_name, 80),
+      new_display_name: stringValue(item.newNickname ?? item.new_display_name, 80),
+      changed_at: numberValue(item.changedAt ?? item.changed_at),
+      source: "mini",
+    }))
+    .filter((item) => item.id && item.changed_at && item.old_display_name !== item.new_display_name)
+    .slice(0, 50);
+  if (!rows.length) return;
+  await rest(
+    "POST",
+    "/rest/v1/mini_profile_name_history?on_conflict=id",
+    rows,
+    { Prefer: "resolution=ignore-duplicates,return=minimal" },
+  );
 }
 
 function profileFromPayload(payload: unknown): Json {
@@ -358,6 +428,17 @@ function profileFromPayload(payload: unknown): Json {
 function profileNickname(profile: Json): string {
   const nickname = stringValue(profile.nickname, 80);
   return nickname && nickname !== "绒绒用户" ? nickname : "";
+}
+
+function accountNoValue(value: unknown): string {
+  const raw = stringValue(value, 12);
+  return /^[A-Za-z0-9_]{4,12}$/.test(raw) ? raw : "";
+}
+
+function randomAccountNo(): string {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return `R${1000000 + (bytes[0] % 9000000)}`;
 }
 
 function clientInfoValue(value: unknown): Json {
