@@ -23,6 +23,7 @@
 
 > [!IMPORTANT]
 > 本项目源码公开用于学习、研究和个人非商业用途。禁止将本项目、修改版本或衍生作品用于商业用途。详见 [LICENSE](LICENSE)。
+> "绒绒记账"名称、吉祥物、Logo、截图、发布包和品牌资产不随源码授权开放，详见 [TRADEMARKS.md](TRADEMARKS.md)；安全问题请查看 [SECURITY.md](SECURITY.md)。
 
 ## 产品预览
 

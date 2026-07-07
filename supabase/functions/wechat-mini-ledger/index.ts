@@ -604,7 +604,8 @@ async function sha256(value: string): Promise<string> {
 }
 
 async function emailCodeHash(email: string, code: string): Promise<string> {
-  const secret = Deno.env.get("EMAIL_CODE_SECRET") || serviceRoleKey || "rongrong";
+  const secret = Deno.env.get("EMAIL_CODE_SECRET") || serviceRoleKey;
+  if (!secret) throw new Error("EMAIL_CODE_SECRET 未配置");
   return await sha256(`${email}:${code}:${secret}`);
 }
 
