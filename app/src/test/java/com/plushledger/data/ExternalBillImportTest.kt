@@ -25,6 +25,25 @@ class ExternalBillImportTest {
     }
 
     @Test
+    fun parsesRongrongMiniProgramCsvBackup() {
+        val csv = """
+            日期,时间,类型,金额,分类路径,备注,账户,id
+            2026-07-07,09:18,支出,12.50,餐饮/早餐,小程序早餐,现金,mini-001
+            2026-07-07,10:00,收入,4.00,收入/退税退费,顺风车退费,支付宝,mini-002
+        """.trimIndent()
+
+        val preview = ExternalBillCsvParser.parse("绒绒备份", csv, "rongrong-miniprogram.csv")
+
+        assertEquals("绒绒备份", preview.provider)
+        assertEquals(2, preview.entries.size)
+        assertEquals("早餐", preview.entries.first().categoryName)
+        assertEquals("餐饮", preview.entries.first().categoryParentName)
+        assertEquals(1_250L, preview.entries.first().amountMinor)
+        assertEquals("income", preview.entries.last().type)
+        assertEquals("退税退费", preview.entries.last().categoryName)
+    }
+
+    @Test
     fun localAiUsesSecondLevelCategoryAndAccount() {
         val categories = CategoryCatalog.defaultCategories("user", "book", 0)
         val accounts = listOf(

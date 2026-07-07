@@ -150,16 +150,17 @@ fun ExportDataDialog(fileName: String, onDismiss: () -> Unit, onConfirm: () -> U
 fun BillSourceDialog(provider: String, onProvider: (String) -> Unit, onDismiss: () -> Unit, onChoose: () -> Unit) {
     val palette = LocalPlushPalette.current
     PlushModalFrame("选择账单来源", onDismiss, showClose = true) {
-        Text("仅支持你从微信或支付宝主动导出的 CSV 文件。应用不会读取你的支付账号、密码或云端账单。", color = palette.muted, fontSize = 13.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
+        Text("支持绒绒 App / 小程序导出的 CSV、JSON 备份，也支持微信或支付宝主动导出的支付账单 CSV。文件只在本机解析。", color = palette.muted, fontSize = 13.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SourceOption("绒绒备份", provider == "绒绒备份", palette.rose, R.drawable.brand_logo, Modifier.weight(1f)) { onProvider("绒绒备份") }
             SourceOption("微信账单", provider == "微信", palette.moss, R.drawable.art_wechat, Modifier.weight(1f)) { onProvider("微信") }
             SourceOption("支付宝账单", provider == "支付宝", palette.blue, null, Modifier.weight(1f)) { onProvider("支付宝") }
         }
         Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onDismiss) { Text("取消", color = palette.rose) }
-            TextButton(onClick = onChoose) { Text("选择 CSV", color = palette.moss, fontWeight = FontWeight.Black) }
+            TextButton(onClick = onChoose) { Text("选择文件", color = palette.moss, fontWeight = FontWeight.Black) }
         }
     }
 }
@@ -174,11 +175,11 @@ private fun SourceOption(label: String, selected: Boolean, color: Color, image: 
         border = BorderStroke(1.5.dp, if (selected) color else palette.border),
         shadowElevation = if (selected) 5.dp else 1.dp
     ) {
-        Column(Modifier.padding(vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (image != null) Image(painterResource(image), null, Modifier.size(42.dp), contentScale = ContentScale.Fit)
+        Column(Modifier.padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (image != null) Image(painterResource(image), null, Modifier.size(38.dp), contentScale = ContentScale.Fit)
             else Surface(shape = CircleShape, color = palette.blue.copy(alpha = 0.13f)) { Text("支", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = palette.blue, fontWeight = FontWeight.Black, fontSize = 24.sp) }
             Spacer(Modifier.height(7.dp))
-            Text(label, color = if (selected) color else palette.ink, fontWeight = FontWeight.Black)
+            Text(label, color = if (selected) color else palette.ink, fontWeight = FontWeight.Black, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (selected) Icon(Icons.Default.CheckCircle, "已选择", tint = color, modifier = Modifier.size(18.dp))
         }
     }
@@ -288,11 +289,11 @@ fun ContactSupportDialog(email: String, onDismiss: () -> Unit, onOpenEmail: () -
 fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String) -> Unit) {
     val palette = LocalPlushPalette.current
     var query by remember { mutableStateOf("") }
-    var typeFilter by remember { mutableStateOf("全部") }
+    var typeFilter by remember { mutableStateOf("经典") }
     val selectedSpec = plushThemeSpec(current) ?: plushThemeSpec("warm")
     val options = remember(query, typeFilter) {
         plushThemeCatalog.filter { spec ->
-            (typeFilter == "全部" || spec.type == typeFilter) && spec.matchesThemeQuery(query)
+            spec.type == typeFilter && spec.matchesThemeQuery(query)
         }
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -301,8 +302,8 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Hi~", color = Color(0xFFFFA126), fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("绒绒 · 经典色卡", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 30.sp)
-                        Text("♥  8 款经典颜色  ♥", color = Color(0xFF9A7865), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("绒绒 · 主题色卡", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 30.sp)
+                        Text("♥  经典 / 国内 / 国外  ♥", color = Color(0xFF9A7865), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Close, "关闭", tint = palette.muted) }
                 }
@@ -318,7 +319,7 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("全部", "经典").forEach { filter ->
+                    listOf("经典", "国内", "国外").forEach { filter ->
                         ThemeFilterPill(filter, selected = typeFilter == filter, modifier = Modifier.weight(1f)) { typeFilter = filter }
                     }
                 }
@@ -330,7 +331,7 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                     border = BorderStroke(1.dp, (selectedSpec?.primary ?: palette.rose).copy(alpha = 0.32f))
                 ) {
                     Column(Modifier.padding(13.dp)) {
-                        Text("当前主题", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("当前主题 · $typeFilter ${options.size} 款", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Text(plushThemeName(current), color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("下方长条只负责快速切换；主色和辅助色统一在这里查看。", color = palette.muted, fontSize = 12.sp)
                         selectedSpec?.let { spec ->
@@ -345,7 +346,7 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                 LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (options.isEmpty()) {
                         item {
-                            Text("没有找到匹配的色卡，换个关键词试试。", modifier = Modifier.fillMaxWidth().padding(18.dp), color = palette.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
+                            Text("没有找到匹配的色卡，换个关键词试试，或切到其他分组。", modifier = Modifier.fillMaxWidth().padding(18.dp), color = palette.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
                         }
                     }
                     items(options) { option ->
@@ -363,17 +364,19 @@ private fun ThemeCatalogRow(option: PlushThemeSpec, selected: Boolean, onClick: 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .height(44.dp)
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         color = if (selected) option.primary.copy(alpha = 0.13f) else Color.White.copy(alpha = 0.74f),
         border = BorderStroke(1.dp, if (selected) option.primary.copy(alpha = 0.42f) else palette.border)
     ) {
-        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(option.region, color = palette.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(44.dp), maxLines = 1)
-            Text(option.name, color = palette.ink, fontSize = 15.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(option.logic, color = palette.muted, fontSize = 11.sp, modifier = Modifier.weight(1.15f), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
+        Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(12.dp).clip(CircleShape).background(option.primary))
+            Spacer(Modifier.width(8.dp))
+            Text(option.region, color = palette.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(54.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(option.name, color = palette.ink, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(0.82f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(option.logic, color = palette.muted, fontSize = 10.sp, modifier = Modifier.weight(1.18f), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
             if (selected) {
                 Spacer(Modifier.width(8.dp))
                 Icon(Icons.Default.CheckCircle, "已选中", tint = option.primary, modifier = Modifier.size(18.dp))

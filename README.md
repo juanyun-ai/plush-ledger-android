@@ -7,14 +7,14 @@
 
   一款本地优先、可云同步的 3D 毛绒风 Android 记账与日记应用。
 
-  ![Version](https://img.shields.io/badge/version-1.1.6-FFA126?style=for-the-badge)
+  ![Version](https://img.shields.io/badge/version-1.2.1-FFA126?style=for-the-badge)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=for-the-badge)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=for-the-badge)
   ![License](https://img.shields.io/badge/license-Noncommercial-EA7C73?style=for-the-badge)
 
   <br>
 
-  <a href="https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.1.6.apk"><b>下载 Android APK</b></a>
+  <a href="https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.2.1.apk"><b>下载 Android APK</b></a>
   ·
   <a href="https://juanyun-ai.github.io/plush-ledger-android/"><b>产品网页</b></a>
   ·
@@ -53,7 +53,7 @@
 
 ## 当前状态
 
-- Android App 是当前完整版本，当前源码版本和最新已发布 APK 均为 **1.1.6**。
+- Android App 是当前完整版本，当前源码版本和最新已发布 APK 均为 **1.2.1**。
 - 微信小程序已上线，当前维护版本为 **1.4.9**；由于个人主体小程序类目和隐私合规限制，小程序版收敛了生活日历、资料上传、手机绑定等入口，AI 快记采用本机规则解析。
 - 两端共用“本地优先、可选云同步、用户确认后入账”的产品原则，但功能页面并不完全一致；Android 版保留更完整的 AI、日记、生活日历和应用内更新体验。
 - 项目从 2026-06-06 开始制作，前三到五天完成基础记账产品，随后围绕真实使用、设计稿、下载更新、导入导出、云同步、合规和小程序提审持续迭代约三周。
@@ -65,7 +65,7 @@
 - 管理后台：[admin.xiaoxing.online](https://admin.xiaoxing.online/)，默认连接绒绒记账 Supabase 项目，登录管理员账号后可管理反馈、官方消息、版本和远程配置。
 - 小程序用户在管理后台优先显示用户自设昵称；微信 openid 仅用于内部账号绑定，不作为公开用户名展示。
 - 运营看板只展示数据库可证明的数据：App 打开事件来自 `app_activity_events`，旧版本没有记录时不会倒填假活跃；记账发生日和同步日分开看。
-- 最新 APK：[rongrong-ledger-1.1.6.apk](https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.1.6.apk)
+- 最新 APK：[rongrong-ledger-1.2.1.apk](https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.2.1.apk)
 - 国内访问长期方案：优先用 Cloudflare Pages 或 Vercel 避开腾讯云接入备案阻塞；如后续需要大陆加速，再考虑腾讯云 EdgeOne 和接入备案。
 
 ## 功能
@@ -73,7 +73,7 @@
 - 收入、支出、分类、账户、预算与搜索；旧版转账数据结构保留，普通记账入口先收起。
 - 支出分类采用一级主类加二级细分：餐饮、交通、购物、日常、娱乐、人情社交、宠物、学习工作、医疗健康、其他；CSV 同时导出主类、细分、分类路径和层级。
 - 首页提供 AI 智能记账：可输入“6月27日，买了一杯瑞幸咖啡，微信支付”等自然语言；日期、分类和账户都可明确指定，云端模型仅用于增强识别且必须由用户确认后才会记账。
-- 支持选择用户主动从微信/支付宝导出的 CSV，在本机解析、预览并确认导入；不读取支付账号、密码或云端账单。
+- 支持导入绒绒 App / 小程序导出的 CSV、JSON 备份，也支持用户主动从微信/支付宝导出的 CSV，在本机解析、预览并确认导入；不读取支付账号、密码或云端账单。
 - 参考图风格的四项底栏、独立记账页、日期分组账单和可交互日历。
 - 统计页支持月报、季度报、年度报，环形图与趋势图按真实账目实时计算，并生成不说教的动态提示。
 - Room 本地优先存储，离线仍可正常记账。
@@ -151,7 +151,22 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ## 版本更新
 
-每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载由 Android 系统下载服务负责，应用读取真实字节和进度；主线路失败后会自动重试并切换备用线路，所有线路不可用时可交给系统浏览器下载。安装前必须通过 SHA-256 校验，校验失败不会进入安装流程。GitHub Release 与 Supabase Storage 互为主备，发布时按实测网络表现设置主线路。
+每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载由 Android 系统下载服务负责，应用读取真实字节和进度；主线路失败后会自动重试并切换备用线路，所有线路不可用时可交给系统浏览器下载。安装前必须通过 SHA-256 校验，校验失败不会进入安装流程。当前优先使用 GitHub raw 下载链路，GitHub Release 作为归档备份；后续可把大体积分享卡片迁到对象存储/CDN，进一步减小 APK。
+
+### v1.2.1
+
+1. 主题色卡恢复为“经典 / 国内 / 国外”三组：经典保留原八种色系，国内恢复 34 个省级行政区，国外恢复国家/地区色卡，并统一采用细长条选择样式。
+2. “我的”页增加窄屏保护和界面字号设置，vivo 等显示偏大的机型可切到紧凑模式；足迹数值改用短金额格式，减少省略号。
+3. 更新下载弹窗增加“后台下载”，慢网下可先退出弹窗，下载任务继续进行；1.2.1 APK 主线路回到历史更快的 GitHub raw 下载链路。
+4. 账单智能导入新增“绒绒备份”来源，支持小程序/App 导出的 CSV/JSON 备份，并保留微信、支付宝账单导入。
+5. 记账足迹从三行两列改为两行三列，热力图按周对齐并显示连续月份标签，数据随真实账目实时变化。
+
+### v1.2.0
+
+1. “我的”页重构为个人资料、记账足迹、活跃热力图和绒绒日记入口，常用入口移动到设置页。
+2. 绒绒日记支持同一天多条记录，修复云端唯一索引导致的 409 同步失败，并保留合并能力。
+3. 统计趋势图增强类别分层显示，主题页切换为更轻的长条式列表。
+4. 分享卡片素材更新到 34 省模板，应用端继续保留本地完整素材以保证离线可分享。
 
 ### v1.1.6
 

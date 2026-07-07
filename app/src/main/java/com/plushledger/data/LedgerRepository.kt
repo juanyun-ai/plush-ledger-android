@@ -225,6 +225,7 @@ class LedgerRepository(
                 categories,
                 accounts
             )
+            val importedCategoryId = importedCategoryId(entry, categories)
             val account = accounts.firstOrNull { account ->
                 entry.accountHint.contains(account.name) || account.name.contains(entry.accountHint)
             } ?: providerAccount
@@ -234,7 +235,7 @@ class LedgerRepository(
                 bookId = book.id,
                 type = entry.type,
                 amountMinor = entry.amountMinor,
-                categoryId = recognition?.categoryId,
+                categoryId = importedCategoryId ?: recognition?.categoryId,
                 accountId = account.id,
                 note = entry.note.ifBlank { "${preview.provider}账单" },
                 occurredAt = entry.occurredAt,
@@ -244,6 +245,21 @@ class LedgerRepository(
         }
         dao.upsertTransactions(records)
         return ExternalBillImportResult(records.size, preview.skippedRows)
+    }
+
+    private fun importedCategoryId(entry: ExternalBillEntry, categories: List<CategoryEntity>): String? {
+        val categoryName = entry.categoryName.ifBlank {
+            entry.categoryPath.split("/", ">").map(String::trim).filter(String::isNotBlank).lastOrNull().orEmpty()
+        }
+        if (categoryName.isBlank()) return null
+        val parentName = entry.categoryParentName.ifBlank {
+            entry.categoryPath.split("/", ">").map(String::trim).filter(String::isNotBlank).dropLast(1).lastOrNull().orEmpty()
+        }
+        val sameKind = categories.filter { it.kind == entry.type && it.deletedAt == null }
+        val byId = categories.associateBy { it.id }
+        return sameKind.firstOrNull { category ->
+            category.name == categoryName && parentName.isNotBlank() && category.parentId?.let(byId::get)?.name == parentName
+        }?.id ?: sameKind.firstOrNull { it.name == categoryName }?.id
     }
 
     suspend fun updateProfile(

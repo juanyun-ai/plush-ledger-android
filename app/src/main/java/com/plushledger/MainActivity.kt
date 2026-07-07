@@ -197,6 +197,7 @@ private fun PlushLedgerApp(
     val onboardingStore = remember { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE) }
     var onboardingDone by rememberSaveable { mutableStateOf(onboardingStore.getBoolean("v075_seen", false)) }
     var confirmDisableUpdatePrompt by rememberSaveable { mutableStateOf(false) }
+    var downloadDialogHidden by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(state.secureScreen) {
         setSecure(state.secureScreen)
@@ -207,6 +208,9 @@ private fun PlushLedgerApp(
             snackbar.showSnackbar(it)
             viewModel.clearMessage()
         }
+    }
+    LaunchedEffect(downloadState.phase, downloadState.versionName) {
+        if (!downloadState.isActive) downloadDialogHidden = false
     }
 
     StableVisualScale {
@@ -259,12 +263,13 @@ private fun PlushLedgerApp(
                         }
                     )
                 }
-                if (downloadState.isVisible) {
+                if (downloadState.isVisible && !(downloadState.isActive && downloadDialogHidden)) {
                     UpdateDownloadStatusDialog(
                         state = downloadState,
                         onCancel = cancelDownload,
                         onRetry = retryDownload,
                         onExternalDownload = openExternalDownload,
+                        onBackground = { downloadDialogHidden = true },
                         onDismiss = dismissDownloadStatus
                     )
                 }
@@ -277,7 +282,17 @@ private fun PlushLedgerApp(
 @Composable
 private fun StableVisualScale(content: @Composable () -> Unit) {
     val density = LocalDensity.current
-    val cappedFontScale = density.fontScale.coerceAtMost(1.05f)
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("plush_user_settings", Context.MODE_PRIVATE) }
+    var userScale by remember { mutableStateOf(prefs.getFloat("app_font_scale", 1f)) }
+    DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "app_font_scale") userScale = prefs.getFloat("app_font_scale", 1f)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    val cappedFontScale = (density.fontScale.coerceAtMost(1.05f) * userScale).coerceIn(0.9f, 1.1f)
     val stableDensity = remember(density.density, cappedFontScale) {
         Density(density = density.density, fontScale = cappedFontScale)
     }
@@ -391,6 +406,7 @@ private fun UpdateDownloadStatusDialog(
     onCancel: () -> Unit,
     onRetry: () -> Unit,
     onExternalDownload: () -> Unit,
+    onBackground: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val palette = LocalPlushPalette.current
@@ -456,7 +472,7 @@ private fun UpdateDownloadStatusDialog(
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFFFE4BD)))
                     Text("♥ 安装包大小 ${if (state.totalBytes > 0L) formatDownloadBytes(state.totalBytes) else "获取中"}", color = palette.muted, fontSize = 13.sp)
                     Text("★ 只有收到真实文件字节后才会显示百分比。", color = palette.muted, fontSize = 13.sp)
-                    Text("如果一直卡住，请取消后重试，或点“打开下载页”复制给浏览器下载。", color = palette.muted, fontSize = 13.sp, lineHeight = 18.sp)
+                    Text("下载慢时可以先转入后台，绒绒会继续慢慢下载。", color = palette.muted, fontSize = 13.sp, lineHeight = 18.sp)
                 }
                 when (state.phase) {
                     UpdateDownloadPhase.FAILED, UpdateDownloadPhase.CANCELLED -> {
@@ -468,9 +484,18 @@ private fun UpdateDownloadStatusDialog(
                         }
                         TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("关闭", color = palette.muted) }
                     }
-                    else -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = onExternalDownload, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp)) { Text("打开下载页") }
-                        TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("取消下载", color = palette.rose, fontWeight = FontWeight.Bold) }
+                    UpdateDownloadPhase.VERIFYING -> Unit
+                    UpdateDownloadPhase.IDLE -> Unit
+                    else -> {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(onClick = onBackground, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp)) { Text("后台下载") }
+                            OutlinedButton(onClick = onExternalDownload, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp)) { Text("浏览器") }
+                        }
+                    }
+                }
+                if (active) {
+                    TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                        Text("取消下载", color = palette.rose, fontWeight = FontWeight.Bold)
                     }
                 }
             }

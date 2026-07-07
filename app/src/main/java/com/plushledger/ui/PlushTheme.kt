@@ -282,7 +282,7 @@ private val legacyPlushThemeCatalog = listOf(
     PlushThemeSpec("global_egypt", "国外", "埃及", "尼罗沙金", colorRgb(0xD8A75F), colorRgb(0x8FB6C7), "金字塔、沙漠、尼罗河蓝", "egypt eg")
 )
 
-val plushThemeCatalog = listOf(
+private val classicPlushThemeCatalog = listOf(
     PlushThemeSpec("warm", "经典", "默认", "暖黄", WarmPalette.rose, WarmPalette.moss, "温暖、轻快、绒绒默认色", "default warm yellow"),
     PlushThemeSpec("pink", "经典", "绒粉", "粉色", PinkPalette.rose, PinkPalette.moss, "柔软、可爱、心情记录感", "pink cute soft"),
     PlushThemeSpec("mono", "经典", "黑白", "黑白", MonoPalette.rose, MonoPalette.moss, "克制、清爽、低干扰", "mono black white"),
@@ -292,6 +292,8 @@ val plushThemeCatalog = listOf(
     PlushThemeSpec("orange", "经典", "蜜桃", "蜜桃橙", OrangePalette.rose, OrangePalette.coral, "明亮、元气、暖甜", "orange peach"),
     PlushThemeSpec("brown", "经典", "可可", "可可棕", BrownPalette.rose, BrownPalette.moss, "安定、复古、耐看", "brown cocoa")
 )
+
+val plushThemeCatalog = classicPlushThemeCatalog + legacyPlushThemeCatalog
 
 fun plushThemeSpec(tone: String): PlushThemeSpec? = plushThemeCatalog.firstOrNull { it.key == tone }
 

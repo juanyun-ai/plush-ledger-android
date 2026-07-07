@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.plushledger.BuildConfig
@@ -20,6 +21,7 @@ import com.plushledger.data.Money
 import com.plushledger.data.OfficialMessage
 import com.plushledger.sync.AppVersionInfo
 import java.io.ByteArrayOutputStream
+import java.nio.charset.Charset
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -468,12 +470,15 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             state.value = state.value.copy(isBusy = true, message = null)
             runCatching {
+                val app = getApplication<Application>()
+                val fileName = app.displayName(uri)
                 val raw = withContext(Dispatchers.IO) {
-                    getApplication<Application>().contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
-                        reader.readText()
+                    val bytes = app.contentResolver.openInputStream(uri)?.use { input ->
+                        input.readBytes()
                     } ?: error("无法读取账单文件")
+                    bytes.decodeImportText()
                 }
-                ExternalBillCsvParser.parse(provider, raw)
+                ExternalBillCsvParser.parse(provider, raw, fileName)
             }.onSuccess { preview ->
                 state.value = state.value.copy(isBusy = false, billImportPreview = preview)
             }.onFailure { error ->
@@ -974,3 +979,14 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 }
+
+private fun ByteArray.decodeImportText(): String {
+    val utf8 = toString(Charsets.UTF_8)
+    if (!utf8.contains('\uFFFD')) return utf8
+    return runCatching { toString(Charset.forName("GB18030")) }.getOrDefault(utf8)
+}
+
+private fun Application.displayName(uri: Uri): String =
+    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else ""
+    }.orEmpty()
