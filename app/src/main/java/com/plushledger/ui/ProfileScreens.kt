@@ -122,6 +122,7 @@ import java.time.Period
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.delay
 
 private const val SUPPORT_EMAIL = "2998319435@qq.com"
@@ -285,7 +286,16 @@ fun MyScreen(
                 onDownloadUpdate = onDownloadUpdate
             )
         }
-        MyPage.SETTINGS -> SettingsScreen(state, biometricAvailable, viewModel, onBack = { page = MyPage.ROOT })
+        MyPage.SETTINGS -> SettingsScreen(
+            state,
+            biometricAvailable,
+            viewModel,
+            onBack = { page = MyPage.ROOT },
+            onBudget = { page = MyPage.BUDGET },
+            onCategory = { page = MyPage.CATEGORY },
+            onInbox = { page = MyPage.INBOX; viewModel.refreshMailbox() },
+            onAbout = { page = MyPage.ABOUT }
+        )
         MyPage.MEMBERSHIP -> MembershipScreen(state, onBack = { page = MyPage.ROOT })
         MyPage.BUDGET -> BudgetManagementScreen(state.ledger, onBack = { page = MyPage.ROOT }, onBudget = viewModel::setBudget)
         MyPage.CATEGORY -> CategoryManagementScreen(
@@ -329,6 +339,13 @@ private fun MyRoot(
     val monthCount = state.ledger.transactions.count { java.time.YearMonth.from(it.localDateForProfile()) == java.time.YearMonth.now() }
     val ledgerDays = state.ledger.transactions.map { it.localDateForProfile() }.distinct().size
     val context = LocalContext.current
+    val profilePrefs = remember { context.getSharedPreferences("plush_profile_actions", Context.MODE_PRIVATE) }
+    val userKey = state.session?.userId ?: "guest"
+    val signature = remember(userKey, profile?.updatedAt) {
+        profilePrefs.getString("signature_$userKey", "认真生活，温柔记账") ?: "认真生活，温柔记账"
+    }
+    val birthdayLabel = profile?.birthDate?.takeIf { it.isNotBlank() }?.toBirthdayLabel() ?: "未设置生日"
+    val regionLabel = listOfNotNull(profile?.province, profile?.city).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "未设置地区" }
     val dailyQuote = rememberDailyQuote()
     val quotes = rememberQuoteCollection()
     var quoteIndex by remember { mutableIntStateOf(Math.floorMod(System.nanoTime().toInt(), quotes.size)) }
@@ -374,15 +391,19 @@ private fun MyRoot(
                     }
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            profile?.displayName ?: state.session?.displayName ?: "绒绒用户",
-                            fontWeight = FontWeight.Black,
-                        fontSize = 25.sp,
-                            color = palette.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text("享受每一次记录的好习惯～", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                profile?.displayName ?: state.session?.displayName ?: "绒绒用户",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 25.sp,
+                                color = palette.ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            GenderMark(profile?.gender)
+                        }
+                        Text(signature.ifBlank { "认真生活，温柔记账" }, color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(8.dp))
                         Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFFFFEDC8), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFDFA2))) {
                             Row(Modifier.padding(start = 4.dp, end = 12.dp, top = 3.dp, bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -396,41 +417,16 @@ private fun MyRoot(
                                 )
                             }
                         }
+                        Spacer(Modifier.height(4.dp))
+                        Text("生日：$birthdayLabel", color = palette.muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("地区：$regionLabel", color = palette.muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     MascotArt(88.dp, R.drawable.mascot_action_heart)
-                }
-                Spacer(Modifier.height(8.dp))
-                Surface(shape = RoundedCornerShape(22.dp), color = Color.White.copy(alpha = 0.9f), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ProfileMetric(Icons.Default.CalendarMonth, "累计记账", "$ledgerDays 天", palette.rose, Modifier.weight(1f))
-                        Box(Modifier.width(1.dp).height(58.dp).background(palette.border))
-                        ProfileMetric(Icons.Default.EditNote, "本月已记录", "$monthCount 笔", palette.moss, Modifier.weight(1f))
-                    }
                 }
             }
         }
         item {
-            PlushCard(Modifier.fillMaxWidth(), padding = 8.dp) {
-                Box(Modifier.fillMaxWidth().clickable(onClick = onBudget).padding(6.dp)) {
-                    MenuRow(Icons.Default.Paid, "预算管理", "", palette.rose)
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                Box(Modifier.fillMaxWidth().clickable(onClick = onCategory).padding(6.dp)) {
-                    MenuRow(Icons.Default.Badge, "分类管理", "", palette.moss)
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                Box(Modifier.fillMaxWidth().clickable { showExportDialog = true }.padding(6.dp)) {
-                    MenuRow(Icons.Default.Download, "数据导出", "", palette.rose)
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                Box(Modifier.fillMaxWidth().clickable(onClick = onInbox).padding(6.dp)) {
-                    MenuRow(Icons.Default.Notifications, "通知提醒", if (state.officialMessages.isEmpty()) "已开启" else "${state.officialMessages.size} 条消息", palette.coral)
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
-                Box(Modifier.fillMaxWidth().clickable(onClick = onAbout).padding(6.dp)) {
-                    MenuRow(Icons.Default.AccountCircle, "关于我们", "", palette.blue)
-                }
-            }
+            LedgerFootprintCard(state.ledger, ledgerDays, monthCount)
         }
         item {
             DiarySummaryCard(
@@ -1568,6 +1564,164 @@ private fun ProfileEditRow(
 }
 
 @Composable
+private fun GenderMark(gender: String?) {
+    val palette = LocalPlushPalette.current
+    val spec = when (gender) {
+        "male" -> "♂" to Color(0xFF3F8CF4)
+        "female" -> "♀" to Color(0xFFFF7BAE)
+        else -> return
+    }
+    Spacer(Modifier.width(6.dp))
+    Surface(
+        shape = CircleShape,
+        color = spec.second.copy(alpha = 0.14f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, spec.second.copy(alpha = 0.28f))
+    ) {
+        Text(
+            spec.first,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            color = spec.second,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Black
+        )
+    }
+}
+
+@Composable
+private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount: Int) {
+    val palette = LocalPlushPalette.current
+    val transactions = ledger.transactions
+    val totalExpense = transactions.filter { it.type == "expense" }.sumOf { it.amountMinor }
+    val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amountMinor }
+    val streaks = remember(transactions) { ledgerStreaks(transactions.map { it.localDateForProfile() }) }
+    ProfileWarmPanel(padding = 14.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("记账足迹", color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text("每一笔，都在慢慢变成生活的轨迹", color = palette.muted, fontSize = 12.sp)
+            }
+            MascotArt(58.dp, R.drawable.mascot_action_wave)
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FootprintMetric(Icons.Default.EditNote, "累计记账", "${transactions.size} 笔", palette.rose, Modifier.weight(1f))
+            FootprintMetric(Icons.Default.Paid, "累计支出", Money.formatCny(totalExpense), palette.coral, Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FootprintMetric(Icons.Default.Favorite, "累计收入", Money.formatCny(totalIncome), palette.moss, Modifier.weight(1f))
+            FootprintMetric(Icons.Default.CalendarMonth, "本月记录", "$monthCount 笔", palette.blue, Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FootprintMetric(Icons.Default.TouchApp, "累计记账", "$ledgerDays 天", palette.rose, Modifier.weight(1f))
+            FootprintMetric(Icons.Default.EmojiEvents, "最长连续", "${streaks.longest} 天", Color(0xFFFFB24A), Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(14.dp))
+        Surface(shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.86f), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("记账活跃度", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    TinyPill("近3月", palette.rose)
+                }
+                Spacer(Modifier.height(12.dp))
+                ActivityHeatmap(transactions)
+                Spacer(Modifier.height(9.dp))
+                Text(
+                    "当前连续 ${streaks.current} 天 · 数据随账目实时变化",
+                    color = palette.muted,
+                    fontSize = 11.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FootprintMetric(icon: ImageVector, label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = modifier.height(68.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White.copy(alpha = 0.88f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
+    ) {
+        Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            PlushBadge(icon, color, 38.dp)
+            Spacer(Modifier.width(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, color = palette.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(value, color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivityHeatmap(transactions: List<com.plushledger.data.TransactionEntity>) {
+    val palette = LocalPlushPalette.current
+    val today = LocalDate.now()
+    val start = today.minusDays(90)
+    val counts = transactions
+        .map { it.localDateForProfile() }
+        .filter { !it.isBefore(start) && !it.isAfter(today) }
+        .groupingBy { it }
+        .eachCount()
+    val maxCount = counts.values.maxOrNull()?.coerceAtLeast(1) ?: 1
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        listOf("一", "二", "三", "四", "五", "六", "日").forEachIndexed { row, label ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(label, color = palette.muted, fontSize = 10.sp, modifier = Modifier.width(12.dp))
+                repeat(13) { column ->
+                    val date = start.plusDays((column * 7 + row).toLong())
+                    val count = counts[date] ?: 0
+                    val alpha = if (count == 0) 0.12f else (0.22f + 0.58f * count / maxCount).coerceIn(0.22f, 0.82f)
+                    Box(
+                        Modifier
+                            .size(12.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (date.isAfter(today)) palette.surfaceAlt else palette.rose.copy(alpha = alpha))
+                    )
+                }
+            }
+        }
+        Row(Modifier.padding(start = 17.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(start.format(DateTimeFormatter.ofPattern("M月")), color = palette.muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+            Text(start.plusDays(45).format(DateTimeFormatter.ofPattern("M月")), color = palette.muted, fontSize = 10.sp, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(today.format(DateTimeFormatter.ofPattern("M月")), color = palette.muted, fontSize = 10.sp, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+        }
+    }
+}
+
+private data class LedgerStreaks(val current: Int, val longest: Int)
+
+private fun ledgerStreaks(dates: List<LocalDate>): LedgerStreaks {
+    val days = dates.distinct().sorted()
+    if (days.isEmpty()) return LedgerStreaks(0, 0)
+    var longest = 1
+    var run = 1
+    for (index in 1 until days.size) {
+        run = if (ChronoUnit.DAYS.between(days[index - 1], days[index]) == 1L) run + 1 else 1
+        if (run > longest) longest = run
+    }
+    val today = LocalDate.now()
+    val latest = days.last()
+    val current = if (ChronoUnit.DAYS.between(latest, today) <= 1L) {
+        var cursor = latest
+        var count = 0
+        val set = days.toSet()
+        while (cursor in set) {
+            count++
+            cursor = cursor.minusDays(1)
+        }
+        count
+    } else {
+        0
+    }
+    return LedgerStreaks(current, longest)
+}
+
+@Composable
 private fun ProfileShortcut(icon: ImageVector, label: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val palette = LocalPlushPalette.current
     Column(
@@ -1587,7 +1741,16 @@ private fun ProfileShortcut(icon: ImageVector, label: String, color: Color, modi
 }
 
 @Composable
-private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewModel: LedgerViewModel, onBack: () -> Unit) {
+private fun SettingsScreen(
+    state: UiState,
+    biometricAvailable: Boolean,
+    viewModel: LedgerViewModel,
+    onBack: () -> Unit,
+    onBudget: () -> Unit,
+    onCategory: () -> Unit,
+    onInbox: () -> Unit,
+    onAbout: () -> Unit
+) {
     val palette = LocalPlushPalette.current
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("plush_user_settings", Context.MODE_PRIVATE) }
@@ -1652,6 +1815,18 @@ private fun SettingsScreen(state: UiState, biometricAvailable: Boolean, viewMode
                     }
                     MascotArt(82.dp, R.drawable.mascot_action_wave)
                 }
+            }
+        }
+        item {
+            PlushCard {
+                ProfileSectionTitle("常用入口")
+                ActionRow(Icons.Default.Paid, "预算管理", "管理月度预算和提醒", palette.rose, onBudget)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                ActionRow(Icons.Default.Badge, "分类管理", "调整支出、收入分类", palette.moss, onCategory)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                ActionRow(Icons.Default.Notifications, "通知提醒", if (state.officialMessages.isEmpty()) "已开启" else "${state.officialMessages.size} 条消息", palette.coral, onInbox)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                ActionRow(Icons.Default.AccountCircle, "关于我们", "联系与产品信息", palette.blue, onAbout)
             }
         }
         item {

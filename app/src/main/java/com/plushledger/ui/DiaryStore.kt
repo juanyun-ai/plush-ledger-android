@@ -33,6 +33,7 @@ class DiaryStore(context: Context, private val userId: String) {
     fun addEntry(date: String, text: String, mood: String, status: String = ""): List<DiaryEntry> {
         val entry = DiaryEntry(date = date, text = text.trim(), mood = mood, status = status.trim())
         val updated = (listOf(entry) + load())
+            .dedupeActiveEntries()
             .take(180)
         save(updated)
         clearDraft(date)
@@ -50,6 +51,7 @@ class DiaryStore(context: Context, private val userId: String) {
         )
         val updated = (listOf(normalized) + load().filterNot { it.id == normalized.id })
             .sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
+            .dedupeActiveEntries()
             .take(180)
         save(updated)
         return updated
@@ -84,6 +86,7 @@ class DiaryStore(context: Context, private val userId: String) {
         selected.forEach(::markDeleted)
         val updated = (listOf(merged) + all.filterNot { it.id in ids })
             .sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
+            .dedupeActiveEntries()
             .take(180)
         save(updated)
         return updated
@@ -122,8 +125,9 @@ class DiaryStore(context: Context, private val userId: String) {
     }
 
     private fun save(entries: List<DiaryEntry>) {
+        val cleaned = entries.dedupeActiveEntries()
         val payload = JSONArray().apply {
-            entries.forEach { entry ->
+            cleaned.forEach { entry ->
                 put(
                     JSONObject()
                         .put("date", entry.date)
@@ -208,9 +212,40 @@ class DiaryStore(context: Context, private val userId: String) {
                 )
                 if (entry.date.isNotBlank() && entry.text.isNotBlank()) add(entry)
             }
-        }.sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
+        }
+            .dedupeActiveEntries()
+            .sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
     }.getOrDefault(emptyList())
 }
 
 private fun newDiaryId(date: String): String =
     "diary:${date}:${UUID.randomUUID()}"
+
+private fun List<DiaryEntry>.dedupeActiveEntries(): List<DiaryEntry> {
+    val latestById = valuesByLatest { it.id }
+    return latestById
+        .values
+        .toList()
+        .valuesByLatest { it.contentSignature() }
+        .values
+        .sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
+}
+
+private fun List<DiaryEntry>.valuesByLatest(key: (DiaryEntry) -> String): LinkedHashMap<String, DiaryEntry> {
+    val result = LinkedHashMap<String, DiaryEntry>()
+    forEach { entry ->
+        val current = result[key(entry)]
+        if (current == null || entry.updatedAt >= current.updatedAt) {
+            result[key(entry)] = entry
+        }
+    }
+    return result
+}
+
+private fun DiaryEntry.contentSignature(): String =
+    listOf(
+        date,
+        text.replace(Regex("\\s+"), " ").trim(),
+        mood.trim(),
+        status.trim()
+    ).joinToString("|")

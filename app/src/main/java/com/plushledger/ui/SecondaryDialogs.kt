@@ -289,7 +289,7 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
     val palette = LocalPlushPalette.current
     var query by remember { mutableStateOf("") }
     var typeFilter by remember { mutableStateOf("全部") }
-    val selectedSpec = plushThemeSpec(current)
+    val selectedSpec = plushThemeSpec(current) ?: plushThemeSpec("warm")
     val options = remember(query, typeFilter) {
         plushThemeCatalog.filter { spec ->
             (typeFilter == "全部" || spec.type == typeFilter) && spec.matchesThemeQuery(query)
@@ -301,8 +301,8 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Hi~", color = Color(0xFFFFA126), fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("绒绒 · 限定色卡", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 30.sp)
-                        Text("♥  国内外 58 款真实配色  ♥", color = Color(0xFF9A7865), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("绒绒 · 经典色卡", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 30.sp)
+                        Text("♥  8 款经典颜色  ♥", color = Color(0xFF9A7865), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Close, "关闭", tint = palette.muted) }
                 }
@@ -318,7 +318,7 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("全部", "国内", "国外").forEach { filter ->
+                    listOf("全部", "经典").forEach { filter ->
                         ThemeFilterPill(filter, selected = typeFilter == filter, modifier = Modifier.weight(1f)) { typeFilter = filter }
                     }
                 }
@@ -332,34 +332,51 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                     Column(Modifier.padding(13.dp)) {
                         Text("当前主题", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Text(plushThemeName(current), color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (selectedSpec == null) {
-                            Text("选中任意限定色卡后，全 App 会切换到对应国家/地区配色。", color = palette.muted, fontSize = 12.sp)
-                        } else {
+                        Text("下方长条只负责快速切换；主色和辅助色统一在这里查看。", color = palette.muted, fontSize = 12.sp)
+                        selectedSpec?.let { spec ->
                             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                ThemeHexChip("主色", selectedSpec.primary)
-                                ThemeHexChip("辅助", selectedSpec.secondary)
+                                ThemeHexChip("主色", spec.primary)
+                                ThemeHexChip("辅助", spec.secondary)
                             }
                         }
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (options.isEmpty()) {
                         item {
                             Text("没有找到匹配的色卡，换个关键词试试。", modifier = Modifier.fillMaxWidth().padding(18.dp), color = palette.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
                         }
                     }
-                    items(options.chunked(2)) { row ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            row.forEach { option ->
-                                ThemeCatalogCard(option, current == option.key, Modifier.weight(1f)) { onChoose(option.key) }
-                            }
-                            if (row.size == 1) {
-                                Spacer(Modifier.weight(1f))
-                            }
-                        }
+                    items(options) { option ->
+                        ThemeCatalogRow(option, current == option.key) { onChoose(option.key) }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeCatalogRow(option: PlushThemeSpec, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) option.primary.copy(alpha = 0.13f) else Color.White.copy(alpha = 0.74f),
+        border = BorderStroke(1.dp, if (selected) option.primary.copy(alpha = 0.42f) else palette.border)
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(option.region, color = palette.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(44.dp), maxLines = 1)
+            Text(option.name, color = palette.ink, fontSize = 15.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(option.logic, color = palette.muted, fontSize = 11.sp, modifier = Modifier.weight(1.15f), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
+            if (selected) {
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Default.CheckCircle, "已选中", tint = option.primary, modifier = Modifier.size(18.dp))
             }
         }
     }

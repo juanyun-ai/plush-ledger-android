@@ -2179,7 +2179,7 @@ fun StatsScreen(ledger: LedgerState, selectedDate: LocalDate, onMonth: (Long) ->
     val periodIncome = periodRecords.filter { it.type == "income" }.sumOf { it.amountMinor }
     val periodBalance = periodIncome - periodExpense
     val chartData = periodCategorySpend(periodRecords, ledger.categories)
-    val trendSpend = periodTrend(reportMode, period, periodRecords)
+    val trendSpend = periodTrend(reportMode, period, periodRecords, ledger.categories)
     val insight = statsInsight(period, periodExpense, periodIncome, previousRecords.filter { it.type == "expense" }.sumOf { it.amountMinor }, chartData)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2428,10 +2428,25 @@ private fun StatsDonutPanel(spend: List<CategorySpend>, totalExpense: Long, modi
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun StatsTrendPanel(title: String, spend: List<WeekSpend>, selectedIndex: Int?, modifier: Modifier = Modifier, onSelect: (Int) -> Unit = {}) {
     WarmPanel(modifier, padding = 12.dp) {
         ProfileSectionLine(title)
         MonthWeekTrendChart(spend, selectedIndex, onSelect)
+        val selected = selectedIndex?.let { spend.getOrNull(it) }
+        selected?.takeIf { it.amountMinor > 0L }?.let { week ->
+            Spacer(Modifier.height(8.dp))
+            Text("${week.label} 合计 ${Money.formatCny(week.amountMinor)}", color = LocalPlushPalette.current.ink, fontWeight = FontWeight.Black, fontSize = 13.sp)
+            Spacer(Modifier.height(6.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                week.segments.take(5).forEach { segment ->
+                    val percent = segment.amountMinor * 100 / week.amountMinor.coerceAtLeast(1)
+                    Surface(shape = RoundedCornerShape(999.dp), color = segment.color.copy(alpha = 0.13f), border = androidx.compose.foundation.BorderStroke(1.dp, segment.color.copy(alpha = 0.34f))) {
+                        Text("${segment.label} $percent% · ${Money.formatCny(segment.amountMinor)}", modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp), color = LocalPlushPalette.current.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2563,13 +2578,32 @@ private fun MonthWeekTrendChart(spend: List<WeekSpend>, selectedIndex: Int?, onS
                     }
                     Spacer(Modifier.height(5.dp))
                     Box(
-                        Modifier
+                        modifier = Modifier
                             .width(if (selected) 31.dp else 25.dp)
                             .height(if (selected) height + 10.dp else height)
                             .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
-                            .background(Brush.verticalGradient(listOf(statsColor(index).copy(alpha = 0.58f), statsColor(index))))
                             .clickable { onSelect(index) }
-                    )
+                            .then(
+                                if (week.segments.isEmpty()) {
+                                    Modifier.background(Brush.verticalGradient(listOf(statsColor(index).copy(alpha = 0.58f), statsColor(index))))
+                                } else {
+                                    Modifier.background(palette.surfaceAlt)
+                                }
+                            )
+                    ) {
+                        if (week.segments.isNotEmpty()) {
+                            Column(Modifier.fillMaxSize()) {
+                                week.segments.forEach { segment ->
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .weight(segment.amountMinor.toFloat().coerceAtLeast(1f))
+                                            .background(segment.color.copy(alpha = if (selected) 0.96f else 0.82f))
+                                    )
+                                }
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text(
                         week.label,
@@ -2641,7 +2675,9 @@ private fun StatsTransactionRow(record: TransactionEntity, categories: Map<Strin
     }
 }
 
-private data class WeekSpend(val label: String, val amountMinor: Long)
+private data class TrendSegment(val label: String, val amountMinor: Long, val color: Color)
+
+private data class WeekSpend(val label: String, val amountMinor: Long, val segments: List<TrendSegment> = emptyList())
 
 private data class StatsPeriod(
     val start: LocalDate,
@@ -2721,18 +2757,18 @@ private fun periodCategorySpend(records: List<TransactionEntity>, categories: Li
         .sortedByDescending { it.amountMinor }
 }
 
-private fun periodTrend(mode: String, period: StatsPeriod, records: List<TransactionEntity>): List<WeekSpend> =
+private fun periodTrend(mode: String, period: StatsPeriod, records: List<TransactionEntity>, categories: List<CategoryEntity>): List<WeekSpend> =
     if (mode == "month") {
-        YearMonth.from(period.start).weeklyExpense(records)
+        YearMonth.from(period.start).weeklyExpense(records, categories)
     } else {
         val months = mutableListOf<WeekSpend>()
         var cursor = YearMonth.from(period.start)
         val stop = YearMonth.from(period.endExclusive.minusDays(1))
         while (!cursor.isAfter(stop)) {
-            val amount = records
+            val monthRows = records
                 .filter { it.type == "expense" && YearMonth.from(it.localDate()) == cursor }
-                .sumOf { it.amountMinor }
-            months += WeekSpend("${cursor.monthValue}月", amount)
+            val amount = monthRows.sumOf { it.amountMinor }
+            months += WeekSpend("${cursor.monthValue}月", amount, trendSegments(monthRows, categories))
             cursor = cursor.plusMonths(1)
         }
         months
@@ -2762,24 +2798,39 @@ private fun statsInsight(
     return "$topName 排在${period.metricPrefix}第一，顺着分类榜看一眼就有数。"
 }
 
-private fun YearMonth.weeklyExpense(records: List<TransactionEntity>): List<WeekSpend> {
+private fun YearMonth.weeklyExpense(records: List<TransactionEntity>, categories: List<CategoryEntity>): List<WeekSpend> {
     val end = atEndOfMonth()
     val weeks = mutableListOf<WeekSpend>()
     var start = atDay(1)
     while (!start.isAfter(end)) {
         val stopCandidate = start.plusDays(6)
         val stop = if (stopCandidate.isAfter(end)) end else stopCandidate
-        val amount = records
+        val weekRows = records
             .filter { it.type == "expense" }
             .filter {
                 val date = it.localDate()
                 !date.isBefore(start) && !date.isAfter(stop)
             }
-            .sumOf { it.amountMinor }
-        weeks += WeekSpend("${start.dayOfMonth}~${stop.dayOfMonth}", amount)
+        val amount = weekRows.sumOf { it.amountMinor }
+        weeks += WeekSpend("${start.dayOfMonth}~${stop.dayOfMonth}", amount, trendSegments(weekRows, categories))
         start = stop.plusDays(1)
     }
     return weeks
+}
+
+private fun trendSegments(records: List<TransactionEntity>, categories: List<CategoryEntity>): List<TrendSegment> {
+    val expense = records.filter { it.type == "expense" }
+    val total = expense.sumOf { it.amountMinor }
+    if (total <= 0L) return emptyList()
+    val top = periodCategorySpend(expense, categories).take(5)
+    val segments = top.mapIndexed { index, spend ->
+        TrendSegment(spend.category.name, spend.amountMinor, statsColor(index))
+    }.toMutableList()
+    val displayed = segments.sumOf { it.amountMinor }
+    if (displayed < total) {
+        segments += TrendSegment("其他", total - displayed, Color(0xFFCFCBC4))
+    }
+    return segments.filter { it.amountMinor > 0L }
 }
 
 private fun statsColor(index: Int): Color = listOf(

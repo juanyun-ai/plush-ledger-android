@@ -918,6 +918,7 @@ class LedgerRepository(
             .filter { it.optString("date").isNotBlank() }
             .groupBy { it.optString("id").ifBlank { "legacy:${it.optString("date")}" } }
             .map { (_, rows) -> rows.maxBy { it.optLong("updated_at", it.optLong("created_at", 0L)) } }
+            .dedupeDiaryContentRows()
             .sortedWith(compareByDescending<JSONObject> { it.optString("date") }.thenByDescending { it.optLong("updated_at", 0L) })
             .take(240)
 
@@ -970,6 +971,29 @@ class LedgerRepository(
             .put("created_at", optLong("created_at", updatedAt).takeIf { it > 0L } ?: updatedAt)
             .put("updated_at", updatedAt)
             .put("deleted_at", optLong("deleted_at", 0L).takeIf { it > 0L } ?: JSONObject.NULL)
+    }
+
+    private fun List<JSONObject>.dedupeDiaryContentRows(): List<JSONObject> {
+        val activeByContent = LinkedHashMap<String, JSONObject>()
+        val tombstones = mutableListOf<JSONObject>()
+        forEach { row ->
+            val deletedAt = row.optLong("deleted_at", 0L)
+            if (deletedAt > 0L || row.optString("text").isBlank()) {
+                tombstones += row
+                return@forEach
+            }
+            val key = listOf(
+                row.optString("date"),
+                row.optString("text").replace(Regex("\\s+"), " ").trim(),
+                row.optString("mood", "开心").trim(),
+                row.optString("status").trim()
+            ).joinToString("|")
+            val current = activeByContent[key]
+            if (current == null || row.optLong("updated_at", 0L) >= current.optLong("updated_at", 0L)) {
+                activeByContent[key] = row
+            }
+        }
+        return tombstones + activeByContent.values
     }
 
     private fun mergedId(userId: String, seed: String): String =

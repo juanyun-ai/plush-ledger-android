@@ -221,7 +221,7 @@ private fun PlushThemeSpec.toPalette(): PlushPalette {
     )
 }
 
-val plushThemeCatalog = listOf(
+private val legacyPlushThemeCatalog = listOf(
     PlushThemeSpec("cn_beijing", "国内", "北京", "宫墙绒红", colorRgb(0xC96F5F), colorRgb(0xF1C08A), "宫墙、胡同、秋日银杏", "beijing bj"),
     PlushThemeSpec("cn_tianjin", "国内", "天津", "海河雾蓝", colorRgb(0xA9C9D8), colorRgb(0xE7C68D), "海河、欧式建筑、码头感", "tianjin tj"),
     PlushThemeSpec("cn_shanghai", "国内", "上海", "浦江蓝灰", colorRgb(0x9FB9CC), colorRgb(0xF2B6A0), "海派、玻璃幕墙、黄浦江", "shanghai sh"),
@@ -280,6 +280,17 @@ val plushThemeCatalog = listOf(
     PlushThemeSpec("global_philippines", "国外", "菲律宾", "海岛晴蓝", colorRgb(0x8EC6DF), colorRgb(0xF2C96B), "海岛、阳光、浅海蓝", "philippines ph"),
     PlushThemeSpec("global_mongolia", "国外", "蒙古", "草原苍绿", colorRgb(0xA9BF8F), colorRgb(0xC98A67), "草原、戈壁、游牧皮革色", "mongolia mn"),
     PlushThemeSpec("global_egypt", "国外", "埃及", "尼罗沙金", colorRgb(0xD8A75F), colorRgb(0x8FB6C7), "金字塔、沙漠、尼罗河蓝", "egypt eg")
+)
+
+val plushThemeCatalog = listOf(
+    PlushThemeSpec("warm", "经典", "默认", "暖黄", WarmPalette.rose, WarmPalette.moss, "温暖、轻快、绒绒默认色", "default warm yellow"),
+    PlushThemeSpec("pink", "经典", "绒粉", "粉色", PinkPalette.rose, PinkPalette.moss, "柔软、可爱、心情记录感", "pink cute soft"),
+    PlushThemeSpec("mono", "经典", "黑白", "黑白", MonoPalette.rose, MonoPalette.moss, "克制、清爽、低干扰", "mono black white"),
+    PlushThemeSpec("green", "经典", "淡绿", "淡绿", GreenPalette.rose, GreenPalette.moss, "清新、自然、轻盈", "green fresh"),
+    PlushThemeSpec("blue", "经典", "冰蓝", "冰蓝", IceBluePalette.rose, IceBluePalette.moss, "清醒、干净、冷静", "blue ice"),
+    PlushThemeSpec("purple", "经典", "紫色", "薰衣草紫", PurplePalette.rose, PurplePalette.lilac, "温柔、梦幻、轻松", "purple lavender"),
+    PlushThemeSpec("orange", "经典", "蜜桃", "蜜桃橙", OrangePalette.rose, OrangePalette.coral, "明亮、元气、暖甜", "orange peach"),
+    PlushThemeSpec("brown", "经典", "可可", "可可棕", BrownPalette.rose, BrownPalette.moss, "安定、复古、耐看", "brown cocoa")
 )
 
 fun plushThemeSpec(tone: String): PlushThemeSpec? = plushThemeCatalog.firstOrNull { it.key == tone }
