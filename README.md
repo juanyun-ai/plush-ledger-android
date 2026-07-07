@@ -14,7 +14,7 @@
 
   <br>
 
-  <a href="https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.2.1.apk"><b>下载 Android APK</b></a>
+  <a href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.2.1.apk"><b>下载 Android APK</b></a>
   ·
   <a href="https://juanyun-ai.github.io/plush-ledger-android/"><b>产品网页</b></a>
   ·
@@ -65,7 +65,7 @@
 - 管理后台：[admin.xiaoxing.online](https://admin.xiaoxing.online/)，默认连接绒绒记账 Supabase 项目，登录管理员账号后可管理反馈、官方消息、版本和远程配置。
 - 小程序用户在管理后台优先显示用户自设昵称；微信 openid 仅用于内部账号绑定，不作为公开用户名展示。
 - 运营看板只展示数据库可证明的数据：App 打开事件来自 `app_activity_events`，旧版本没有记录时不会倒填假活跃；记账发生日和同步日分开看。
-- 最新 APK：[rongrong-ledger-1.2.1.apk](https://privacy.xiaoxing.online/downloads/rongrong-ledger-1.2.1.apk)
+- 最新 APK：[rongrong-ledger-1.2.1.apk](https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.2.1.apk)
 - 国内访问长期方案：优先用 Cloudflare Pages 或 Vercel 避开腾讯云接入备案阻塞；如后续需要大陆加速，再考虑腾讯云 EdgeOne 和接入备案。
 
 ## 功能
