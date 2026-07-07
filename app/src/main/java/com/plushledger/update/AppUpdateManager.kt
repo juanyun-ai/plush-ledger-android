@@ -127,10 +127,11 @@ class AppUpdateManager(private val activity: FragmentActivity) {
     }
 
     fun openExternalDownload() {
+        val url = currentSource() ?: preferences.getString(KEY_PRIMARY_URL, null)?.takeIf(String::isNotBlank) ?: DOWNLOAD_PAGE_URL
         runCatching {
-            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DOWNLOAD_PAGE_URL)))
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }.onSuccess {
-            showToast("已打开下载页，可在浏览器中选择下载线路", Toast.LENGTH_LONG)
+            showToast("已打开当前下载线路", Toast.LENGTH_LONG)
         }.onFailure {
             showToast("无法打开系统浏览器，请检查默认浏览器设置", Toast.LENGTH_LONG)
         }

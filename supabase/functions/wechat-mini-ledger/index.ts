@@ -352,12 +352,17 @@ async function updateMiniUserProfile(userId: unknown, payload: unknown, now: num
   if (signature) patch.signature = signature;
   patch.birthday_wechat_enabled = Boolean(profile.birthdayWechatSubscribeEnabled);
   patch.birthday_email_enabled = Boolean(profile.birthdayEmailEnabled);
-  await rest(
-    "PATCH",
-    `/rest/v1/mini_users?id=eq.${encodeURIComponent(String(userId))}`,
-    patch,
-    { Prefer: "return=minimal" },
-  );
+  try {
+    await rest(
+      "PATCH",
+      `/rest/v1/mini_users?id=eq.${encodeURIComponent(String(userId))}`,
+      patch,
+      { Prefer: "return=minimal" },
+    );
+  } catch (error) {
+    if (isAccountNoUniqueError(error)) throw new Error("用户ID已被占用，请换一个");
+    throw error;
+  }
   await syncMiniNameHistory(userId, nicknameHistory);
 }
 
@@ -480,6 +485,11 @@ function profileNickname(profile: Json): string {
 function accountNoValue(value: unknown): string {
   const raw = stringValue(value, 12);
   return /^[A-Za-z0-9_]{4,12}$/.test(raw) ? raw : "";
+}
+
+function isAccountNoUniqueError(error: unknown): boolean {
+  const text = String(error instanceof Error ? error.message : error).toLowerCase();
+  return text.includes("mini_users_account_no_unique_idx") || text.includes("duplicate") || text.includes("23505");
 }
 
 function randomAccountNo(): string {

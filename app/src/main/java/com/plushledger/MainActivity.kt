@@ -66,6 +66,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -82,12 +83,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -206,6 +209,7 @@ private fun PlushLedgerApp(
         }
     }
 
+    StableVisualScale {
     PlushLedgerTheme(false, state.themeTone) {
         Surface(Modifier.fillMaxSize(), color = LocalPlushPalette.current.background) {
             Box(Modifier.fillMaxSize()) {
@@ -266,6 +270,19 @@ private fun PlushLedgerApp(
                 }
             }
         }
+    }
+    }
+}
+
+@Composable
+private fun StableVisualScale(content: @Composable () -> Unit) {
+    val density = LocalDensity.current
+    val cappedFontScale = density.fontScale.coerceAtMost(1.05f)
+    val stableDensity = remember(density.density, cappedFontScale) {
+        Density(density = density.density, fontScale = cappedFontScale)
+    }
+    CompositionLocalProvider(LocalDensity provides stableDensity) {
+        content()
     }
 }
 
