@@ -283,14 +283,14 @@ private val legacyPlushThemeCatalog = listOf(
 )
 
 private val classicPlushThemeCatalog = listOf(
-    PlushThemeSpec("warm", "经典", "默认", "暖黄", WarmPalette.rose, WarmPalette.moss, "温暖、轻快、绒绒默认色", "default warm yellow"),
-    PlushThemeSpec("pink", "经典", "绒粉", "粉色", PinkPalette.rose, PinkPalette.moss, "柔软、可爱、心情记录感", "pink cute soft"),
-    PlushThemeSpec("mono", "经典", "黑白", "黑白", MonoPalette.rose, MonoPalette.moss, "克制、清爽、低干扰", "mono black white"),
-    PlushThemeSpec("green", "经典", "淡绿", "淡绿", GreenPalette.rose, GreenPalette.moss, "清新、自然、轻盈", "green fresh"),
-    PlushThemeSpec("blue", "经典", "冰蓝", "冰蓝", IceBluePalette.rose, IceBluePalette.moss, "清醒、干净、冷静", "blue ice"),
-    PlushThemeSpec("purple", "经典", "紫色", "薰衣草紫", PurplePalette.rose, PurplePalette.lilac, "温柔、梦幻、轻松", "purple lavender"),
-    PlushThemeSpec("orange", "经典", "蜜桃", "蜜桃橙", OrangePalette.rose, OrangePalette.coral, "明亮、元气、暖甜", "orange peach"),
-    PlushThemeSpec("brown", "经典", "可可", "可可棕", BrownPalette.rose, BrownPalette.moss, "安定、复古、耐看", "brown cocoa")
+    PlushThemeSpec("warm", "经典", "默认", "暖黄", WarmPalette.rose, WarmPalette.rose, "温暖、轻快、绒绒默认色", "default warm yellow"),
+    PlushThemeSpec("pink", "经典", "绒粉", "粉色", PinkPalette.rose, PinkPalette.rose, "柔软、可爱、心情记录感", "pink cute soft"),
+    PlushThemeSpec("mono", "经典", "黑白", "黑白", MonoPalette.rose, MonoPalette.rose, "克制、清爽、低干扰", "mono black white"),
+    PlushThemeSpec("green", "经典", "淡绿", "淡绿", GreenPalette.rose, GreenPalette.rose, "清新、自然、轻盈", "green fresh"),
+    PlushThemeSpec("blue", "经典", "冰蓝", "冰蓝", IceBluePalette.rose, IceBluePalette.rose, "清醒、干净、冷静", "blue ice"),
+    PlushThemeSpec("purple", "经典", "紫色", "薰衣草紫", PurplePalette.rose, PurplePalette.rose, "温柔、梦幻、轻松", "purple lavender"),
+    PlushThemeSpec("orange", "经典", "蜜桃", "蜜桃橙", OrangePalette.rose, OrangePalette.rose, "明亮、元气、暖甜", "orange peach"),
+    PlushThemeSpec("brown", "经典", "可可", "可可棕", BrownPalette.rose, BrownPalette.rose, "安定、复古、耐看", "brown cocoa")
 )
 
 val plushThemeCatalog = classicPlushThemeCatalog + legacyPlushThemeCatalog
@@ -315,7 +315,7 @@ fun PlushLedgerTheme(darkMode: Boolean, themeTone: String = "warm", content: @Co
     val palette = if (darkMode) {
         DarkPalette
     } else {
-        plushThemeSpec(themeTone)?.toPalette() ?: when (themeTone) {
+        when (themeTone) {
             "pink" -> PinkPalette
             "mono" -> MonoPalette
             "green" -> GreenPalette
@@ -323,7 +323,8 @@ fun PlushLedgerTheme(darkMode: Boolean, themeTone: String = "warm", content: @Co
             "purple" -> PurplePalette
             "orange" -> OrangePalette
             "brown" -> BrownPalette
-            else -> WarmPalette
+            "warm" -> WarmPalette
+            else -> plushThemeSpec(themeTone)?.toPalette() ?: WarmPalette
         }
     }
     androidx.compose.runtime.CompositionLocalProvider(LocalPlushPalette provides palette) {

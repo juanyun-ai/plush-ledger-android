@@ -34,6 +34,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -44,7 +45,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -235,19 +235,18 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
               }
             }
         }
-        item { Text("近期日记", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 22.sp) }
-        if (selectedDiaryIds.isNotEmpty()) {
-            item {
-                Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFFFFF3E6), border = BorderStroke(1.dp, Color(0xFFFFD7A3))) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("已选择 ${selectedDiaryIds.size} 篇", color = palette.ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { selectedDiaryIds = emptySet() }) { Text("取消", color = palette.muted) }
-                        PlushButton("合并", Icons.Default.Save, color = palette.pink, enabled = canMerge) {
-                            entries = store.mergeEntries(selectedDiaryIds)
-                            selectedDiaryIds = emptySet()
-                            onChanged()
-                            Toast.makeText(context, "同一天日记已合并", Toast.LENGTH_SHORT).show()
-                        }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("近期日记", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 22.sp, modifier = Modifier.weight(1f))
+                if (selectedDiaryIds.isNotEmpty()) {
+                    Text("已选 ${selectedDiaryIds.size} 篇", color = palette.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(6.dp))
+                    TextButton(onClick = { selectedDiaryIds = emptySet() }) { Text("取消", color = palette.muted) }
+                    PlushButton("合并", Icons.Default.Save, color = palette.pink, enabled = canMerge) {
+                        entries = store.mergeEntries(selectedDiaryIds)
+                        selectedDiaryIds = emptySet()
+                        onChanged()
+                        Toast.makeText(context, "同一天日记已合并", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -262,7 +261,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
                     onSelectionChange = {
                         selectedDiaryIds = if (entry.id in selectedDiaryIds) selectedDiaryIds - entry.id else selectedDiaryIds + entry.id
                     },
-                    onClick = { editingEntry = entry },
+                    onClick = { editingEntry = store.entryDraft(entry.id) ?: entry },
                     onDelete = {
                         entries = store.deleteEntry(entry)
                         selectedDiaryIds = selectedDiaryIds - entry.id
@@ -292,7 +291,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
             initial = entry,
             onDismiss = { editingEntry = null },
             onDraft = { draft ->
-                store.saveDraft(draft.date, draft.text, draft.mood, draft.status)
+                store.saveEntryDraft(draft)
                 Toast.makeText(context, "这篇日记草稿已暂存", Toast.LENGTH_SHORT).show()
                 editingEntry = null
             },
@@ -484,7 +483,17 @@ private fun DiaryHistoryCard(entry: DiaryEntry, selected: Boolean, onSelectionCh
     val palette = LocalPlushPalette.current
     Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), color = palette.surface, border = BorderStroke(1.dp, palette.border), shadowElevation = 2.dp) {
         Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = selected, onCheckedChange = { onSelectionChange() })
+            Surface(
+                modifier = Modifier.size(26.dp).clip(CircleShape).clickable(onClick = onSelectionChange),
+                shape = CircleShape,
+                color = if (selected) palette.pink else Color.Transparent,
+                border = BorderStroke(2.dp, if (selected) palette.pink else palette.pink.copy(alpha = 0.42f))
+            ) {
+                if (selected) {
+                    Icon(Icons.Default.Check, contentDescription = "已选择", tint = Color.White, modifier = Modifier.padding(5.dp))
+                }
+            }
+            Spacer(Modifier.width(10.dp))
             MascotArt(48.dp, R.drawable.mascot_action_sleep)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {

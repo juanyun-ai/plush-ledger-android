@@ -274,7 +274,7 @@ class LedgerRepository(
     ) {
         val current = dao.getProfile(userId) ?: return
         val normalizedAccountNo = accountNo?.trim()?.takeIf { it.isNotBlank() } ?: current.accountNo ?: defaultAccountNo(userId)
-        require(normalizedAccountNo.matches(Regex("^[A-Za-z0-9_]{4,12}$"))) { "用户ID仅支持 4-12 位字母、数字或下划线" }
+        require(normalizedAccountNo.matches(Regex("^[A-Za-z]{6,8}$"))) { "用户ID仅支持 6-8 位英文字母" }
         val yearKey = LocalDate.now().year.toString()
         val changedYear = if (current.accountNoChangedMonth == yearKey) current.accountNoChangedMonth else yearKey
         val baseChangeCount = if (current.accountNoChangedMonth == yearKey) current.accountNoChangedCount else 0
@@ -466,6 +466,23 @@ class LedgerRepository(
         val from = siblings.indexOfFirst { it.id == categoryId }
         if (from == -1) return
         val to = (from + direction).coerceIn(0, siblings.lastIndex)
+        if (from == to) return
+        val reordered = siblings.toMutableList().apply { add(to, removeAt(from)) }
+        val now = now()
+        dao.upsertCategories(
+            reordered.mapIndexed { index, item ->
+                item.copy(sortOrder = index, updatedAt = now, syncState = SYNC_DIRTY)
+            }
+        )
+    }
+
+    suspend fun moveCategoryTo(userId: String, categoryId: String, targetIndex: Int) {
+        val all = dao.categoriesSnapshot(userId)
+        val current = all.firstOrNull { it.id == categoryId } ?: return
+        val siblings = all.filter { it.kind == current.kind && it.parentId == current.parentId }.sortedBy { it.sortOrder }
+        val from = siblings.indexOfFirst { it.id == categoryId }
+        if (from == -1) return
+        val to = targetIndex.coerceIn(0, siblings.lastIndex)
         if (from == to) return
         val reordered = siblings.toMutableList().apply { add(to, removeAt(from)) }
         val now = now()
@@ -1061,7 +1078,7 @@ class LedgerRepository(
         gender = gender?.takeIf { it in setOf("female", "male", "other", "prefer_not") },
         province = province?.trim()?.takeIf { it.length <= 30 },
         city = city?.trim()?.takeIf { it.length <= 40 },
-        accountNo = accountNo?.trim()?.takeIf { it.matches(Regex("^[A-Za-z0-9_]{4,18}$")) },
+        accountNo = accountNo?.trim()?.takeIf { it.matches(Regex("^[A-Za-z]{6,8}$")) },
         currency = currency.takeIf { it.length == 3 } ?: "CNY"
     )
 
@@ -1311,7 +1328,17 @@ private val expenseColors = listOf("#C86F7E", "#D99676", "#B86A77", "#E0A0A8", "
 private val incomeColors = listOf("#5E9B83", "#6E8DBF", "#8AA46D", "#76A9A8")
 
 private fun defaultAccountNo(userId: String): String =
-    "RR" + userId.filter(Char::isLetterOrDigit).takeLast(10).uppercase(Locale.ROOT).padStart(10, '0')
+    buildString {
+        append("RR")
+        val letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        val source = userId.filter(Char::isLetter).uppercase(Locale.ROOT)
+        append(source.take(6))
+        var seed = userId.fold(17) { acc, ch -> acc * 31 + ch.code }.toUInt().toLong()
+        while (length < 8) {
+            append(letters[(seed % letters.length).toInt()])
+            seed = seed / letters.length + 11
+        }
+    }.take(8)
 
 private fun JSONObject.toProfile() = ProfileEntity(
     id = getString("id"),

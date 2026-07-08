@@ -304,7 +304,8 @@ fun MyScreen(
             onBack = { page = MyPage.ROOT },
             onAdd = viewModel::addCategory,
             onDelete = viewModel::deleteCategory,
-            onReorder = viewModel::moveCategory
+            onReorder = viewModel::moveCategory,
+            onMoveTo = viewModel::moveCategoryTo
         )
         MyPage.ABOUT -> AboutScreen(
             onBack = { page = MyPage.ROOT },
@@ -972,11 +973,13 @@ private fun ProfileScreen(
     }
     if (showAccountNoEditor) {
         ProfileTextEditDialog(
-            title = "修改账号编号",
+            title = "修改用户ID",
             value = accountNo,
-            label = "4-12 位字母、数字或下划线，一年最多改 2 次",
-            maxLength = 12,
-            filter = { it.filter { ch -> ch.isLetterOrDigit() || ch == '_' } },
+            label = "6-8 位英文字母，一年最多改 2 次",
+            maxLength = 8,
+            filter = { it.filter { ch -> ch in 'A'..'Z' || ch in 'a'..'z' } },
+            isValid = { it.length in 6..8 && it.all { ch -> ch in 'A'..'Z' || ch in 'a'..'z' } },
+            errorText = "用户ID只能是 6-8 位英文字母，不能包含数字、空格或符号。",
             onDismiss = { showAccountNoEditor = false },
             onConfirm = { accountNo = it.trim(); showAccountNoEditor = false }
         )
@@ -1436,36 +1439,40 @@ private fun RegionPickerChip(label: String, selected: Boolean, onClick: () -> Un
 }
 
 private val regionPickerCities = linkedMapOf(
-    "上海" to listOf("上海"),
-    "重庆" to listOf("重庆"),
-    "山东" to listOf("济南", "青岛", "烟台", "潍坊", "临沂"),
-    "江苏" to listOf("南京", "苏州", "无锡", "常州", "扬州"),
-    "浙江" to listOf("杭州", "宁波", "温州", "绍兴", "嘉兴"),
-    "河南" to listOf("郑州", "洛阳", "开封", "南阳"),
-    "广东" to listOf("广州", "深圳", "佛山", "东莞", "珠海"),
-    "四川" to listOf("成都", "绵阳", "乐山", "宜宾"),
-    "湖北" to listOf("武汉", "宜昌", "襄阳"),
-    "湖南" to listOf("长沙", "株洲", "湘潭"),
-    "安徽" to listOf("合肥", "芜湖", "黄山"),
-    "福建" to listOf("福州", "厦门", "泉州"),
-    "江西" to listOf("南昌", "九江", "景德镇"),
-    "河北" to listOf("石家庄", "秦皇岛", "唐山"),
-    "辽宁" to listOf("沈阳", "大连"),
-    "吉林" to listOf("长春"),
-    "黑龙江" to listOf("哈尔滨"),
-    "陕西" to listOf("西安"),
-    "甘肃" to listOf("兰州"),
-    "青海" to listOf("西宁"),
-    "云南" to listOf("昆明", "大理"),
-    "贵州" to listOf("贵阳"),
-    "海南" to listOf("海口", "三亚"),
-    "广西" to listOf("南宁", "桂林"),
-    "宁夏" to listOf("银川"),
-    "新疆" to listOf("乌鲁木齐"),
-    "内蒙古" to listOf("呼和浩特"),
-    "西藏" to listOf("拉萨"),
-    "台湾" to listOf("台北"),
-    "港澳" to listOf("香港", "澳门")
+    "北京" to listOf("北京市"),
+    "天津" to listOf("天津市"),
+    "河北" to listOf("石家庄", "唐山", "秦皇岛", "邯郸", "邢台", "保定", "张家口", "承德", "沧州", "廊坊", "衡水"),
+    "山西" to listOf("太原", "大同", "阳泉", "长治", "晋城", "朔州", "晋中", "运城", "忻州", "临汾", "吕梁"),
+    "内蒙古" to listOf("呼和浩特", "包头", "乌海", "赤峰", "通辽", "鄂尔多斯", "呼伦贝尔", "巴彦淖尔", "乌兰察布", "兴安盟", "锡林郭勒盟", "阿拉善盟"),
+    "辽宁" to listOf("沈阳", "大连", "鞍山", "抚顺", "本溪", "丹东", "锦州", "营口", "阜新", "辽阳", "盘锦", "铁岭", "朝阳", "葫芦岛"),
+    "吉林" to listOf("长春", "吉林", "四平", "辽源", "通化", "白山", "松原", "白城", "延边朝鲜族自治州"),
+    "黑龙江" to listOf("哈尔滨", "齐齐哈尔", "鸡西", "鹤岗", "双鸭山", "大庆", "伊春", "佳木斯", "七台河", "牡丹江", "黑河", "绥化", "大兴安岭地区"),
+    "上海" to listOf("上海市"),
+    "江苏" to listOf("南京", "无锡", "徐州", "常州", "苏州", "南通", "连云港", "淮安", "盐城", "扬州", "镇江", "泰州", "宿迁"),
+    "浙江" to listOf("杭州", "宁波", "温州", "嘉兴", "湖州", "绍兴", "金华", "衢州", "舟山", "台州", "丽水"),
+    "安徽" to listOf("合肥", "芜湖", "蚌埠", "淮南", "马鞍山", "淮北", "铜陵", "安庆", "黄山", "滁州", "阜阳", "宿州", "六安", "亳州", "池州", "宣城"),
+    "福建" to listOf("福州", "厦门", "莆田", "三明", "泉州", "漳州", "南平", "龙岩", "宁德"),
+    "江西" to listOf("南昌", "景德镇", "萍乡", "九江", "新余", "鹰潭", "赣州", "吉安", "宜春", "抚州", "上饶"),
+    "山东" to listOf("济南", "青岛", "淄博", "枣庄", "东营", "烟台", "潍坊", "济宁", "泰安", "威海", "日照", "临沂", "德州", "聊城", "滨州", "菏泽"),
+    "河南" to listOf("郑州", "开封", "洛阳", "平顶山", "安阳", "鹤壁", "新乡", "焦作", "濮阳", "许昌", "漯河", "三门峡", "南阳", "商丘", "信阳", "周口", "驻马店", "济源"),
+    "湖北" to listOf("武汉", "黄石", "十堰", "宜昌", "襄阳", "鄂州", "荆门", "孝感", "荆州", "黄冈", "咸宁", "随州", "恩施土家族苗族自治州", "仙桃", "潜江", "天门", "神农架林区"),
+    "湖南" to listOf("长沙", "株洲", "湘潭", "衡阳", "邵阳", "岳阳", "常德", "张家界", "益阳", "郴州", "永州", "怀化", "娄底", "湘西土家族苗族自治州"),
+    "广东" to listOf("广州", "深圳", "珠海", "汕头", "佛山", "韶关", "湛江", "肇庆", "江门", "茂名", "惠州", "梅州", "汕尾", "河源", "阳江", "清远", "东莞", "中山", "潮州", "揭阳", "云浮"),
+    "广西" to listOf("南宁", "柳州", "桂林", "梧州", "北海", "防城港", "钦州", "贵港", "玉林", "百色", "贺州", "河池", "来宾", "崇左"),
+    "海南" to listOf("海口", "三亚", "三沙", "儋州", "五指山", "琼海", "文昌", "万宁", "东方", "定安", "屯昌", "澄迈", "临高", "白沙黎族自治县", "昌江黎族自治县", "乐东黎族自治县", "陵水黎族自治县", "保亭黎族苗族自治县", "琼中黎族苗族自治县"),
+    "重庆" to listOf("重庆市"),
+    "四川" to listOf("成都", "自贡", "攀枝花", "泸州", "德阳", "绵阳", "广元", "遂宁", "内江", "乐山", "南充", "眉山", "宜宾", "广安", "达州", "雅安", "巴中", "资阳", "阿坝藏族羌族自治州", "甘孜藏族自治州", "凉山彝族自治州"),
+    "贵州" to listOf("贵阳", "六盘水", "遵义", "安顺", "毕节", "铜仁", "黔西南布依族苗族自治州", "黔东南苗族侗族自治州", "黔南布依族苗族自治州"),
+    "云南" to listOf("昆明", "曲靖", "玉溪", "保山", "昭通", "丽江", "普洱", "临沧", "楚雄彝族自治州", "红河哈尼族彝族自治州", "文山壮族苗族自治州", "西双版纳傣族自治州", "大理白族自治州", "德宏傣族景颇族自治州", "怒江傈僳族自治州", "迪庆藏族自治州"),
+    "西藏" to listOf("拉萨", "日喀则", "昌都", "林芝", "山南", "那曲", "阿里地区"),
+    "陕西" to listOf("西安", "铜川", "宝鸡", "咸阳", "渭南", "延安", "汉中", "榆林", "安康", "商洛"),
+    "甘肃" to listOf("兰州", "嘉峪关", "金昌", "白银", "天水", "武威", "张掖", "平凉", "酒泉", "庆阳", "定西", "陇南", "临夏回族自治州", "甘南藏族自治州"),
+    "青海" to listOf("西宁", "海东", "海北藏族自治州", "黄南藏族自治州", "海南藏族自治州", "果洛藏族自治州", "玉树藏族自治州", "海西蒙古族藏族自治州"),
+    "宁夏" to listOf("银川", "石嘴山", "吴忠", "固原", "中卫"),
+    "新疆" to listOf("乌鲁木齐", "克拉玛依", "吐鲁番", "哈密", "昌吉回族自治州", "博尔塔拉蒙古自治州", "巴音郭楞蒙古自治州", "阿克苏地区", "克孜勒苏柯尔克孜自治州", "喀什地区", "和田地区", "伊犁哈萨克自治州", "塔城地区", "阿勒泰地区", "石河子", "阿拉尔", "图木舒克", "五家渠", "北屯", "铁门关", "双河", "可克达拉", "昆玉", "胡杨河", "新星", "白杨"),
+    "台湾" to listOf("台北", "新北", "桃园", "台中", "台南", "高雄", "基隆", "新竹", "嘉义", "宜兰", "新竹县", "苗栗", "彰化", "南投", "云林", "嘉义县", "屏东", "台东", "花莲", "澎湖", "金门", "连江"),
+    "香港" to listOf("香港岛", "九龙", "新界"),
+    "澳门" to listOf("澳门半岛", "氹仔", "路环")
 )
 
 @Composable
@@ -1476,25 +1483,35 @@ private fun ProfileTextEditDialog(
     maxLength: Int,
     keyboardType: KeyboardType = KeyboardType.Text,
     filter: (String) -> String = { it },
+    isValid: (String) -> Boolean = { true },
+    errorText: String = "",
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
     var draft by rememberSaveable(title) { mutableStateOf(value) }
+    val trimmedDraft = draft.trim()
+    val valid = isValid(trimmedDraft)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, fontWeight = FontWeight.Bold) },
         text = {
-            OutlinedTextField(
-                draft,
-                { draft = filter(it).take(maxLength) },
-                label = { Text(label) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    draft,
+                    { draft = filter(it).take(maxLength) },
+                    label = { Text(label) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = !valid && trimmedDraft.isNotEmpty(),
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
+                )
+                if (!valid && trimmedDraft.isNotEmpty() && errorText.isNotBlank()) {
+                    Text(errorText, color = LocalPlushPalette.current.coral, fontSize = 12.sp)
+                }
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        confirmButton = { TextButton(onClick = { onConfirm(draft.trim()) }) { Text("确定") } }
+        confirmButton = { TextButton(enabled = valid, onClick = { onConfirm(trimmedDraft) }) { Text("确定") } }
     )
 }
 
@@ -1597,6 +1614,13 @@ private fun GenderMark(gender: String?) {
     }
 }
 
+private data class FootprintMetricItem(
+    val icon: ImageVector,
+    val label: String,
+    val value: String,
+    val color: Color
+)
+
 @Composable
 private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount: Int) {
     val palette = LocalPlushPalette.current
@@ -1604,6 +1628,15 @@ private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount
     val totalExpense = transactions.filter { it.type == "expense" }.sumOf { it.amountMinor }
     val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amountMinor }
     val streaks = remember(transactions) { ledgerStreaks(transactions.map { it.localDateForProfile() }) }
+    var showHeatmap by rememberSaveable { mutableStateOf(false) }
+    val metrics = listOf(
+        FootprintMetricItem(Icons.Default.EditNote, "累计记账", "${transactions.size} 笔", palette.rose),
+        FootprintMetricItem(Icons.Default.Paid, "累计支出", compactCny(totalExpense), palette.coral),
+        FootprintMetricItem(Icons.Default.Favorite, "累计收入", compactCny(totalIncome), palette.moss),
+        FootprintMetricItem(Icons.Default.CalendarMonth, "本月记录", "$monthCount 笔", palette.blue),
+        FootprintMetricItem(Icons.Default.TouchApp, "累计天数", "$ledgerDays 天", palette.rose),
+        FootprintMetricItem(Icons.Default.EmojiEvents, "最长连续", "${streaks.longest} 天", Color(0xFFFFB24A))
+    )
     ProfileWarmPanel(padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -1613,32 +1646,41 @@ private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount
             MascotArt(58.dp, R.drawable.mascot_action_wave)
         }
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FootprintMetric(Icons.Default.EditNote, "累计记账", "${transactions.size} 笔", palette.rose, Modifier.weight(1f))
-            FootprintMetric(Icons.Default.Paid, "累计支出", compactCny(totalExpense), palette.coral, Modifier.weight(1f))
-            FootprintMetric(Icons.Default.Favorite, "累计收入", compactCny(totalIncome), palette.moss, Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FootprintMetric(Icons.Default.CalendarMonth, "本月记录", "$monthCount 笔", palette.blue, Modifier.weight(1f))
-            FootprintMetric(Icons.Default.TouchApp, "累计天数", "$ledgerDays 天", palette.rose, Modifier.weight(1f))
-            FootprintMetric(Icons.Default.EmojiEvents, "最长连续", "${streaks.longest} 天", Color(0xFFFFB24A), Modifier.weight(1f))
+        BoxWithConstraints {
+            val columns = if (maxWidth < 390.dp) 2 else 3
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                metrics.chunked(columns).forEach { rowItems ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        rowItems.forEach { item ->
+                            FootprintMetric(item.icon, item.label, item.value, item.color, Modifier.weight(1f))
+                        }
+                        repeat(columns - rowItems.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(14.dp))
-        Surface(shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.86f), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
+        LedgerGentleSummary(transactions, ledgerDays, monthCount, streaks)
+        Spacer(Modifier.height(10.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { showHeatmap = !showHeatmap },
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White.copy(alpha = 0.72f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
+        ) {
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("记账活跃度", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    TinyPill("近3月", palette.rose)
+                    Text(if (showHeatmap) "收起" else "展开", color = palette.rose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.height(12.dp))
-                ActivityHeatmap(transactions)
-                Spacer(Modifier.height(9.dp))
-                Text(
-                    "当前连续 ${streaks.current} 天 · 数据随账目实时变化",
-                    color = palette.muted,
-                    fontSize = 11.sp
-                )
+                if (showHeatmap) {
+                    Spacer(Modifier.height(12.dp))
+                    ActivityHeatmap(transactions)
+                    Spacer(Modifier.height(9.dp))
+                    Text("近 3 个月记录分布，仅用于回看自己的生活节奏。", color = palette.muted, fontSize = 11.sp)
+                }
             }
         }
     }
@@ -1648,23 +1690,82 @@ private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount
 private fun FootprintMetric(icon: ImageVector, label: String, value: String, color: Color, modifier: Modifier = Modifier) {
     val palette = LocalPlushPalette.current
     Surface(
-        modifier = modifier.height(72.dp),
+        modifier = modifier.height(68.dp),
         shape = RoundedCornerShape(16.dp),
         color = Color.White.copy(alpha = 0.88f),
         border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
     ) {
-        Column(
-            Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 9.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            PlushBadge(icon, color, 30.dp)
-            Spacer(Modifier.height(5.dp))
-            Text(label, color = palette.muted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            PlushBadge(icon, color, 34.dp)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                Text(label, color = palette.muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    value,
+                    color = palette.ink,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LedgerGentleSummary(
+    transactions: List<com.plushledger.data.TransactionEntity>,
+    ledgerDays: Int,
+    monthCount: Int,
+    streaks: LedgerStreaks
+) {
+    val palette = LocalPlushPalette.current
+    val latest = transactions.maxByOrNull { it.occurredAt }
+    val latestLabel = latest?.localDateForProfile()?.format(DateTimeFormatter.ofPattern("M月d日")) ?: "还没有"
+    val summary = when {
+        transactions.isEmpty() -> "第一笔账还没来，等你愿意开始的时候再写也可以。"
+        monthCount == 0 -> "已经在 $ledgerDays 天里留下 ${transactions.size} 笔记录，这个月可以慢慢重新接上。"
+        else -> "已经在 $ledgerDays 天里留下 ${transactions.size} 笔记录，本月新增 $monthCount 笔。"
+    }
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White.copy(alpha = 0.86f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("最近小结", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                TinyPill("实时", palette.rose)
+            }
+            Text(summary, color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GentleStatPill("最近记录", latestLabel, palette.blue, Modifier.weight(1f))
+                GentleStatPill("当前连续", "${streaks.current} 天", palette.moss, Modifier.weight(1f))
+                GentleStatPill("本月记录", "$monthCount 笔", palette.rose, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun GentleStatPill(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = color.copy(alpha = 0.11f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.18f))
+    ) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, color = palette.muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 value,
                 color = palette.ink,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Black,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2086,8 +2187,8 @@ private fun SettingsScreen(
 }
 
 private fun appFontScaleLabel(scale: Float): String = when {
-    scale < 0.98f -> "紧凑"
-    scale > 1.03f -> "稍大"
+    scale < 0.88f -> "更紧凑"
+    scale < 0.97f -> "紧凑"
     else -> "标准"
 }
 
@@ -2095,9 +2196,9 @@ private fun appFontScaleLabel(scale: Float): String = when {
 private fun FontScaleDialog(current: Float, onDismiss: () -> Unit, onChoose: (Float) -> Unit) {
     val palette = LocalPlushPalette.current
     val options = listOf(
-        Triple(0.94f, "紧凑", "适合 vivo 等显示偏大的手机"),
-        Triple(1.0f, "标准", "保持当前默认观感"),
-        Triple(1.06f, "稍大", "适合喜欢大一点文字的用户")
+        Triple(0.84f, "更紧凑", "适合显示偏大的手机，尽量减少换行"),
+        Triple(0.92f, "紧凑", "比标准小一档，保留舒适间距"),
+        Triple(1.0f, "标准", "保持默认观感，不再提供放大字号")
     )
     AlertDialog(
         onDismissRequest = onDismiss,

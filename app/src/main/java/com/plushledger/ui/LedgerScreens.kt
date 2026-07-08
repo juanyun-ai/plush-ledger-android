@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -112,9 +113,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import com.plushledger.data.AccountEntity
 import com.plushledger.data.AiLedgerAnalysis
 import com.plushledger.R
@@ -134,6 +137,7 @@ import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
@@ -1843,13 +1847,19 @@ fun CategoryManagementScreen(
     onBack: () -> Unit,
     onAdd: (String, String) -> Unit,
     onDelete: (String) -> Unit,
-    onReorder: (String, Int) -> Unit = { _, _ -> }
+    onReorder: (String, Int) -> Unit = { _, _ -> },
+    onMoveTo: (String, Int) -> Unit = { _, _ -> }
 ) {
     val palette = LocalPlushPalette.current
     var kind by rememberSaveable { mutableStateOf("expense") }
     var newName by rememberSaveable { mutableStateOf("") }
-    var pendingDelete by remember { mutableStateOf<CategoryEntity?>(null) }
     var editMode by rememberSaveable { mutableStateOf(false) }
+    val jiggle by rememberInfiniteTransition(label = "categoryJiggle").animateFloat(
+        initialValue = -1.4f,
+        targetValue = 1.4f,
+        animationSpec = infiniteRepeatable(tween(90), RepeatMode.Reverse),
+        label = "categoryJiggleOffset"
+    )
     val categories = ledger.categories.filter { it.kind == kind }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 112.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { ManagementHeader("分类管理", onBack) }
@@ -1857,8 +1867,8 @@ fun CategoryManagementScreen(
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    if (editMode) "编辑中：拖动分类可调整顺序，点右上角叉叉删除。"
-                    else "长按任意分类进入编辑状态，再拖动排序或点叉叉删除。",
+                    if (editMode) "编辑中：拖动分类调整顺序，松手后会吸附到最近位置。"
+                    else "长按任意分类 1 秒进入抖动排序，再拖动调整顺序。",
                     color = palette.muted,
                     fontSize = 12.sp,
                     modifier = Modifier.weight(1f)
@@ -1868,11 +1878,20 @@ fun CategoryManagementScreen(
         }
         item {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                categories.forEach { category ->
-                    var dragOffset by remember(category.id) { mutableStateOf(0f) }
+                categories.forEachIndexed { index, category ->
+                    var dragOffset by remember(category.id) { mutableStateOf(Offset.Zero) }
+                    val dragging = dragOffset != Offset.Zero
                     Box(
                         modifier = Modifier
                             .width(164.dp)
+                            .offset {
+                                IntOffset(
+                                    dragOffset.x.roundToInt() + if (editMode && !dragging) jiggle.roundToInt() else 0,
+                                    dragOffset.y.roundToInt()
+                                )
+                            }
+                            .zIndex(if (dragging) 1f else 0f)
+                            .scale(if (dragging) 1.04f else 1f)
                             .combinedClickable(
                                 onClick = {},
                                 onLongClick = { editMode = true }
@@ -1881,22 +1900,19 @@ fun CategoryManagementScreen(
                                 detectDragGesturesAfterLongPress(
                                     onDragStart = {
                                         editMode = true
-                                        dragOffset = 0f
+                                        dragOffset = Offset.Zero
                                     },
-                                    onDragEnd = { dragOffset = 0f },
-                                    onDragCancel = { dragOffset = 0f },
+                                    onDragEnd = {
+                                        val columns = 2
+                                        val columnShift = (dragOffset.x / 174f).roundToInt()
+                                        val rowShift = (dragOffset.y / 88f).roundToInt()
+                                        val targetIndex = (index + rowShift * columns + columnShift).coerceIn(0, categories.lastIndex)
+                                        if (targetIndex != index) onMoveTo(category.id, targetIndex)
+                                        dragOffset = Offset.Zero
+                                    },
+                                    onDragCancel = { dragOffset = Offset.Zero },
                                     onDrag = { _, dragAmount ->
-                                        dragOffset += dragAmount.y
-                                        when {
-                                            dragOffset > 44f -> {
-                                                onReorder(category.id, 1)
-                                                dragOffset = 0f
-                                            }
-                                            dragOffset < -44f -> {
-                                                onReorder(category.id, -1)
-                                                dragOffset = 0f
-                                            }
-                                        }
+                                        dragOffset += dragAmount
                                     }
                                 )
                             }
@@ -1911,18 +1927,6 @@ fun CategoryManagementScreen(
                                 }
                                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
                                     Icon(Icons.Default.Menu, contentDescription = "拖动${category.name}", tint = palette.muted, modifier = Modifier.size(18.dp))
-                                }
-                            }
-                        }
-                        if (editMode) {
-                            Surface(
-                                modifier = Modifier.align(Alignment.TopEnd).size(26.dp),
-                                shape = androidx.compose.foundation.shape.CircleShape,
-                                color = palette.coral,
-                                shadowElevation = 4.dp
-                            ) {
-                                IconButton(onClick = { pendingDelete = category }, modifier = Modifier.size(26.dp)) {
-                                    Icon(Icons.Default.Close, contentDescription = "删除${category.name}", tint = Color.White, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -1944,12 +1948,6 @@ fun CategoryManagementScreen(
                 onAdd(newName, kind)
                 newName = ""
             }
-        }
-    }
-    pendingDelete?.let { category ->
-        ConfirmDialog("删除分类", "是否要删除“${category.name}”？历史账目会保留。", onDismiss = { pendingDelete = null }) {
-            onDelete(category.id)
-            pendingDelete = null
         }
     }
 }

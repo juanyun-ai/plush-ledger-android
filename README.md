@@ -7,14 +7,14 @@
 
   一款本地优先、可云同步的 3D 毛绒风 Android 记账与日记应用。
 
-  ![Version](https://img.shields.io/badge/version-1.2.1-FFA126?style=for-the-badge)
+  ![Version](https://img.shields.io/badge/version-1.2.5-FFA126?style=for-the-badge)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=for-the-badge)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=for-the-badge)
   ![License](https://img.shields.io/badge/license-Noncommercial-EA7C73?style=for-the-badge)
 
   <br>
 
-  <a href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.2.1.apk"><b>下载 Android APK</b></a>
+  <a href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.2.5.apk"><b>下载 Android APK</b></a>
   ·
   <a href="https://juanyun-ai.github.io/plush-ledger-android/"><b>产品网页</b></a>
   ·
@@ -53,7 +53,7 @@
 
 ## 当前状态
 
-- Android App 是当前完整版本，当前源码版本和最新已发布 APK 均为 **1.2.1**。
+- Android App 是当前完整版本，当前源码版本和最新已发布 APK 均为 **1.2.5**。
 - 微信小程序已上线，当前维护版本为 **1.4.9**；由于个人主体小程序类目和隐私合规限制，小程序版收敛了生活日历、资料上传、手机绑定等入口，AI 快记采用本机规则解析。
 - 两端共用“本地优先、可选云同步、用户确认后入账”的产品原则，但功能页面并不完全一致；Android 版保留更完整的 AI、日记、生活日历和应用内更新体验。
 - 项目从 2026-06-06 开始制作，前三到五天完成基础记账产品，随后围绕真实使用、设计稿、下载更新、导入导出、云同步、合规和小程序提审持续迭代约三周。
@@ -65,7 +65,7 @@
 - 管理后台：[admin.xiaoxing.online](https://admin.xiaoxing.online/)，默认连接绒绒记账 Supabase 项目，登录管理员账号后可管理反馈、官方消息、版本和远程配置。
 - 小程序用户在管理后台优先显示用户自设昵称；微信 openid 仅用于内部账号绑定，不作为公开用户名展示。
 - 运营看板只展示数据库可证明的数据：App 打开事件来自 `app_activity_events`，旧版本没有记录时不会倒填假活跃；记账发生日和同步日分开看。
-- 最新 APK：[rongrong-ledger-1.2.1.apk](https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.2.1.apk)
+- 最新 APK：[rongrong-ledger-1.2.5.apk](https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.2.5.apk)
 - 国内访问长期方案：优先用 Cloudflare Pages 或 Vercel 避开腾讯云接入备案阻塞；如后续需要大陆加速，再考虑腾讯云 EdgeOne 和接入备案。
 
 ## 功能
@@ -152,6 +152,14 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载由 Android 系统下载服务负责，应用读取真实字节和进度；主线路失败后会自动重试并切换备用线路，所有线路不可用时可交给系统浏览器下载。安装前必须通过 SHA-256 校验，校验失败不会进入安装流程。当前优先使用 GitHub raw 下载链路，GitHub Release 作为归档备份；后续可把大体积分享卡片迁到对象存储/CDN，进一步减小 APK。
+
+### v1.2.5
+
+1. 界面字号改为“标准 / 紧凑 / 更紧凑”，移除放大选项，并限制系统字号继续放大 App 内布局，改善 vivo 等显示偏大机型的换行和挤压。
+2. 记账足迹六个数据卡改为自适应横向信息布局，热力图保留但折叠到“记账活跃度”中，喜欢看的用户可展开查看。
+3. 绒绒日记历史编辑暂存改为按单篇日记保存；近期日记勾选后在标题右侧显示取消和合并，不再弹出额外选择条。
+4. 用户ID限制为 6-8 位英文字母并接入云端唯一性检查；地区选择补齐省级行政区及地市列表。
+5. 主题色卡改为先选择预览、再确认切换；经典组恢复为原来的 8 种纯色。
 
 ### v1.2.1
 

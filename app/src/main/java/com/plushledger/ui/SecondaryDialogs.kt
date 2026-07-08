@@ -290,7 +290,8 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
     val palette = LocalPlushPalette.current
     var query by remember { mutableStateOf("") }
     var typeFilter by remember { mutableStateOf("经典") }
-    val selectedSpec = plushThemeSpec(current) ?: plushThemeSpec("warm")
+    var pendingTone by remember(current) { mutableStateOf(current) }
+    val selectedSpec = plushThemeSpec(pendingTone) ?: plushThemeSpec("warm")
     val options = remember(query, typeFilter) {
         plushThemeCatalog.filter { spec ->
             spec.type == typeFilter && spec.matchesThemeQuery(query)
@@ -331,13 +332,21 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                     border = BorderStroke(1.dp, (selectedSpec?.primary ?: palette.rose).copy(alpha = 0.32f))
                 ) {
                     Column(Modifier.padding(13.dp)) {
-                        Text("当前主题 · $typeFilter ${options.size} 款", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text(plushThemeName(current), color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("下方长条只负责快速切换；主色和辅助色统一在这里查看。", color = palette.muted, fontSize = 12.sp)
+                        Text("待确认主题 · $typeFilter ${options.size} 款", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(plushThemeName(pendingTone), color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("先点选预览，再确认切换。经典组为原来的 8 种纯色。", color = palette.muted, fontSize = 12.sp)
                         selectedSpec?.let { spec ->
-                            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 ThemeHexChip("主色", spec.primary)
-                                ThemeHexChip("辅助", spec.secondary)
+                                if (spec.type != "经典") ThemeHexChip("辅助", spec.secondary)
+                                Spacer(Modifier.weight(1f))
+                                PlushButton(
+                                    text = if (pendingTone == current) "当前已应用" else "确认切换",
+                                    icon = Icons.Default.Check,
+                                    color = spec.primary,
+                                    enabled = pendingTone != current,
+                                    onClick = { onChoose(pendingTone) }
+                                )
                             }
                         }
                     }
@@ -350,7 +359,7 @@ fun ThemePickerDialog(current: String, onDismiss: () -> Unit, onChoose: (String)
                         }
                     }
                     items(options) { option ->
-                        ThemeCatalogRow(option, current == option.key) { onChoose(option.key) }
+                        ThemeCatalogRow(option, pendingTone == option.key) { pendingTone = option.key }
                     }
                 }
             }

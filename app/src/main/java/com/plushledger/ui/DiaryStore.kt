@@ -54,6 +54,7 @@ class DiaryStore(context: Context, private val userId: String) {
             .dedupeActiveEntries()
             .take(180)
         save(updated)
+        clearEntryDraft(normalized.id)
         return updated
     }
 
@@ -65,6 +66,7 @@ class DiaryStore(context: Context, private val userId: String) {
         save(updated)
         markDeleted(entry)
         clearDraft(entry.date)
+        clearEntryDraft(entry.id)
         return updated
     }
 
@@ -84,6 +86,7 @@ class DiaryStore(context: Context, private val userId: String) {
             updatedAt = System.currentTimeMillis()
         )
         selected.forEach(::markDeleted)
+        selected.forEach { clearEntryDraft(it.id) }
         val updated = (listOf(merged) + all.filterNot { it.id in ids })
             .sortedWith(compareByDescending<DiaryEntry> { it.date }.thenByDescending { it.updatedAt })
             .dedupeActiveEntries()
@@ -122,6 +125,41 @@ class DiaryStore(context: Context, private val userId: String) {
 
     fun clearDraft(date: String) {
         current.edit().remove("draft_$date").apply()
+    }
+
+    fun entryDraft(entryId: String): DiaryEntry? = runCatching {
+        current.getString("entry_draft_$entryId", null)?.let { raw ->
+            val item = JSONObject(raw)
+            DiaryEntry(
+                date = item.optString("date"),
+                text = item.optString("text"),
+                mood = item.optString("mood", "开心"),
+                status = item.optString("status"),
+                id = item.optString("id", entryId),
+                createdAt = item.optLong("created_at", 0L),
+                updatedAt = item.optLong("updated_at", 0L)
+            )
+        }
+    }.getOrNull()
+
+    fun saveEntryDraft(entry: DiaryEntry) {
+        val now = System.currentTimeMillis()
+        current.edit().putString(
+            "entry_draft_${entry.id}",
+            JSONObject()
+                .put("date", entry.date)
+                .put("id", entry.id)
+                .put("text", entry.text)
+                .put("mood", entry.mood)
+                .put("status", entry.status.trim())
+                .put("created_at", entry.createdAt.takeIf { it > 0L } ?: now)
+                .put("updated_at", now)
+                .toString()
+        ).apply()
+    }
+
+    fun clearEntryDraft(entryId: String) {
+        current.edit().remove("entry_draft_$entryId").apply()
     }
 
     private fun save(entries: List<DiaryEntry>) {

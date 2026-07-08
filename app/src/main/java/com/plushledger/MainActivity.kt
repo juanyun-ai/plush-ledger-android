@@ -292,7 +292,7 @@ private fun StableVisualScale(content: @Composable () -> Unit) {
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    val cappedFontScale = (density.fontScale.coerceAtMost(1.05f) * userScale).coerceIn(0.9f, 1.1f)
+    val cappedFontScale = (density.fontScale.coerceAtMost(1.0f) * userScale).coerceIn(0.84f, 1.0f)
     val stableDensity = remember(density.density, cappedFontScale) {
         Density(density = density.density, fontScale = cappedFontScale)
     }
