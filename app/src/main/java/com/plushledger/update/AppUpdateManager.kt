@@ -17,6 +17,7 @@ import androidx.core.content.FileProvider
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.work.WorkManager
+import com.plushledger.BuildConfig
 import com.plushledger.sync.AppVersionInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,6 +58,9 @@ class AppUpdateManager(private val activity: FragmentActivity) {
             receiverRegistered = true
         }
         cleanupRetiredWorker()
+        cleanupInstalledUpdate()
+        cleanupUpdateFiles(savedOutputFile())
+        cleanupCacheGarbage()
         resumePendingDownload()
     }
 
@@ -87,6 +91,7 @@ class AppUpdateManager(private val activity: FragmentActivity) {
         }
 
         cancelSystemDownload(deleteFile = true)
+        cleanupUpdateFiles(keepFile = null)
         preferences.edit()
             .putString(KEY_PRIMARY_URL, sources.first())
             .putString(KEY_BACKUP_URL, sources.getOrNull(1))
@@ -385,11 +390,57 @@ class AppUpdateManager(private val activity: FragmentActivity) {
         preferences.edit().remove(KEY_RETIRED_WORK_ID).apply()
     }
 
+    private fun cleanupInstalledUpdate() {
+        if (savedVersionName() != BuildConfig.VERSION_NAME) return
+        savedDownloadId().takeIf { it >= 0L }?.let { downloadManager.remove(it) }
+        clearPendingState(keepFile = false)
+    }
+
     private fun updateFile(versionName: String): File {
         val directory = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             ?: File(activity.filesDir, "updates")
         directory.mkdirs()
         return File(directory, "rongrong-ledger-$versionName.apk")
+    }
+
+    private fun cleanupUpdateFiles(keepFile: File? = savedOutputFile()) {
+        val keepPath = keepFile?.absolutePath
+        val directories = listOfNotNull(
+            activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+            File(activity.filesDir, "updates")
+        )
+        directories.forEach { directory ->
+            directory.listFiles()
+                ?.filter { file ->
+                    file.isFile &&
+                        file.name.startsWith("rongrong-ledger-") &&
+                        file.extension.equals("apk", ignoreCase = true) &&
+                        file.absolutePath != keepPath
+                }
+                ?.forEach { file -> runCatching { file.delete() } }
+        }
+    }
+
+    private fun cleanupCacheGarbage() {
+        val now = System.currentTimeMillis()
+        File(activity.cacheDir, "share").listFiles()
+            ?.filter { it.isFile && now - it.lastModified() > SHARE_OUTPUT_MAX_AGE_MS }
+            ?.forEach { file -> runCatching { file.delete() } }
+
+        val shareCardDir = File(activity.cacheDir, "share-cards")
+        shareCardDir.listFiles()
+            ?.filter { it.isFile && (it.extension.equals("tmp", true) || it.length() < MIN_VALID_CACHE_FILE_BYTES) }
+            ?.forEach { file -> runCatching { file.delete() } }
+
+        val cachedCards = shareCardDir.listFiles()
+            ?.filter { it.isFile && it.extension.equals("png", true) }
+            ?.sortedByDescending(File::lastModified)
+            .orEmpty()
+        var retainedBytes = 0L
+        cachedCards.forEach { file ->
+            retainedBytes += file.length()
+            if (retainedBytes > SHARE_CARD_CACHE_LIMIT_BYTES) runCatching { file.delete() }
+        }
     }
 
     private fun savedSources(): List<String> = listOfNotNull(
@@ -475,6 +526,9 @@ class AppUpdateManager(private val activity: FragmentActivity) {
         const val SHA256_LENGTH = 64
         const val MAX_ATTEMPTS_PER_SOURCE = 2
         const val POLL_INTERVAL_MS = 750L
+        const val SHARE_OUTPUT_MAX_AGE_MS = 7L * 24L * 60L * 60L * 1000L
+        const val SHARE_CARD_CACHE_LIMIT_BYTES = 64L * 1024L * 1024L
+        const val MIN_VALID_CACHE_FILE_BYTES = 1024L
         const val INVALID_DOWNLOAD_ID = -1L
         const val RETIRED_WORK_NAME = "app-update-download"
         const val DOWNLOAD_PAGE_URL = "https://juanyun-ai.github.io/plush-ledger-android/"

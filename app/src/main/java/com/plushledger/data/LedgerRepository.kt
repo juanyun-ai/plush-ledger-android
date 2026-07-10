@@ -287,7 +287,7 @@ class LedgerRepository(
             val available = withFreshAccessToken { token ->
                 supabaseClient.profileAccountNoAvailable(token, userId, normalizedAccountNo)
             }
-            if (!available) error("这个账号编号已经被使用了，请换一个")
+            if (!available) error("这个用户ID已经被使用了，请换一个")
         }
         if (nicknameChanged) {
             val since = now() - 180L * 24L * 60L * 60L * 1000L

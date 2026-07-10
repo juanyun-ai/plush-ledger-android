@@ -5,6 +5,7 @@ create table if not exists public.mini_users (
   unionid text,
   nickname text,
   avatar_url text,
+  phone text,
   created_at bigint not null default ((extract(epoch from clock_timestamp()) * 1000)::bigint),
   updated_at bigint not null default ((extract(epoch from clock_timestamp()) * 1000)::bigint),
   unique (appid, openid)

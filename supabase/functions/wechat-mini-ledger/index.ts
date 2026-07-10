@@ -15,6 +15,7 @@ const wechatAppId = Deno.env.get("WECHAT_MINI_APPID") ?? defaultWechatMiniAppId;
 const wechatSecret = Deno.env.get("WECHAT_MINI_SECRET") ?? Deno.env.get("密钥") ?? "";
 const chinaOffsetMs = 8 * 60 * 60 * 1000;
 const nicknameWindowMs = 180 * 24 * 60 * 60 * 1000;
+let wechatAccessTokenCache: { token: string; expiresAt: number } | null = null;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return json({ ok: true });
@@ -31,6 +32,8 @@ Deno.serve(async (req) => {
     if (action === "feedback.replies") return await listFeedbackReplies(req);
     if (action === "email.requestCode") return await requestEmailCode(req, body);
     if (action === "email.verifyCode") return await verifyEmailCode(req, body);
+    if (action === "phone.bind") return await bindPhone(req, body);
+    if (action === "avatar.check") return await checkAvatarImage(body);
     if (action === "birthday.sendDue") return await sendDueBirthdayGreetings(req, body);
     return json({ error: "未知操作" }, 400);
   } catch (error) {
@@ -58,7 +61,7 @@ async function login(body: Json): Promise<Response> {
   }], {
     Prefer: "resolution=merge-duplicates,return=representation",
   }).then((rows) => rows[0]);
-  const accountNo = stringValue(user.account_no, 12) || await assignMiniAccountNo(user.id);
+  const accountNo = accountNoValue(user.account_no) || await assignMiniAccountNo(user.id);
 
   const token = randomToken();
   const tokenHash = await sha256(token);
@@ -71,7 +74,7 @@ async function login(body: Json): Promise<Response> {
     last_used_at: now,
   }], { Prefer: "return=minimal" });
 
-  const snapshot = await loadSnapshot(user.id);
+  const snapshot = await loadSnapshot(String(user.id));
   return json({
     token,
     userId: user.id,
@@ -102,7 +105,7 @@ async function pushSnapshot(req: Request, body: Json): Promise<Response> {
 
 async function pullSnapshot(req: Request): Promise<Response> {
   const session = await requireMiniSession(req);
-  const snapshot = await loadSnapshot(session.user_id);
+  const snapshot = await loadSnapshot(String(session.user_id));
   return json({ ok: true, ledger: snapshot?.payload ?? null, updatedAt: snapshot?.updated_at ?? null });
 }
 
@@ -281,6 +284,67 @@ async function codeToSession(code: string): Promise<Json> {
     throw new Error(`微信登录失败：${data.errmsg ?? response.status}`);
   }
   return data;
+}
+
+async function checkAvatarImage(body: Json): Promise<Response> {
+  assertConfigured();
+  const imageBase64 = stringValue(body.imageBase64, 2_000_000).replace(/^data:image\/\w+;base64,/, "");
+  const size = numberValue(body.size);
+  const mimeType = avatarMimeType(body.mimeType);
+  if (!imageBase64) return json({ error: "缺少头像图片" }, 400);
+  if (size > 1024 * 1024 || imageBase64.length > 1_500_000) return json({ error: "头像图片过大，请换一张较小图片" }, 413);
+
+  const bytes = base64ToBytes(imageBase64);
+  if (!bytes.length) return json({ error: "头像图片读取失败" }, 400);
+  const token = await wechatAccessToken();
+  const formData = new FormData();
+  const media = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(media).set(bytes);
+  formData.append("media", new Blob([media], { type: mimeType }), `avatar.${mimeType.split("/")[1] || "jpg"}`);
+  const response = await fetch(`https://api.weixin.qq.com/wxa/img_sec_check?access_token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    body: formData,
+  });
+  const result = await response.json().catch(() => ({}));
+  const errcode = Number(result.errcode ?? 0);
+  if (response.ok && errcode === 0) return json({ ok: true, safe: true, api: "img_sec_check" });
+  if (errcode === 87014) return json({ ok: false, safe: false, error: "头像含违规信息，请更换后再试" }, 400);
+  throw new Error(`微信头像安全检测失败：${result.errmsg ?? response.status}`);
+}
+
+async function bindPhone(req: Request, body: Json): Promise<Response> {
+  assertConfigured();
+  const session = await requireMiniSession(req);
+  const code = stringValue(body.code, 256);
+  if (!code) return json({ error: "缺少手机号授权 code" }, 400);
+
+  const token = await wechatAccessToken();
+  const response = await fetch(`https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  const result = await response.json().catch(() => ({}));
+  const errcode = Number(result.errcode ?? 0);
+  if (!response.ok || errcode !== 0) {
+    throw new Error(`微信手机号授权失败：${result.errmsg ?? response.status}`);
+  }
+
+  const phoneInfo = result.phone_info && typeof result.phone_info === "object" ? result.phone_info as Json : {};
+  const phone = phoneValue(phoneInfo.phoneNumber ?? phoneInfo.purePhoneNumber);
+  if (!phone) return json({ error: "微信未返回有效手机号" }, 502);
+  let persisted = true;
+  try {
+    await rest(
+      "PATCH",
+      `/rest/v1/mini_users?id=eq.${encodeURIComponent(String(session.user_id))}`,
+      { phone, updated_at: Date.now() },
+      { Prefer: "return=minimal" },
+    );
+  } catch {
+    persisted = false;
+  }
+  return json({ ok: true, phone, persisted });
 }
 
 async function requireMiniSession(req: Request): Promise<Json> {
@@ -483,8 +547,8 @@ function profileNickname(profile: Json): string {
 }
 
 function accountNoValue(value: unknown): string {
-  const raw = stringValue(value, 12);
-  return /^[A-Za-z0-9_]{4,12}$/.test(raw) ? raw : "";
+  const raw = stringValue(value, 6).toUpperCase();
+  return /^[A-Za-z0-9_]{6}$/.test(raw) ? raw : "";
 }
 
 function isAccountNoUniqueError(error: unknown): boolean {
@@ -493,9 +557,14 @@ function isAccountNoUniqueError(error: unknown): boolean {
 }
 
 function randomAccountNo(): string {
-  const bytes = new Uint32Array(1);
+  const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
-  return `R${1000000 + (bytes[0] % 9000000)}`;
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let result = "";
+  for (let index = 0; index < 6; index += 1) {
+    result += chars[bytes[index] % chars.length];
+  }
+  return result;
 }
 
 function clientInfoValue(value: unknown): Json {
@@ -571,9 +640,33 @@ function emailValue(value: unknown): string {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : "";
 }
 
+function phoneValue(value: unknown): string {
+  const raw = stringValue(value, 32).replace(/[^\d+]/g, "");
+  if (/^\+?\d{6,20}$/.test(raw)) return raw;
+  return "";
+}
+
+function avatarMimeType(value: unknown): string {
+  const raw = stringValue(value, 40).toLowerCase();
+  if (raw === "image/png") return raw;
+  if (raw === "image/webp") return raw;
+  return "image/jpeg";
+}
+
 function numberValue(value: unknown): number {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  try {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  } catch {
+    return new Uint8Array();
+  }
 }
 
 function requestedDateKey(value: unknown, fallback: number): string {
@@ -662,6 +755,8 @@ async function sendWechatBirthdayMessage(openid: string, nickname: string, place
 
 async function wechatAccessToken(): Promise<string> {
   assertConfigured();
+  const now = Date.now();
+  if (wechatAccessTokenCache && wechatAccessTokenCache.expiresAt > now + 60_000) return wechatAccessTokenCache.token;
   const url = new URL("https://api.weixin.qq.com/cgi-bin/token");
   url.searchParams.set("grant_type", "client_credential");
   url.searchParams.set("appid", wechatAppId);
@@ -671,7 +766,11 @@ async function wechatAccessToken(): Promise<string> {
   if (!response.ok || data.errcode || !data.access_token) {
     throw new Error(`微信 access_token 获取失败：${data.errmsg ?? response.status}`);
   }
-  return String(data.access_token);
+  wechatAccessTokenCache = {
+    token: String(data.access_token),
+    expiresAt: now + Math.max(60, Number(data.expires_in || 7200) - 300) * 1000,
+  };
+  return wechatAccessTokenCache.token;
 }
 
 function wechatTemplateData(nickname: string, place: string, today: string): Json {

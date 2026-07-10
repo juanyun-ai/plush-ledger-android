@@ -52,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -79,10 +80,14 @@ import androidx.core.content.FileProvider
 import com.plushledger.R
 import java.io.File
 import java.io.FileOutputStream
+import java.net.URL
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class DiaryStatusGroup(val title: String, val items: List<String>)
 
@@ -97,6 +102,7 @@ private val diaryStatuses = listOf(
 fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "", onChanged: () -> Unit = {}, onBack: () -> Unit) {
     val context = LocalContext.current
     val palette = LocalPlushPalette.current
+    val scope = rememberCoroutineScope()
     val store = remember(userId) { DiaryStore(context.applicationContext, userId) }
     var entries by remember(userId) { mutableStateOf(store.load()) }
     val today = LocalDate.now()
@@ -109,6 +115,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
     var sharePreview by remember { mutableStateOf<Bitmap?>(null) }
     var showSharePicker by rememberSaveable { mutableStateOf(false) }
     var shareSearch by rememberSaveable { mutableStateOf("") }
+    var loadingShareKey by rememberSaveable { mutableStateOf<String?>(null) }
     var savedNotice by rememberSaveable { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<DiaryEntry?>(null) }
     var selectedDiaryIds by remember(userId) { mutableStateOf<Set<String>>(emptySet()) }
@@ -325,23 +332,41 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
                     )
                     LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(options, key = { it.key }) { option ->
+                            val loading = loadingShareKey == option.key
                             Surface(
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable {
-                                    sharePreview = DiaryShareCard.create(context, selectedDate, displayStatus, option.resId)
-                                    showSharePicker = false
-                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .clickable(enabled = loadingShareKey == null) {
+                                        loadingShareKey = option.key
+                                        scope.launch {
+                                            runCatching {
+                                                DiaryShareCard.create(context, option)
+                                            }.onSuccess { bitmap ->
+                                                sharePreview = bitmap
+                                                showSharePicker = false
+                                            }.onFailure {
+                                                Toast.makeText(context, "分享卡片加载失败，已保留当前页面", Toast.LENGTH_SHORT).show()
+                                            }
+                                            loadingShareKey = null
+                                        }
+                                    },
                                 shape = RoundedCornerShape(18.dp),
-                                color = if (option.preferred) palette.pink.copy(alpha = 0.12f) else Color.White,
-                                border = BorderStroke(1.dp, if (option.preferred) palette.pink else palette.border)
+                                color = when {
+                                    loading -> palette.moss.copy(alpha = 0.12f)
+                                    option.preferred -> palette.pink.copy(alpha = 0.12f)
+                                    else -> Color.White
+                                },
+                                border = BorderStroke(1.dp, if (loading || option.preferred) palette.pink else palette.border)
                             ) {
                                 Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(option.label, color = palette.ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                                    Text(option.kind, color = palette.muted, fontSize = 12.sp)
+                                    Text(if (loading) "正在缓存" else option.kind, color = palette.muted, fontSize = 12.sp)
                                 }
                             }
                         }
                     }
-                    Text("会优先按城市匹配，其次省份，找不到时使用默认卡。", color = palette.muted, fontSize = 12.sp)
+                    Text("会优先按城市匹配，其次省份；首次使用会下载并缓存卡片，之后可直接分享。", color = palette.muted, fontSize = 12.sp)
                 }
             }
         }
@@ -746,17 +771,43 @@ private data class ShareCardOption(
     val label: String,
     val kind: String,
     val search: String,
-    val resId: Int,
+    val fileName: String,
     val preferred: Boolean = false
 )
 
 private object DiaryShareCard {
-    fun create(context: Context, date: LocalDate, mood: String, locationHint: String = ""): Bitmap =
-        create(context, date, mood, preferredOption(locationHint).resId)
+    private const val REMOTE_BASE_URL = "https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/share-cards/"
 
-    fun create(context: Context, date: LocalDate, mood: String, artResId: Int): Bitmap {
-        val art = BitmapFactory.decodeResource(context.resources, artResId)
-        return art.copy(Bitmap.Config.ARGB_8888, false)
+    suspend fun create(context: Context, option: ShareCardOption): Bitmap = withContext(Dispatchers.IO) {
+        val art = loadShareCard(context, option.fileName) ?: BitmapFactory.decodeResource(context.resources, R.drawable.share_province_default)
+        art.copy(Bitmap.Config.ARGB_8888, false)
+    }
+
+    private fun loadShareCard(context: Context, fileName: String): Bitmap? {
+        val cacheDir = File(context.cacheDir, "share-cards").apply { mkdirs() }
+        val target = File(cacheDir, fileName)
+        if (!target.exists() || target.length() < 1024L) {
+            val temp = File(cacheDir, "$fileName.tmp")
+            runCatching {
+                URL(REMOTE_BASE_URL + fileName).openConnection().apply {
+                    connectTimeout = 8_000
+                    readTimeout = 20_000
+                }.getInputStream().use { input ->
+                    FileOutputStream(temp).use { output -> input.copyTo(output) }
+                }
+                if (temp.length() >= 1024L) {
+                    temp.renameTo(target)
+                } else {
+                    temp.delete()
+                }
+            }.onFailure {
+                temp.delete()
+            }
+        }
+        return target.takeIf { it.exists() && it.length() >= 1024L }?.let {
+            it.setLastModified(System.currentTimeMillis())
+            BitmapFactory.decodeFile(it.absolutePath)
+        }
     }
 
     fun options(locationHint: String, query: String): List<ShareCardOption> {
@@ -779,39 +830,39 @@ private object DiaryShareCard {
     }
 
     private val shareOptions = listOf(
-        ShareCardOption("province_beijing", "北京", "省级", "beijing bj", R.drawable.share_card_province_beijing),
-        ShareCardOption("province_tianjin", "天津", "省级", "tianjin tj", R.drawable.share_card_province_tianjin),
-        ShareCardOption("province_shanghai", "上海", "省级", "shanghai sh", R.drawable.share_card_province_shanghai),
-        ShareCardOption("province_chongqing", "重庆", "省级", "chongqing cq", R.drawable.share_card_province_chongqing),
-        ShareCardOption("province_hebei", "河北", "省级", "hebei hb", R.drawable.share_card_province_hebei),
-        ShareCardOption("province_shanxi", "山西", "省级", "shanxi sx", R.drawable.share_card_province_shanxi),
-        ShareCardOption("province_liaoning", "辽宁", "省级", "liaoning ln", R.drawable.share_card_province_liaoning),
-        ShareCardOption("province_jilin", "吉林", "省级", "jilin jl", R.drawable.share_card_province_jilin),
-        ShareCardOption("province_heilongjiang", "黑龙江", "省级", "heilongjiang hlj", R.drawable.share_card_province_heilongjiang),
-        ShareCardOption("province_jiangsu", "江苏", "省级", "jiangsu js nanjing suzhou", R.drawable.share_card_province_jiangsu),
-        ShareCardOption("province_zhejiang", "浙江", "省级", "zhejiang zj hangzhou ningbo", R.drawable.share_card_province_zhejiang),
-        ShareCardOption("province_anhui", "安徽", "省级", "anhui ah", R.drawable.share_card_province_anhui),
-        ShareCardOption("province_fujian", "福建", "省级", "fujian fj xiamen fuzhou", R.drawable.share_card_province_fujian),
-        ShareCardOption("province_jiangxi", "江西", "省级", "jiangxi jx", R.drawable.share_card_province_jiangxi),
-        ShareCardOption("province_shandong", "山东", "省级", "shandong sd jinan qingdao", R.drawable.share_card_province_shandong),
-        ShareCardOption("province_henan", "河南", "省级", "henan hn zhengzhou luoyang", R.drawable.share_card_province_henan),
-        ShareCardOption("province_hubei", "湖北", "省级", "hubei hb wuhan", R.drawable.share_card_province_hubei),
-        ShareCardOption("province_hunan", "湖南", "省级", "hunan hn changsha", R.drawable.share_card_province_hunan),
-        ShareCardOption("province_guangdong", "广东", "省级", "guangdong gd guangzhou shenzhen", R.drawable.share_card_province_guangdong),
-        ShareCardOption("province_hainan", "海南", "省级", "hainan hi", R.drawable.share_card_province_hainan),
-        ShareCardOption("province_sichuan", "四川", "省级", "sichuan sc", R.drawable.share_card_province_sichuan),
-        ShareCardOption("province_guizhou", "贵州", "省级", "guizhou gz", R.drawable.share_card_province_guizhou),
-        ShareCardOption("province_yunnan", "云南", "省级", "yunnan yn", R.drawable.share_card_province_yunnan),
-        ShareCardOption("province_shaanxi", "陕西", "省级", "shaanxi sx xian", R.drawable.share_card_province_shaanxi),
-        ShareCardOption("province_gansu", "甘肃", "省级", "gansu gs lanzhou", R.drawable.share_card_province_gansu),
-        ShareCardOption("province_qinghai", "青海", "省级", "qinghai qh", R.drawable.share_card_province_qinghai),
-        ShareCardOption("province_taiwan", "台湾", "省级", "taiwan tw", R.drawable.share_card_province_taiwan),
-        ShareCardOption("province_neimenggu", "内蒙古", "省级", "neimenggu nmg", R.drawable.share_card_province_neimenggu),
-        ShareCardOption("province_guangxi", "广西", "省级", "guangxi gx", R.drawable.share_card_province_guangxi),
-        ShareCardOption("province_xizang", "西藏", "省级", "xizang xz tibet", R.drawable.share_card_province_xizang),
-        ShareCardOption("province_ningxia", "宁夏", "省级", "ningxia nx", R.drawable.share_card_province_ningxia),
-        ShareCardOption("province_xinjiang", "新疆", "省级", "xinjiang xj", R.drawable.share_card_province_xinjiang),
-        ShareCardOption("province_gangao", "港澳", "省级", "gangao ga hongkong xianggang hk macao aomen mo", R.drawable.share_card_province_gangao)
+        ShareCardOption("province_beijing", "北京", "省级", "beijing bj", "share_card_province_beijing.png"),
+        ShareCardOption("province_tianjin", "天津", "省级", "tianjin tj", "share_card_province_tianjin.png"),
+        ShareCardOption("province_shanghai", "上海", "省级", "shanghai sh", "share_card_province_shanghai.png"),
+        ShareCardOption("province_chongqing", "重庆", "省级", "chongqing cq", "share_card_province_chongqing.png"),
+        ShareCardOption("province_hebei", "河北", "省级", "hebei hb", "share_card_province_hebei.png"),
+        ShareCardOption("province_shanxi", "山西", "省级", "shanxi sx", "share_card_province_shanxi.png"),
+        ShareCardOption("province_liaoning", "辽宁", "省级", "liaoning ln", "share_card_province_liaoning.png"),
+        ShareCardOption("province_jilin", "吉林", "省级", "jilin jl", "share_card_province_jilin.png"),
+        ShareCardOption("province_heilongjiang", "黑龙江", "省级", "heilongjiang hlj", "share_card_province_heilongjiang.png"),
+        ShareCardOption("province_jiangsu", "江苏", "省级", "jiangsu js nanjing suzhou", "share_card_province_jiangsu.png"),
+        ShareCardOption("province_zhejiang", "浙江", "省级", "zhejiang zj hangzhou ningbo", "share_card_province_zhejiang.png"),
+        ShareCardOption("province_anhui", "安徽", "省级", "anhui ah", "share_card_province_anhui.png"),
+        ShareCardOption("province_fujian", "福建", "省级", "fujian fj xiamen fuzhou", "share_card_province_fujian.png"),
+        ShareCardOption("province_jiangxi", "江西", "省级", "jiangxi jx", "share_card_province_jiangxi.png"),
+        ShareCardOption("province_shandong", "山东", "省级", "shandong sd jinan qingdao", "share_card_province_shandong.png"),
+        ShareCardOption("province_henan", "河南", "省级", "henan hn zhengzhou luoyang", "share_card_province_henan.png"),
+        ShareCardOption("province_hubei", "湖北", "省级", "hubei hb wuhan", "share_card_province_hubei.png"),
+        ShareCardOption("province_hunan", "湖南", "省级", "hunan hn changsha", "share_card_province_hunan.png"),
+        ShareCardOption("province_guangdong", "广东", "省级", "guangdong gd guangzhou shenzhen", "share_card_province_guangdong.png"),
+        ShareCardOption("province_hainan", "海南", "省级", "hainan hi", "share_card_province_hainan.png"),
+        ShareCardOption("province_sichuan", "四川", "省级", "sichuan sc", "share_card_province_sichuan.png"),
+        ShareCardOption("province_guizhou", "贵州", "省级", "guizhou gz", "share_card_province_guizhou.png"),
+        ShareCardOption("province_yunnan", "云南", "省级", "yunnan yn", "share_card_province_yunnan.png"),
+        ShareCardOption("province_shaanxi", "陕西", "省级", "shaanxi sx xian", "share_card_province_shaanxi.png"),
+        ShareCardOption("province_gansu", "甘肃", "省级", "gansu gs lanzhou", "share_card_province_gansu.png"),
+        ShareCardOption("province_qinghai", "青海", "省级", "qinghai qh", "share_card_province_qinghai.png"),
+        ShareCardOption("province_taiwan", "台湾", "省级", "taiwan tw", "share_card_province_taiwan.png"),
+        ShareCardOption("province_neimenggu", "内蒙古", "省级", "neimenggu nmg", "share_card_province_neimenggu.png"),
+        ShareCardOption("province_guangxi", "广西", "省级", "guangxi gx", "share_card_province_guangxi.png"),
+        ShareCardOption("province_xizang", "西藏", "省级", "xizang xz tibet", "share_card_province_xizang.png"),
+        ShareCardOption("province_ningxia", "宁夏", "省级", "ningxia nx", "share_card_province_ningxia.png"),
+        ShareCardOption("province_xinjiang", "新疆", "省级", "xinjiang xj", "share_card_province_xinjiang.png"),
+        ShareCardOption("province_gangao", "港澳", "省级", "gangao ga hongkong xianggang hk macao aomen mo", "share_card_province_gangao.png")
     )
 
     fun share(context: Context, bitmap: Bitmap) {

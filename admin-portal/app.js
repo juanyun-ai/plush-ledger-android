@@ -54,6 +54,13 @@ const els = {
   deviceBrandChart: byId("deviceBrandChart"),
   portraitCoverageChart: byId("portraitCoverageChart"),
   activityRows: byId("activityRows"),
+  opsNotice: byId("opsNotice"),
+  opsKpiGrid: byId("opsKpiGrid"),
+  opsUsage: byId("opsUsage"),
+  opsRelease: byId("opsRelease"),
+  opsMonthly: byId("opsMonthly"),
+  opsQuarterly: byId("opsQuarterly"),
+  opsBucketRows: byId("opsBucketRows"),
   userModal: byId("userModal"),
   userModalSource: byId("userModalSource"),
   userModalTitle: byId("userModalTitle"),
@@ -229,6 +236,7 @@ function renderDashboard() {
   renderMessages();
   renderVersions();
   renderConfig();
+  renderOps();
 }
 
 function renderOverview() {
@@ -355,7 +363,7 @@ function renderFeedback() {
       <td class="reply-cell">
         <textarea data-feedback-reply="${escapeHtml(item.id)}" maxlength="500" placeholder="写给这个用户的点对点回复">${escapeHtml(item.developer_reply || "")}</textarea>
         <div class="reply-actions">
-          <button data-feedback-reply-save="${escapeHtml(item.id)}" type="button">${item.developer_reply ? "更新回复" : "发送回复"}</button>
+          <button class="reply-save-button" data-feedback-reply-save="${escapeHtml(item.id)}" type="button">${item.developer_reply ? "更新回复给用户" : "发送回复给用户"}</button>
           <small>${item.replied_at ? `用户打开反馈页后可见 · ${formatTime(item.replied_at)}${item.reply_seen_at ? ` · 已读 ${formatTime(item.reply_seen_at)}` : ""}` : "未回复"}</small>
         </div>
       </td>
@@ -609,6 +617,93 @@ function renderLinks() {
       <span>${escapeHtml(desc)}</span>
     </a>
   `).join("");
+}
+
+function renderOps() {
+  const ops = state.dashboard?.ops || {};
+  const warnings = Array.isArray(ops.warnings) ? ops.warnings : [];
+  els.opsNotice.innerHTML = warnings.length
+    ? `<strong>需要留意</strong><span>${warnings.map(escapeHtml).join("；")}</span>`
+    : `<strong>当前健康</strong><span>核心数据容量很轻，短期不用升级 Supabase；重点是定期备份和清理发布包。</span>`;
+
+  const cards = [
+    ["数据库", bytesLabel(ops.database?.bytes), `${percentLabel(ops.database?.bytes, ops.database?.limit_bytes)} / Free 500MB`],
+    ["Storage", bytesLabel(ops.storage?.total_bytes), `${percentLabel(ops.storage?.total_bytes, ops.storage?.limit_bytes)} / Free 1GB`],
+    ["APK 存储桶", bytesLabel(ops.storage?.app_releases_bytes), `${Number(ops.storage?.app_releases_objects || 0)} 个对象`],
+    ["最新版本", ops.release?.latest_version_name ? `v${ops.release.latest_version_name}` : "-", `${bytesLabel(ops.release?.latest_file_size_bytes)} · ${ops.release?.carrier || "未识别线路"}`],
+    ["TOS 承载", ops.release?.uses_volc_tos ? "已接入" : "未承载", ops.release?.uses_volc_tos ? "可继续续小规格" : "当前主链路仍是 GitHub / Supabase"],
+    ["分享卡片", bytesLabel(ops.local_assets?.share_cards_bytes), `${Number(ops.local_assets?.share_cards_count || 0)} 张，App 按需缓存`],
+    ["下载目录", bytesLabel(ops.local_assets?.docs_downloads_bytes), `${Number(ops.local_assets?.docs_downloads_count || 0)} 个 APK`],
+    ["备份策略", ops.backup?.status || "建议开启", ops.backup?.recommendation || "每月一次 Supabase 逻辑备份"],
+  ];
+  els.opsKpiGrid.innerHTML = cards.map(([label, value, desc]) => `
+    <article class="kpi-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value ?? "-")}</strong>
+      <small>${escapeHtml(desc || "")}</small>
+    </article>
+  `).join("");
+
+  els.opsUsage.innerHTML = [
+    usageRow("数据库", ops.database?.bytes, ops.database?.limit_bytes),
+    usageRow("Storage", ops.storage?.total_bytes, ops.storage?.limit_bytes),
+    usageRow("app-releases 桶", ops.storage?.app_releases_bytes, ops.storage?.limit_bytes),
+  ].join("");
+
+  const release = ops.release || {};
+  els.opsRelease.innerHTML = `
+    ${opsItem("APK 主线路", release.primary_url || "未配置")}
+    ${opsItem("APK 备用线路", release.backup_url || "未配置")}
+    ${opsItem("线路判断", release.carrier || "未识别")}
+    ${opsItem("火山 TOS", release.uses_volc_tos ? "当前版本链路已出现火山 TOS" : "当前版本链路未发现火山 TOS")}
+    ${opsItem("迁移建议", release.migration_note || "分享卡片继续按需缓存；APK 镜像可等 TOS 资源包续费前再接入。")}
+  `;
+
+  els.opsMonthly.innerHTML = checklist(ops.monthly || []);
+  els.opsQuarterly.innerHTML = checklist(ops.quarterly || []);
+  const buckets = Array.isArray(ops.storage?.buckets) ? ops.storage.buckets : [];
+  els.opsBucketRows.innerHTML = buckets.map((bucket) => `
+    <tr>
+      <td>${escapeHtml(bucket.bucket_id || "-")}</td>
+      <td>${Number(bucket.object_count || 0)}</td>
+      <td>${bytesLabel(bucket.bytes)}</td>
+      <td>${escapeHtml(bucketAdvice(bucket))}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="4">暂无 Storage 分桶数据；请先部署 admin_ops_stats 数据库函数。</td></tr>`;
+}
+
+function usageRow(label, value, limit) {
+  const used = Number(value || 0);
+  const cap = Number(limit || 0);
+  const percent = cap > 0 ? Math.min(100, used / cap * 100) : 0;
+  return `
+    <div class="usage-row">
+      <div>
+        <strong>${escapeHtml(label)}</strong>
+        <span>${bytesLabel(used)} / ${bytesLabel(cap)}</span>
+      </div>
+      <div class="usage-meter"><i style="width:${percent}%"></i></div>
+      <b>${percent.toFixed(1)}%</b>
+    </div>
+  `;
+}
+
+function opsItem(label, value) {
+  return `<div class="ops-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "-")}</strong></div>`;
+}
+
+function checklist(rows) {
+  return rows.length
+    ? rows.map((item) => `<div class="check-row"><span>✓</span><p>${escapeHtml(item)}</p></div>`).join("")
+    : `<p class="muted">暂无清单</p>`;
+}
+
+function bucketAdvice(bucket) {
+  const id = String(bucket.bucket_id || "");
+  const bytes = Number(bucket.bytes || 0);
+  if (id === "app-releases") return bytes > 300 * 1024 * 1024 ? "旧 APK 较多，确认无旧客户端依赖后清理。" : "保留最近稳定包即可。";
+  if (id === "avatars") return "用户头像，谨慎清理。";
+  return "按用途确认是否需要保留。";
 }
 
 function renderSourceFilteredGroup(group) {
@@ -1075,6 +1170,25 @@ function formatMoney(value) {
     currency: "CNY",
     maximumFractionDigits: 2,
   }).format(Number(value || 0) / 100);
+}
+
+function bytesLabel(value) {
+  const bytes = Number(value || 0);
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index += 1;
+  }
+  return `${size >= 10 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
+}
+
+function percentLabel(value, limit) {
+  const cap = Number(limit || 0);
+  if (!cap) return "未接入";
+  return `${(Number(value || 0) / cap * 100).toFixed(1)}%`;
 }
 
 function formatBool(value) {

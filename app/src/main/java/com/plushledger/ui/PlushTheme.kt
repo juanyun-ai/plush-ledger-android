@@ -204,20 +204,21 @@ private fun Color.soft(amount: Float): Color = mixColor(this, Color.White, amoun
 private fun Color.deep(amount: Float): Color = mixColor(this, Color.Black, amount)
 
 private fun PlushThemeSpec.toPalette(): PlushPalette {
-    val accent = mixColor(primary, secondary, 0.34f)
+    val readableAccent = primary.deep(0.08f)
+    val softAccent = primary.soft(0.78f)
     return PlushPalette(
         background = secondary.soft(0.88f),
         surface = Color.White,
-        surfaceAlt = secondary.soft(0.74f),
-        ink = primary.deep(0.62f),
-        muted = mixColor(primary.deep(0.25f), Color(0xFF9A8D84), 0.66f),
-        rose = primary,
-        moss = secondary,
+        surfaceAlt = softAccent,
+        ink = primary.deep(0.68f),
+        muted = mixColor(primary.deep(0.32f), Color(0xFF8F8179), 0.58f),
+        rose = readableAccent,
+        moss = mixColor(readableAccent, Color(0xFF69B891), 0.42f),
         blue = mixColor(primary, Color(0xFF80BFE5), 0.46f),
         pink = mixColor(primary, Color(0xFFFF9FB7), 0.48f),
         lilac = mixColor(primary, Color(0xFFA996E8), 0.48f),
-        coral = mixColor(accent, Color(0xFFFF8B72), 0.36f),
-        border = accent.soft(0.62f)
+        coral = mixColor(readableAccent, Color(0xFFFF8B72), 0.36f),
+        border = readableAccent.soft(0.72f)
     )
 }
 

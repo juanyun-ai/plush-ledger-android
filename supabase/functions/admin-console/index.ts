@@ -12,6 +12,8 @@ const defaultAllowedOrigins = new Set([
 const allowedStatuses = new Set(["new", "triaged", "done", "ignored"]);
 const dayMs = 86_400_000;
 const chinaOffsetMs = 8 * 60 * 60 * 1000;
+const freeDatabaseLimitBytes = 500 * 1024 * 1024;
+const freeStorageLimitBytes = 1024 * 1024 * 1024;
 
 Deno.serve(async (request) => {
   const corsHeaders = buildCorsHeaders(request);
@@ -79,7 +81,7 @@ async function requireAdmin(request: Request, env: ReturnType<typeof readEnv>) {
 }
 
 async function dashboard(admin: ReturnType<typeof createClient>, userId: string, body: Json) {
-  const [appFeedback, miniFeedback, messages, versions, config, profile, analytics] = await Promise.all([
+  const [appFeedback, miniFeedback, messages, versions, config, profile, analytics, opsStats] = await Promise.all([
     select(admin, "feedback", "id,user_id,email,content,status,source,page,app_version,developer_reply,replied_at,reply_seen_at,created_at,updated_at", "created_at", false, 200),
     select(admin, "mini_feedback", "id,mini_user_id,contact,content,category,status,source,page,app_version,developer_reply,replied_at,reply_seen_at,created_at,updated_at", "created_at", false, 200),
     select(admin, "official_messages", "id,title,body,source_key,created_at,updated_at", "created_at", false, 100),
@@ -87,10 +89,12 @@ async function dashboard(admin: ReturnType<typeof createClient>, userId: string,
     select(admin, "app_config", "key,value,description,active,updated_at", "updated_at", false, 100),
     admin.from("profiles").select("id,display_name,email,role,membership_tier").eq("id", userId).maybeSingle(),
     loadAnalytics(admin, body),
+    loadOpsStats(admin),
   ]);
   return {
     admin: profile.data ?? null,
     analytics,
+    ops: buildOpsOverview(opsStats, versions),
     users: analytics.users,
     feedback: normalizeFeedback(appFeedback, miniFeedback),
     messages,
@@ -122,7 +126,7 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
   ] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     select(admin, "profiles", "id,display_name,phone,email,currency,role,membership_tier,account_no,age,birth_date,gender,province,city,signature,device_brand,device_model,device_platform,device_last_seen_at,app_version,created_at,updated_at", "created_at", false, 1000),
-    select(admin, "mini_users", "id,account_no,nickname,email,email_verified_at,gender,birth_date,province,city,district,signature,birthday_wechat_enabled,birthday_email_enabled,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
+    select(admin, "mini_users", "id,account_no,nickname,phone,email,email_verified_at,gender,birth_date,province,city,district,signature,birthday_wechat_enabled,birthday_email_enabled,device_brand,device_model,device_platform,app_version,last_seen_at,created_at,updated_at", "created_at", false, 1000),
     select(admin, "mini_sessions", "user_id,created_at,last_used_at", "last_used_at", false, 1000),
     select(admin, "mini_ledger_snapshots", "user_id,payload,created_at,updated_at", "updated_at", false, 1000),
     select(admin, "app_activity_events", "id,user_id,event_type,device_brand,device_model,device_platform,app_version,occurred_at,created_at", "occurred_at", false, 5000),
@@ -275,6 +279,103 @@ async function loadAnalytics(admin: ReturnType<typeof createClient>, body: Json 
     }),
     users,
   };
+}
+
+async function loadOpsStats(admin: ReturnType<typeof createClient>) {
+  const { data, error } = await admin.rpc("admin_ops_stats");
+  if (error) return { error: error.message };
+  return (data && typeof data === "object" ? data : {}) as Json;
+}
+
+function buildOpsOverview(stats: Json, versions: Json[]) {
+  const database = stats.database && typeof stats.database === "object" ? stats.database as Json : {};
+  const buckets = Array.isArray(stats.storage) ? stats.storage as Json[] : [];
+  const storageTotal = buckets.reduce((sum, row) => sum + numberValue(row.bytes), 0);
+  const appReleaseBucket = buckets.find((row) => String(row.bucket_id || "") === "app-releases") ?? {};
+  const androidVersions = versions
+    .filter((row) => platformValue(row.platform) === "android")
+    .sort((a, b) => numberValue(b.version_code) - numberValue(a.version_code));
+  const latestVersion = androidVersions.find((row) => row.active !== false) ?? androidVersions[0] ?? {};
+  const urls = [latestVersion.apk_url, latestVersion.backup_apk_url].map((value) => stringValue(value, 700)).filter(Boolean);
+  const carrier = carrierLabel(urls);
+  const usesVolcTos = urls.some(isVolcTosUrl);
+  const warnings: string[] = [];
+  const databaseBytes = numberValue(database.bytes);
+  const appReleasesBytes = numberValue(appReleaseBucket.bytes);
+  if (stats.error) warnings.push(`容量 RPC 未部署或未授权：${stringValue(stats.error, 160)}`);
+  if (databaseBytes >= freeDatabaseLimitBytes * 0.7) warnings.push("数据库接近免费额度预警线，需要准备清理或升级");
+  if (storageTotal >= freeStorageLimitBytes * 0.7) warnings.push("Supabase Storage 接近免费额度预警线，APK 与大图应迁出");
+  if (appReleasesBytes >= 300 * 1024 * 1024) warnings.push("app-releases 桶已有较多旧 APK，建议确认旧客户端依赖后清理");
+  if (!usesVolcTos) warnings.push("当前版本下载链路未发现火山 TOS；TOS 资源包目前不是主承载");
+
+  return {
+    database: {
+      bytes: databaseBytes,
+      pretty: stringValue(database.pretty, 40),
+      limit_bytes: freeDatabaseLimitBytes,
+      used_percent: freeDatabaseLimitBytes ? Number((databaseBytes / freeDatabaseLimitBytes * 100).toFixed(2)) : 0,
+    },
+    storage: {
+      total_bytes: storageTotal,
+      limit_bytes: freeStorageLimitBytes,
+      used_percent: Number((storageTotal / freeStorageLimitBytes * 100).toFixed(2)),
+      app_releases_bytes: appReleasesBytes,
+      app_releases_objects: numberValue(appReleaseBucket.object_count),
+      buckets,
+    },
+    release: {
+      latest_version_code: numberValue(latestVersion.version_code),
+      latest_version_name: stringValue(latestVersion.version_name, 32),
+      latest_file_size_bytes: numberValue(latestVersion.file_size_bytes),
+      primary_url: stringValue(latestVersion.apk_url, 700),
+      backup_url: stringValue(latestVersion.backup_apk_url, 700),
+      carrier,
+      uses_volc_tos: usesVolcTos,
+      migration_note: usesVolcTos
+        ? "火山 TOS 已在下载链路中出现，可继续观察真实速度和流量。"
+        : "当前主链路仍是 GitHub / Supabase；TOS 可以先作为 APK 镜像、分享卡片和备份仓库，不急着迁核心数据库。",
+    },
+    local_assets: {
+      share_cards_count: 33,
+      share_cards_bytes: 86 * 1024 * 1024,
+      docs_downloads_count: 5,
+      docs_downloads_bytes: 485 * 1024 * 1024,
+      note: "本地数值来自 2026-07-09 仓库巡检；线上后台部署后可继续用脚本刷新。",
+    },
+    backup: {
+      status: "建议每月执行",
+      recommendation: "运行 scripts/supabase_monthly_backup.sh，生成 backups/supabase/*.sql。",
+    },
+    monthly: [
+      "检查 Supabase 数据库、Storage、函数错误和最近一次逻辑备份。",
+      "检查 GitHub Release 与 docs/downloads，只保留当前稳定版、上一版和必要回滚包。",
+      "打开官网、管理后台、APK 主备下载链接，确认能正常访问。",
+      "检查 app_versions 的版本号、文件大小、SHA-256 是否和真实 APK 一致。",
+    ],
+    quarterly: [
+      "清理 build、app/build、旧 debug APK、过期 release 包和重复中间产物。",
+      "复核火山 TOS、域名、Cloudflare、Supabase 是否有续费或政策变化。",
+      "抽查一次备份恢复能力，确认备份文件能读、能还原，不只是存在。",
+      "整理旧设计图和未使用素材，高清源文件私有归档，不随生产仓库堆积。",
+    ],
+    warnings,
+  };
+}
+
+function carrierLabel(urls: string[]) {
+  if (!urls.length) return "未配置";
+  const labels = new Set<string>();
+  for (const url of urls) {
+    if (isVolcTosUrl(url)) labels.add("火山 TOS");
+    else if (/raw\.githubusercontent\.com|github\.com/i.test(url)) labels.add("GitHub");
+    else if (/supabase\.co|supabase/i.test(url)) labels.add("Supabase Storage");
+    else labels.add("其他 HTTPS");
+  }
+  return Array.from(labels).join(" / ");
+}
+
+function isVolcTosUrl(url: string) {
+  return /volc|tos|ivolces|byteimg|bytedance|volces/i.test(url);
 }
 
 function aggregateByDay(rows: Json[], field: string, days: number, endDayStart: number, distinctField?: string) {

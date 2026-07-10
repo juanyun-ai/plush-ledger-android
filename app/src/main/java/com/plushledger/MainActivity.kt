@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -292,7 +293,7 @@ private fun StableVisualScale(content: @Composable () -> Unit) {
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    val cappedFontScale = (density.fontScale.coerceAtMost(1.0f) * userScale).coerceIn(0.84f, 1.0f)
+    val cappedFontScale = (density.fontScale.coerceAtMost(1.0f) * userScale).coerceIn(0.76f, 1.0f)
     val stableDensity = remember(density.density, cappedFontScale) {
         Density(density = density.density, fontScale = cappedFontScale)
     }
@@ -412,6 +413,10 @@ private fun UpdateDownloadStatusDialog(
     val palette = LocalPlushPalette.current
     val active = state.isActive
     val knownProgress = state.progress.coerceIn(0, 100).takeIf { state.progress >= 0 }
+    val animatedProgress by animateFloatAsState(
+        targetValue = knownProgress?.let { it / 100f } ?: 0f,
+        label = "download-progress"
+    )
     Dialog(onDismissRequest = { if (!active) onDismiss() }) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -458,7 +463,7 @@ private fun UpdateDownloadStatusDialog(
                             )
                         } else {
                             LinearProgressIndicator(
-                                progress = { knownProgress / 100f },
+                                progress = { animatedProgress },
                                 modifier = Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 4.dp, vertical = 2.dp),
                                 color = palette.moss,
                                 trackColor = Color.Transparent

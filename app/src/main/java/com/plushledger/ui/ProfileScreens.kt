@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -116,6 +117,7 @@ import com.plushledger.data.LedgerState
 import com.plushledger.data.Money
 import com.plushledger.data.OfficialMessage
 import com.plushledger.sync.AppVersionInfo
+import java.io.File
 import java.time.Instant
 import java.time.Duration
 import java.time.LocalDate
@@ -787,7 +789,18 @@ private fun ProfileScreen(
                     Avatar(state.avatarUrl, 100.dp)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(nickname.ifBlank { "绒绒用户" }, fontWeight = FontWeight.Black, fontSize = 26.sp, color = palette.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                nickname.ifBlank { "绒绒用户" },
+                                fontWeight = FontWeight.Black,
+                                fontSize = 26.sp,
+                                color = palette.ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            GenderMark(gender)
+                        }
                         Text("让每一次记录更贴近自己～", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -797,8 +810,8 @@ private fun ProfileScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                         Text("生日  ${if (privacyOn) "**月**日" else birthdayLabel}", color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                        Text("账号编号  ${accountNo.ifBlank { "--" }}", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(membershipLabel(profile?.role, profile?.membershipTier), color = badgeColor(profile?.role, profile?.membershipTier), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("用户ID  ${accountNo.ifBlank { "--" }}", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("地区  ${if (privacyOn) "已隐藏" else locationLabel}", color = palette.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     MascotArt(86.dp, R.drawable.mascot_action_heart)
                 }
@@ -981,7 +994,14 @@ private fun ProfileScreen(
             isValid = { it.length in 6..8 && it.all { ch -> ch in 'A'..'Z' || ch in 'a'..'z' } },
             errorText = "用户ID只能是 6-8 位英文字母，不能包含数字、空格或符号。",
             onDismiss = { showAccountNoEditor = false },
-            onConfirm = { accountNo = it.trim(); showAccountNoEditor = false }
+            onConfirm = {
+                val nextAccountNo = it.trim()
+                accountNo = nextAccountNo
+                prefs.edit().putString("signature_$userKey", signature).apply()
+                onSave(nickname, age, birthDate.ifBlank { null }, gender, province, city, nextAccountNo)
+                editMode = false
+                showAccountNoEditor = false
+            }
         )
     }
     if (showSignatureEditor) {
@@ -1662,18 +1682,25 @@ private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount
             }
         }
         Spacer(Modifier.height(14.dp))
-        LedgerGentleSummary(transactions, ledgerDays, monthCount, streaks)
-        Spacer(Modifier.height(10.dp))
         Surface(
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { showHeatmap = !showHeatmap },
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)),
             shape = RoundedCornerShape(20.dp),
             color = Color.White.copy(alpha = 0.72f),
             border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)
         ) {
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("记账活跃度", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    Text(if (showHeatmap) "收起" else "展开", color = palette.rose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("记账热力图", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    Text(
+                        if (showHeatmap) "收起" else "展开",
+                        color = palette.rose,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { showHeatmap = !showHeatmap }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
                 }
                 if (showHeatmap) {
                     Spacer(Modifier.height(12.dp))
@@ -1793,6 +1820,16 @@ private fun ActivityHeatmap(transactions: List<com.plushledger.data.TransactionE
     val visibleStart = today.minusDays(90)
     val gridStart = visibleStart.weekStart()
     val columns = 14
+    val firstVisibleMonthStart = visibleStart.withDayOfMonth(1).let { first ->
+        if (first.isBefore(visibleStart)) first.plusMonths(1) else first
+    }
+    val monthLabels = generateSequence(firstVisibleMonthStart) { it.plusMonths(1) }
+        .takeWhile { !it.isAfter(today) }
+        .map { monthStart ->
+            val column = (ChronoUnit.DAYS.between(gridStart, monthStart) / 7L).toInt().coerceIn(0, columns - 1)
+            column to monthStart.format(DateTimeFormatter.ofPattern("M月"))
+        }
+        .toMap()
     val counts = transactions
         .map { it.localDateForProfile() }
         .filter { !it.isBefore(visibleStart) && !it.isAfter(today) }
@@ -1807,33 +1844,51 @@ private fun ActivityHeatmap(transactions: List<com.plushledger.data.TransactionE
                     val date = gridStart.plusDays((column * 7 + row).toLong())
                     val count = counts[date] ?: 0
                     val inRange = !date.isBefore(visibleStart) && !date.isAfter(today)
-                    val alpha = if (count == 0) 0.12f else (0.22f + 0.58f * count / maxCount).coerceIn(0.22f, 0.82f)
-                    Box(
-                        Modifier
+                    val isMonthStart = inRange && date.dayOfMonth == 1
+                    Surface(
+                        modifier = Modifier
                             .weight(1f)
-                            .height(11.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(if (!inRange) palette.surfaceAlt else palette.rose.copy(alpha = alpha))
-                    )
+                            .height(11.dp),
+                        shape = RoundedCornerShape(3.dp),
+                        color = heatmapActivityColor(palette.rose, count, maxCount, inRange),
+                        border = if (isMonthStart) androidx.compose.foundation.BorderStroke(0.7.dp, Color(0xFFB8BEC6)) else null
+                    ) {}
                 }
             }
         }
-        Row(Modifier.padding(start = 17.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf(visibleStart, visibleStart.plusMonths(1), visibleStart.plusMonths(2), today).forEachIndexed { index, date ->
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Spacer(Modifier.width(12.dp))
+            repeat(columns) { column ->
                 Text(
-                    date.format(DateTimeFormatter.ofPattern("M月")),
+                    monthLabels[column].orEmpty(),
                     color = palette.muted,
                     fontSize = 10.sp,
                     modifier = Modifier.weight(1f),
-                    textAlign = when (index) {
-                        0 -> androidx.compose.ui.text.style.TextAlign.Start
-                        3 -> androidx.compose.ui.text.style.TextAlign.End
-                        else -> androidx.compose.ui.text.style.TextAlign.Center
-                    }
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 1
                 )
             }
         }
     }
+}
+
+private fun heatmapActivityColor(accent: Color, count: Int, maxCount: Int, inRange: Boolean): Color {
+    if (!inRange) return Color(0xFFF5F6F8)
+    if (count <= 0) return Color(0xFFEDEFF2)
+    val intensity = (count.toFloat() / maxCount.coerceAtLeast(1)).coerceIn(0f, 1f)
+    val light = blendProfileColor(accent, Color.White, 0.78f)
+    val strong = blendProfileColor(accent, Color.Black, 0.12f)
+    return blendProfileColor(light, strong, 0.22f + 0.78f * intensity)
+}
+
+private fun blendProfileColor(start: Color, end: Color, amount: Float): Color {
+    val t = amount.coerceIn(0f, 1f)
+    return Color(
+        red = start.red + (end.red - start.red) * t,
+        green = start.green + (end.green - start.green) * t,
+        blue = start.blue + (end.blue - start.blue) * t,
+        alpha = start.alpha + (end.alpha - start.alpha) * t
+    )
 }
 
 private data class LedgerStreaks(val current: Int, val longest: Int)
@@ -2176,7 +2231,7 @@ private fun SettingsScreen(
     }
     if (showCache) {
         SettingsConfirmDialog("清理缓存", "是否清除临时缓存？账本数据不会被删除。", confirmText = "确认删除", onDismiss = { showCache = false }) {
-            val success = runCatching { context.cacheDir.deleteRecursively() }.getOrDefault(false)
+            val success = runCatching { clearTemporaryFiles(context) }.getOrDefault(false)
             Toast.makeText(context, if (success) "缓存已清理" else "缓存清理完成", Toast.LENGTH_SHORT).show()
             showCache = false
         }
@@ -2186,9 +2241,33 @@ private fun SettingsScreen(
     }
 }
 
+private fun clearTemporaryFiles(context: Context): Boolean {
+    var success = true
+    success = runCatching {
+        context.cacheDir.deleteRecursively()
+        context.cacheDir.mkdirs()
+    }.getOrDefault(false) && success
+    val updateDirs = listOfNotNull(
+        context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+        File(context.filesDir, "updates")
+    )
+    updateDirs.forEach { directory ->
+        directory.listFiles()
+            ?.filter { file ->
+                file.isFile &&
+                    file.name.startsWith("rongrong-ledger-") &&
+                    file.extension.equals("apk", ignoreCase = true)
+            }
+            ?.forEach { file ->
+                success = runCatching { file.delete() }.getOrDefault(false) && success
+            }
+    }
+    return success
+}
+
 private fun appFontScaleLabel(scale: Float): String = when {
-    scale < 0.88f -> "更紧凑"
-    scale < 0.97f -> "紧凑"
+    scale < 0.82f -> "细"
+    scale < 0.95f -> "偏细"
     else -> "标准"
 }
 
@@ -2196,9 +2275,9 @@ private fun appFontScaleLabel(scale: Float): String = when {
 private fun FontScaleDialog(current: Float, onDismiss: () -> Unit, onChoose: (Float) -> Unit) {
     val palette = LocalPlushPalette.current
     val options = listOf(
-        Triple(0.84f, "更紧凑", "适合显示偏大的手机，尽量减少换行"),
-        Triple(0.92f, "紧凑", "比标准小一档，保留舒适间距"),
-        Triple(1.0f, "标准", "保持默认观感，不再提供放大字号")
+        Triple(0.76f, "细", "适合显示偏大的手机，文字和行距都会明显收紧"),
+        Triple(0.88f, "偏细", "比标准小一档，减少换行但仍保持舒适间距"),
+        Triple(1.0f, "标准", "保持默认观感，不提供放大字号")
     )
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2711,7 +2790,20 @@ private fun Long.toDateLabel(): String =
 
 private fun profileAccountNo(profile: com.plushledger.data.ProfileEntity?, userKey: String): String =
     profile?.accountNo?.takeIf { it.isNotBlank() }
-        ?: ("RR" + userKey.filter(Char::isLetterOrDigit).takeLast(10).uppercase().padStart(10, '0'))
+        ?: defaultProfileAccountNo(userKey)
+
+private fun defaultProfileAccountNo(userKey: String): String =
+    buildString {
+        append("RR")
+        val letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        val source = userKey.filter(Char::isLetter).uppercase(java.util.Locale.ROOT)
+        append(source.take(6))
+        var seed = userKey.fold(17) { acc, ch -> acc * 31 + ch.code }.toUInt().toLong()
+        while (length < 8) {
+            append(letters[(seed % letters.length).toInt()])
+            seed = seed / letters.length + 11
+        }
+    }.take(8)
 
 private fun String.maskIf(enabled: Boolean): String {
     if (!enabled || isBlank() || this == "未绑定" || this == "本地账号") return this

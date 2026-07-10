@@ -52,6 +52,7 @@
           <span>官方消息</span>
           <span>版本更新</span>
           <span>远程配置</span>
+          <span>运维健康</span>
           <span>快捷入口</span>
         </div>
         <form id="loginForm" class="grid-form">
@@ -75,6 +76,7 @@
           <button class="tab" data-tab="messages" type="button">官方消息</button>
           <button class="tab" data-tab="versions" type="button">版本更新</button>
           <button class="tab" data-tab="config" type="button">远程配置</button>
+          <button class="tab" data-tab="ops" type="button">运维健康</button>
           <button class="tab" data-tab="links" type="button">快捷入口</button>
         </nav>
 
@@ -223,7 +225,7 @@
           </div>
           <div class="notice subtle">请优先引导用户在 App 或小程序内提交在线反馈；备用 QQ 邮箱不会自动进入后台。</div>
           <div class="table-wrap">
-            <table>
+            <table class="feedback-table">
               <thead>
                 <tr>
                   <th>时间</th>
@@ -353,6 +355,54 @@
 
         <section id="linksTab" class="tab-panel hidden">
           <div class="links-grid" id="linksGrid"></div>
+        </section>
+
+        <section id="opsTab" class="tab-panel hidden">
+          <div class="panel-heading inline">
+            <div>
+              <h2>运维健康</h2>
+              <p>容量、发布包、备份和迁移路线都从真实项目状态汇总；看不见的数据会明确标注，不伪装成已接入。</p>
+            </div>
+            <span class="source-pill">Supabase Free 额度监控</span>
+          </div>
+          <div id="opsNotice" class="notice"></div>
+          <section id="opsKpiGrid" class="kpi-grid"></section>
+          <section class="ops-grid">
+            <article class="chart-panel">
+              <div class="item-title">Supabase 容量</div>
+              <p class="muted">免费档按 500MB 数据库、1GB Storage 做预警。</p>
+              <div id="opsUsage" class="usage-list"></div>
+            </article>
+            <article class="chart-panel">
+              <div class="item-title">发布与承载</div>
+              <p class="muted">检查 APK 主备线路是否实际走火山 TOS / GitHub / Supabase Storage。</p>
+              <div id="opsRelease" class="ops-stack"></div>
+            </article>
+            <article class="chart-panel">
+              <div class="item-title">每月维护</div>
+              <div id="opsMonthly" class="check-list"></div>
+            </article>
+            <article class="chart-panel">
+              <div class="item-title">每季度维护</div>
+              <div id="opsQuarterly" class="check-list"></div>
+            </article>
+            <article class="chart-panel wide">
+              <div class="item-title">Storage 分桶</div>
+              <div class="table-wrap">
+                <table class="compact-table">
+                  <thead>
+                    <tr>
+                      <th>桶</th>
+                      <th>对象数</th>
+                      <th>占用</th>
+                      <th>建议</th>
+                    </tr>
+                  </thead>
+                  <tbody id="opsBucketRows"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
         </section>
       </section>
     </main>

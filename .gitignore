@@ -14,3 +14,5 @@ secrets.properties
 supabase/.temp/
 .wrangler/
 edgeone-packages/
+backups/
+reports/

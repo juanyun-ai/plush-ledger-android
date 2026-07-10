@@ -31,8 +31,8 @@ android {
         applicationId = "online.xiaoxing.rongrongledger"
         minSdk = 26
         targetSdk = 36
-        versionCode = 125
-        versionName = "1.2.5"
+        versionCode = 130
+        versionName = "1.3.0"
 
         val supabaseUrl = providers.gradleProperty("SUPABASE_URL").orNull ?: ""
         val supabaseAnonKey = providers.gradleProperty("SUPABASE_ANON_KEY").orNull ?: ""
