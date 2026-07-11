@@ -7,14 +7,14 @@
 
   一款本地优先、可云同步的 3D 毛绒风 Android 记账与日记应用。
 
-  ![Version](https://img.shields.io/badge/version-1.3.0-FFA126?style=for-the-badge)
+  ![Version](https://img.shields.io/badge/version-1.4.0-FFA126?style=for-the-badge)
   ![Android](https://img.shields.io/badge/Android-8.0%2B-69C69E?style=for-the-badge)
   ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-82AEE8?style=for-the-badge)
   ![License](https://img.shields.io/badge/license-Noncommercial-EA7C73?style=for-the-badge)
 
   <br>
 
-  <a href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.3.0.apk"><b>下载 Android APK</b></a>
+  <a href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.4.0.apk"><b>下载 Android APK</b></a>
   ·
   <a href="https://juanyun-ai.github.io/plush-ledger-android/"><b>产品网页</b></a>
   ·
@@ -53,8 +53,8 @@
 
 ## 当前状态
 
-- Android App 是当前完整版本，当前源码版本和最新已发布 APK 均为 **1.3.0**。
-- 微信小程序已上线，当前维护版本为 **1.4.9**；由于个人主体小程序类目和隐私合规限制，小程序版收敛了生活日历、资料上传、手机绑定等入口，AI 快记采用本机规则解析。
+- Android App 是当前完整版本，当前源码与已验证发布包均为 **1.4.0**；正式上线状态以 GitHub Release 和 `app_versions` 线上记录为准。
+- 微信小程序 **1.6.3** 已通过微信开发者工具上传为开发版，尚未提审或正式发布；项目记录中的线上稳定版仍为 **1.4.7**，本轮未重新通过公众平台后台核验。由于个人主体小程序类目和隐私合规限制，小程序版收敛了生活日历、资料上传、手机绑定等入口，智能快记采用本机规则解析。
 - 两端共用“本地优先、可选云同步、用户确认后入账”的产品原则，但功能页面并不完全一致；Android 版保留更完整的 AI、日记、生活日历和应用内更新体验。
 - 项目从 2026-06-06 开始制作，前三到五天完成基础记账产品，随后围绕真实使用、设计稿、下载更新、导入导出、云同步、合规和小程序提审持续迭代约三周。
 - 2026-06-24 完成 `xiaoxing.online` 相关备案和产品官网准备；2026-06-28 至 2026-06-29 完成小程序提审整改与上线收敛。
@@ -65,7 +65,7 @@
 - 管理后台：[admin.xiaoxing.online](https://admin.xiaoxing.online/)，默认连接绒绒记账 Supabase 项目，登录管理员账号后可管理反馈、官方消息、版本和远程配置。
 - 小程序用户在管理后台优先显示用户自设昵称；微信 openid 仅用于内部账号绑定，不作为公开用户名展示。
 - 运营看板只展示数据库可证明的数据：App 打开事件来自 `app_activity_events`，旧版本没有记录时不会倒填假活跃；记账发生日和同步日分开看。
-- 最新 APK：[rongrong-ledger-1.3.0.apk](https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.3.0.apk)
+- 最新 APK：[rongrong-ledger-1.4.0.apk](https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.4.0.apk)
 - 国内访问长期方案：优先用 Cloudflare Pages 或 Vercel 避开腾讯云接入备案阻塞；如后续需要大陆加速，再考虑腾讯云 EdgeOne 和接入备案。
 
 ## 功能
@@ -143,7 +143,7 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 维护边界
 
 - 日常维护主要关注四件事：Android APK 发布、Supabase 后端配置、小程序提审版本、产品官网 HTTPS/下载链接。
-- Android 发布必须保持同一个 `applicationId` 和 release 签名；应用内更新依赖 `app_versions` 表中的版本号、下载地址、备用地址、文件大小和 SHA-256。
+- Android 发布必须保持同一个 `applicationId` 和同一张签名证书；当前公开安装包实际沿用历史 Android Debug 证书，以保证老用户可覆盖安装。应用内更新依赖 `app_versions` 表中的版本号、下载地址、备用地址、文件大小和 SHA-256。
 - Supabase 的 `service_role`、AI 模型 Key、微信小程序 AppSecret 只能放在服务端 Secrets，不能写入仓库、APK、小程序包或截图。
 - 小程序上架版本要按微信审核要求收敛功能描述；Android README 和官网可以介绍 Android 完整功能，但小程序材料要以当前真实可用范围为准。
 - 官网是静态前端，适合 GitHub Pages、EdgeOne Pages、Cloudflare Pages、Netlify 等静态托管；不需要 Java 后端。
@@ -154,6 +154,14 @@ app/build/outputs/apk/debug/app-debug.apk
 ## 版本更新
 
 每次发布新的 `app_versions` 记录时，数据库触发器会自动生成对应的官方信箱消息。APK 下载由 Android 系统下载服务负责，应用读取真实字节和进度；主线路失败后会自动重试并切换备用线路，所有线路不可用时可交给系统浏览器下载。安装前必须通过 SHA-256 校验，校验失败不会进入安装流程。当前优先使用 GitHub raw 下载链路，GitHub Release 作为归档备份；后续可把大体积分享卡片迁到对象存储/CDN，进一步减小 APK。
+
+### v1.4.0
+
+1. 记账热力图支持近 3 月、近 6 月和全年切换，日期范围和笔数来自真实账本。
+2. 绒绒日记更新完整首图、历史记录与编辑布局。
+3. 隐藏未接入的微信登录、本地“实名认证”和未验收手机号入口，公开包默认只展示真实可用的账号能力。
+4. 产品官网新增 34 省级地区主题卡展，支持地区筛选、自动巡游、拖动切换和高清大图查看。
+5. 管理后台连接恢复、月度备份、运维报告和 APK 下载线路检查进一步完善。
 
 ### v1.3.0
 
@@ -391,7 +399,7 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ### v0.8.6
 
-- 正式包名调整为 `online.xiaoxing.rongrongledger`，并启用长期保存的独立 release 签名。
+- 正式包名调整为 `online.xiaoxing.rongrongledger`；后续实际发布沿用历史 Android Debug 证书以保持覆盖安装兼容，独立 release 签名迁移尚未完成。
 - 更新下载增加双线路、自动重试、失败切换和重启恢复，Supabase Storage 为主源，GitHub Release 为备用归档。
 - 公测期间关闭会员支付入口，现有功能全部免费。
 - 修复统计页顶部金额和周趋势日期在常见手机宽度下被裁切的问题。
@@ -442,11 +450,11 @@ app/build/outputs/apk/debug/app-debug.apk
 - 新增年龄、生日、性别资料，以及邮箱和手机号换绑入口。
 - 记账页改为独立页面，系统返回手势会回到上一页。
 
-Android 不允许普通 App 静默安装，用户仍需要在系统安装器中确认。正式发行时请使用长期保存的 release keystore，后续版本必须保持相同签名。
+Android 不允许普通 App 静默安装，用户仍需要在系统安装器中确认。当前公开版本必须继续使用已发布 APK 的同一证书；在没有新包名或明确迁移方案前，不能直接切换到另一张 release 证书。
 
 ## 尚未开放
 
-微信/QQ 一键登录与自动绑定需要腾讯开放平台 AppID、移动应用审核和回调服务。当前开发者资质尚未审核通过，因此入口只展示真实前置条件，不写入假的绑定状态。微信/支付宝支付暂不开放，公测期间不收费，也不会自动读取个人支付账单。
+微信/QQ 一键登录与自动绑定需要腾讯开放平台 AppID、移动应用审核和回调服务。当前开发者资质尚未审核通过，公开包已隐藏相关入口。微信/支付宝支付暂不开放，公测期间不收费，也不会自动读取个人支付账单。
 
 ## 许可
 

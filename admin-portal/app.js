@@ -1030,8 +1030,9 @@ async function adminAction(action, payload) {
 }
 
 async function adminRequest(action, payload) {
+  const endpoint = `${state.settings.supabaseUrl}/functions/v1/admin-console`;
   try {
-    return await fetch(`${state.settings.supabaseUrl}/functions/v1/admin-console`, {
+    return await fetch(endpoint, {
       method: "POST",
       headers: {
         ...baseHeaders(),
@@ -1040,7 +1041,14 @@ async function adminRequest(action, payload) {
       body: JSON.stringify({ action, ...payload }),
     });
   } catch (error) {
-    throw new Error("无法连接管理函数：请检查网络、admin-console 是否已部署，以及 Supabase CORS/域名是否允许当前后台。");
+    if (state.settings.supabaseUrl !== DEFAULT_SETTINGS.supabaseUrl) {
+      state.settings = { ...DEFAULT_SETTINGS };
+      saveJson(STORAGE_KEY, state.settings);
+      byId("supabaseUrl").value = state.settings.supabaseUrl;
+      byId("supabaseAnonKey").value = state.settings.supabaseAnonKey;
+      return adminRequest(action, payload);
+    }
+    throw new Error(`无法连接管理函数：当前连接地址是 ${state.settings.supabaseUrl}。请刷新页面；如果仍失败，点“连接设置”恢复默认连接后重新登录。`);
   }
 }
 
@@ -1124,8 +1132,14 @@ function loadJson(key, fallback) {
 
 function loadSettings() {
   const settings = loadJson(STORAGE_KEY, DEFAULT_SETTINGS);
-  if (!settings.supabaseUrl || !settings.supabaseAnonKey) return DEFAULT_SETTINGS;
-  return settings;
+  const supabaseUrl = normalizeSupabaseUrl(settings.supabaseUrl);
+  const supabaseAnonKey = String(settings.supabaseAnonKey || "").trim();
+  if (!supabaseUrl || !supabaseAnonKey) {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    return { ...DEFAULT_SETTINGS };
+  }
+  return { supabaseUrl, supabaseAnonKey };
 }
 
 function saveJson(key, value) {

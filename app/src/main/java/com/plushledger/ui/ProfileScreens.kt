@@ -275,7 +275,6 @@ fun MyScreen(
             onBack = { page = MyPage.ROOT },
             onSave = viewModel::updateProfile,
             onAvatar = viewModel::uploadAvatar,
-            onBind = viewModel::socialLogin,
             onSendIdentityCode = viewModel::requestIdentityChange,
             onVerifyIdentity = viewModel::verifyIdentityChange,
             onSendPhoneUpgradeCode = { viewModel.sendLoginOtp("phone", it) },
@@ -700,7 +699,6 @@ private fun ProfileScreen(
     onBack: () -> Unit,
     onSave: (String, String, String?, String?, String?, String?, String?) -> Unit,
     onAvatar: (android.net.Uri) -> Unit,
-    onBind: (String) -> Unit,
     onSendIdentityCode: (String, String) -> Unit,
     onVerifyIdentity: (String, String, String) -> Unit,
     onSendPhoneUpgradeCode: (String) -> Unit,
@@ -741,12 +739,9 @@ private fun ProfileScreen(
     var showSignatureEditor by rememberSaveable { mutableStateOf(false) }
     var showPrivacy by rememberSaveable { mutableStateOf(false) }
     var showPassword by rememberSaveable { mutableStateOf(false) }
-    var showVerify by rememberSaveable { mutableStateOf(false) }
     var showDelete by rememberSaveable { mutableStateOf(false) }
     var showBirthdayPicker by rememberSaveable { mutableStateOf(false) }
     var privacyOn by rememberSaveable(userKey) { mutableStateOf(prefs.getBoolean("privacy_$userKey", false)) }
-    var verified by rememberSaveable(userKey) { mutableStateOf(prefs.getBoolean("verified_$userKey", false)) }
-    var verifiedName by rememberSaveable(userKey) { mutableStateOf(prefs.getString("verified_name_$userKey", "") ?: "") }
     var birthdaySettings by remember(userKey) { mutableStateOf(plannerStore.birthdaySettings()) }
     var deleteSeconds by remember { mutableIntStateOf(15) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(onAvatar) }
@@ -895,23 +890,21 @@ private fun ProfileScreen(
         }
         item {
             PlushCard {
-                ProfileSectionTitle("账号绑定")
-                ProfileProviderRow(R.drawable.logo_wechat, "微信", if (profile?.wechatBound == true) "已绑定" else "未绑定", palette.moss, onClick = { onBind("微信绑定") })
-                ProfileDivider()
+                ProfileSectionTitle("账号信息")
                 ProfileListRow(Icons.Default.Email, "邮箱", (profile?.email ?: state.session?.email ?: "本地账号").maskIf(privacyOn), palette.coral, enabled = remoteMode, onClick = {
                     identityChannel = "email"
                 })
-                ProfileDivider()
-                ProfileListRow(
-                    Icons.Default.Phone,
-                    "手机号",
-                    (profile?.phone ?: state.session?.phone ?: if (remoteMode) "未绑定" else "未绑定 · 可升级云账号").maskIf(privacyOn),
-                    palette.blue,
-                    enabled = true,
-                    onClick = {
-                    identityChannel = "phone"
-                    }
-                )
+                if (BuildConfig.PHONE_AUTH_ENABLED) {
+                    ProfileDivider()
+                    ProfileListRow(
+                        Icons.Default.Phone,
+                        "手机号",
+                        (profile?.phone ?: state.session?.phone ?: if (remoteMode) "未绑定" else "未绑定 · 可升级云账号").maskIf(privacyOn),
+                        palette.blue,
+                        enabled = true,
+                        onClick = { identityChannel = "phone" }
+                    )
+                }
             }
         }
         item {
@@ -919,10 +912,10 @@ private fun ProfileScreen(
                 ProfileSectionTitle("其他功能")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     ProfileShortcut(Icons.Default.Lock, "资料隐私", palette.lilac, Modifier.weight(1f)) { showPrivacy = true }
-                    Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
-                    ProfileShortcut(Icons.Default.Security, "修改密码", palette.rose, Modifier.weight(1f)) { showPassword = true }
-                    Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
-                    ProfileShortcut(Icons.Default.Shield, "实名认证", palette.moss, Modifier.weight(1f)) { showVerify = true }
+                    if (remoteMode) {
+                        Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
+                        ProfileShortcut(Icons.Default.Security, "修改密码", palette.rose, Modifier.weight(1f)) { showPassword = true }
+                    }
                     Box(Modifier.width(1.dp).height(74.dp).background(palette.border))
                     ProfileShortcut(Icons.Default.DeleteForever, "注销账号", palette.coral, Modifier.weight(1f)) { showDelete = true }
                 }
@@ -1050,23 +1043,6 @@ private fun ProfileScreen(
             onConfirm = { current, next, confirm ->
                 onChangePassword(current, next, confirm)
                 showPassword = false
-            }
-        )
-    }
-    if (showVerify) {
-        IdentityVerifyDialog(
-            verified = verified,
-            verifiedName = verifiedName,
-            onDismiss = { showVerify = false },
-            onConfirm = { name ->
-                verified = true
-                verifiedName = name
-                prefs.edit()
-                    .putBoolean("verified_$userKey", true)
-                    .putString("verified_name_$userKey", name)
-                    .apply()
-                showVerify = false
-                Toast.makeText(context, "实名认证状态已保存", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -1375,43 +1351,6 @@ private fun ProfileListRow(
 }
 
 @Composable
-private fun ProfileProviderRow(
-    logoRes: Int,
-    label: String,
-    value: String,
-    color: Color,
-    enabled: Boolean = true,
-    onClick: () -> Unit
-) {
-    val palette = LocalPlushPalette.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(shape = CircleShape, color = color.copy(alpha = 0.12f), border = androidx.compose.foundation.BorderStroke(1.dp, palette.border)) {
-            Image(painterResource(logoRes), contentDescription = label, modifier = Modifier.size(34.dp).padding(6.dp))
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(label, modifier = Modifier.weight(0.9f), color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Text(
-            value,
-            modifier = Modifier.weight(1.2f),
-            color = if (enabled) palette.muted else palette.muted.copy(alpha = 0.5f),
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.End
-        )
-        Spacer(Modifier.width(6.dp))
-        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = palette.muted.copy(alpha = if (enabled) 1f else 0.35f))
-    }
-}
-
-@Composable
 private fun RegionEditDialog(
     province: String,
     city: String,
@@ -1579,33 +1518,6 @@ private fun PasswordChangeDialog(
         confirmButton = {
             TextButton(onClick = { onConfirm(current, next, confirm) }, enabled = !busy) { Text("保存密码") }
         }
-    )
-}
-
-@Composable
-private fun IdentityVerifyDialog(
-    verified: Boolean,
-    verifiedName: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var realName by rememberSaveable { mutableStateOf(verifiedName) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("实名认证", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    if (verified) "当前已保存认证状态。正式上线前建议接入合规实名服务商。"
-                    else "先保存应用内认证状态；正式实名认证需要后续接入合规服务商。",
-                    color = LocalPlushPalette.current.muted,
-                    fontSize = 12.sp
-                )
-                OutlinedTextField(realName, { realName = it.take(12) }, label = { Text("姓名") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        confirmButton = { TextButton(onClick = { onConfirm(realName.trim()) }, enabled = realName.isNotBlank()) { Text("保存") } }
     )
 }
 
@@ -2750,17 +2662,6 @@ private val profilePhoneCountryOptions = listOf(
     ProfilePhoneCountry("🇳🇿", "新西兰", "+64"),
     ProfilePhoneCountry("🇩🇪", "德国", "+49")
 )
-
-@Composable
-private fun BindRow(provider: String, bound: Boolean, onBind: () -> Unit) {
-    val palette = LocalPlushPalette.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(if (provider == "微信") Icons.Default.ChatBubble else Icons.Default.AccountCircle, contentDescription = null, tint = palette.moss)
-        Spacer(Modifier.width(10.dp))
-        Text(provider, modifier = Modifier.weight(1f), color = palette.ink, fontWeight = FontWeight.SemiBold)
-        TextButton(onClick = onBind, enabled = !bound) { Text(if (bound) "已绑定" else "绑定") }
-    }
-}
 
 @Composable
 private fun Avatar(url: String?, size: androidx.compose.ui.unit.Dp) {

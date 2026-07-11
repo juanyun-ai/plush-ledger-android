@@ -262,14 +262,6 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun socialLogin(provider: String) {
-        val name = when {
-            provider.contains("微信") -> "微信"
-            else -> provider
-        }
-        state.value = state.value.copy(message = "$name 绑定已准备接入；密钥只能放后端。Android 原生绑定还需要腾讯开放平台移动应用 AppID、包名签名和回调配置，未完成前不会写入假的绑定状态")
-    }
-
     fun unlockWithPin(pin: String) {
         when (val result = auth.signInWithPin(pin)) {
             is AuthOutcome.SignedIn -> {

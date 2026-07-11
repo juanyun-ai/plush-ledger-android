@@ -253,15 +253,317 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
+
+        .province-exhibit {
+            position: relative;
+            isolation: isolate;
+            width: 100vw;
+            margin-left: calc(50% - 50vw);
+            padding: clamp(44px, 7vw, 88px) 0;
+            overflow: hidden;
+            background: #eef8f2;
+            border-top: 1px solid rgba(104, 200, 158, 0.32);
+            border-bottom: 1px solid rgba(82, 140, 112, 0.2);
+            box-shadow: inset 0 24px 70px rgba(255, 255, 255, 0.7);
+            --stage-tilt-x: 0deg;
+            --stage-tilt-y: 0deg;
+        }
+
+        .province-exhibit::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            opacity: 0.38;
+            background-image:
+                linear-gradient(rgba(73, 132, 103, 0.08) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(73, 132, 103, 0.08) 1px, transparent 1px);
+            background-size: 32px 32px;
+            mask-image: linear-gradient(to bottom, transparent, black 18%, black 82%, transparent);
+        }
+
+        .province-exhibit-inner {
+            width: min(1200px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+
+        .province-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            margin-top: 28px;
+        }
+
+        .region-tabs {
+            display: flex;
+            gap: 8px;
+            min-width: 0;
+            overflow-x: auto;
+            padding: 4px;
+        }
+
+        .region-tab {
+            flex: 0 0 auto;
+            min-height: 38px;
+            padding: 0 16px;
+            border: 1px solid rgba(77, 126, 101, 0.25);
+            border-radius: 999px;
+            color: #496556;
+            background: rgba(255, 255, 255, 0.68);
+            font-weight: 700;
+            transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
+        }
+
+        .region-tab:hover,
+        .region-tab[aria-selected="true"] {
+            color: #ffffff;
+            background: #4f8f70;
+            border-color: #4f8f70;
+            transform: translateY(-1px);
+        }
+
+        .gallery-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 0 0 auto;
+        }
+
+        .gallery-icon-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border: 1px solid rgba(77, 126, 101, 0.26);
+            border-radius: 50%;
+            color: #3f6f58;
+            background: rgba(255, 255, 255, 0.82);
+            box-shadow: 0 10px 28px rgba(58, 105, 81, 0.12);
+            transition: transform 180ms ease, color 180ms ease, background 180ms ease;
+        }
+
+        .gallery-icon-button:hover {
+            color: #ffffff;
+            background: #4f8f70;
+            transform: translateY(-2px);
+        }
+
+        .province-stage {
+            position: relative;
+            min-height: 600px;
+            margin-top: 22px;
+            outline: none;
+            perspective: 1500px;
+            touch-action: pan-y;
+        }
+
+        .province-stack {
+            position: absolute;
+            inset: 0 0 92px;
+            transform-style: preserve-3d;
+            transform: rotateX(var(--stage-tilt-y)) rotateY(var(--stage-tilt-x));
+            transition: transform 220ms ease-out;
+        }
+
+        .province-stage.is-dragging .province-stack {
+            transition-duration: 80ms;
+        }
+
+        .province-card {
+            position: absolute;
+            left: 50%;
+            top: 48%;
+            width: clamp(220px, 26vw, 318px);
+            aspect-ratio: 0.78;
+            padding: 0;
+            overflow: hidden;
+            border: 6px solid rgba(255, 255, 255, 0.96);
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 34px 70px rgba(43, 80, 62, 0.22);
+            transform:
+                translate(-50%, -50%)
+                translate3d(var(--card-x), var(--card-y), var(--card-z))
+                rotateY(var(--card-rotate-y))
+                rotateZ(var(--card-rotate-z))
+                scale(var(--card-scale));
+            opacity: var(--card-opacity);
+            z-index: var(--card-order);
+            cursor: pointer;
+            transition: transform 560ms cubic-bezier(.2,.75,.2,1), opacity 360ms ease, box-shadow 300ms ease;
+            will-change: transform;
+        }
+
+        .province-card::after {
+            content: "";
+            position: absolute;
+            inset: -35%;
+            pointer-events: none;
+            background: linear-gradient(112deg, transparent 34%, rgba(255, 255, 255, 0.58) 49%, transparent 64%);
+            transform: translateX(-115%) rotate(7deg);
+            transition: transform 720ms cubic-bezier(.2,.75,.2,1);
+        }
+
+        .province-card:hover,
+        .province-card:focus-visible {
+            box-shadow: 0 42px 84px rgba(43, 80, 62, 0.3);
+        }
+
+        .province-card:hover::after,
+        .province-card:focus-visible::after {
+            transform: translateX(115%) rotate(7deg);
+        }
+
+        .province-card img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .province-caption {
+            position: absolute;
+            left: 50%;
+            bottom: 22px;
+            width: min(92%, 560px);
+            transform: translateX(-50%);
+            text-align: center;
+        }
+
+        .province-caption strong {
+            display: block;
+            color: #315b47;
+            font-size: 24px;
+            line-height: 1.3;
+        }
+
+        .province-caption span {
+            display: block;
+            margin-top: 7px;
+            color: #6d887a;
+            font-size: 14px;
+        }
+
+        .province-progress {
+            width: min(220px, 52vw);
+            height: 3px;
+            margin: 14px auto 0;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(77, 126, 101, 0.16);
+        }
+
+        .province-progress span {
+            display: block;
+            width: 0;
+            height: 100%;
+            margin: 0;
+            border-radius: inherit;
+            background: #d97782;
+            transition: width 420ms cubic-bezier(.2,.75,.2,1);
+        }
+
+        .province-index {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 6px 2px 12px;
+            scroll-behavior: smooth;
+        }
+
+        .province-index button {
+            flex: 0 0 auto;
+            min-width: 68px;
+            min-height: 38px;
+            padding: 0 12px;
+            border: 1px solid rgba(77, 126, 101, 0.2);
+            border-radius: 8px;
+            color: #61796d;
+            background: rgba(255, 255, 255, 0.62);
+            font-weight: 700;
+            transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+        }
+
+        .province-index button[aria-current="true"] {
+            color: #ffffff;
+            background: #d97782;
+            border-color: #d97782;
+        }
+
+        .province-dialog {
+            width: min(92vw, 720px);
+            max-height: 92vh;
+            padding: 0;
+            overflow: hidden;
+            border: 0;
+            border-radius: 8px;
+            color: #4a453e;
+            background: #fffdf8;
+            box-shadow: 0 34px 100px rgba(30, 53, 42, 0.36);
+        }
+
+        .province-dialog::backdrop {
+            background: rgba(27, 40, 34, 0.72);
+            backdrop-filter: blur(8px);
+        }
+
+        .province-dialog figure {
+            margin: 0;
+            display: grid;
+            grid-template-rows: minmax(0, 1fr) auto;
+            max-height: 92vh;
+        }
+
+        .province-dialog img {
+            display: block;
+            width: 100%;
+            max-height: 76vh;
+            object-fit: contain;
+            background: #eef8f2;
+        }
+
+        .province-dialog footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 18px;
+            border-top: 1px solid #e6eee8;
+        }
+
+        .province-dialog-copy strong,
+        .province-dialog-copy span {
+            display: block;
+        }
+
+        .province-dialog-copy strong { font-size: 20px; color: #315b47; }
+        .province-dialog-copy span { margin-top: 3px; color: #789083; font-size: 13px; }
+        .province-dialog-actions { display: flex; gap: 8px; }
+
+        @media (max-width: 760px) {
+            .province-toolbar { align-items: flex-start; flex-direction: column; }
+            .gallery-controls { align-self: flex-end; }
+            .province-stage { min-height: 470px; }
+            .province-stack { bottom: 82px; }
+            .province-card { width: min(58vw, 250px); border-width: 4px; }
+            .province-caption strong { font-size: 21px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .province-card,
+            .province-card::after,
+            .province-stack,
+            .province-progress span,
+            .region-tab,
+            .gallery-icon-button {
+                transition-duration: 1ms;
+            }
+        }
     </style>
 </head>
 <body class="bg-cream-bg font-body-md text-charcoal-text relative">
-<!-- Background Blobs -->
-<div class="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden -z-10">
-<div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-warm-yellow/20 rounded-blob animate-morph mix-blend-multiply blur-3xl"></div>
-<div class="absolute top-[30%] right-[-10%] w-[40vw] h-[40vw] bg-soft-mint/20 rounded-blob2 animate-morph mix-blend-multiply blur-3xl" style="animation-delay: 2s;"></div>
-<div class="absolute bottom-[-10%] left-[20%] w-[60vw] h-[60vw] bg-secondary-container/20 rounded-blob animate-morph mix-blend-multiply blur-3xl" style="animation-delay: 4s;"></div>
-</div>
 <!-- Top Navigation Bar -->
 <nav class="full-width top-0 z-50 pt-6 px-margin-mobile md:px-margin-desktop">
 <div class="max-w-container-max mx-auto flex items-center justify-between">
@@ -270,15 +572,16 @@
 <img alt="绒绒记账 Logo" class="h-16 w-auto mix-blend-multiply" src="assets/rongrong-icon.png">
 </a>
 <!-- Center Pill -->
-<div class="hidden md:flex items-center gap-10 bg-white/70 px-12 py-3 rounded-full backdrop-blur-md border border-white shadow-sm">
+<div class="hidden md:flex items-center gap-7 bg-white/70 px-9 py-3 rounded-full backdrop-blur-md border border-white shadow-sm">
 <a class="font-body-lg text-body-lg text-primary font-bold hover:scale-105 transition-all" href="#top">首页</a>
 <a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#features">核心功能</a>
 <a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#healing">治愈体验</a>
 <a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#stats">统计分析</a>
-<a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#download">愿望清单</a>
+<a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#province-gallery">省份卡展</a>
+<a class="font-body-lg text-body-lg text-charcoal-text hover:text-primary hover:scale-105 transition-all" href="#download">下载体验</a>
 </div>
 <!-- Right Button -->
-<a class="bg-[#845400] text-white font-title-md text-body-md px-8 py-3 rounded-full shadow-md hover:-translate-y-1 hover:shadow-lg transition-all" href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.3.0.apk">
+<a class="bg-[#845400] text-white font-title-md text-body-md px-8 py-3 rounded-full shadow-md hover:-translate-y-1 hover:shadow-lg transition-all" href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.4.0.apk">
             立即下载
         </a>
 </div>
@@ -288,7 +591,7 @@
 <section class="flex flex-col lg:flex-row items-center gap-12 lg:gap-8 mb-section reveal pt-12">
 <!-- Left text -->
 <div class="flex-1 text-left space-y-10 z-20 relative w-full lg:max-w-[50%]">
-<h1 class="text-[64px] lg:text-[76px] font-bold text-primary leading-[1.1] tracking-tight font-display">
+<h1 class="text-[64px] lg:text-[76px] font-bold text-primary leading-[1.1] font-display">
             绒绒记账<br>
 <span class="text-charcoal-text text-[44px] lg:text-[52px] mt-4 block font-medium">温暖每一笔，记录每一天</span>
 </h1>
@@ -298,7 +601,7 @@
             </p>
 </div>
 <div class="flex flex-col sm:flex-row items-center gap-6 pt-2">
-<a class="bg-[#ffb347] text-white font-title-md text-xl px-12 py-4 rounded-full shadow-md hover:-translate-y-1 hover:scale-105 hover:bg-[#ffb95a] transition-all duration-300 w-full sm:w-auto text-center" href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.3.0.apk">
+<a class="bg-[#ffb347] text-white font-title-md text-xl px-12 py-4 rounded-full shadow-md hover:-translate-y-1 hover:scale-105 hover:bg-[#ffb95a] transition-all duration-300 w-full sm:w-auto text-center" href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.4.0.apk">
                 立即下载
             </a>
 <a class="bg-[#fceee2]/80 backdrop-blur-md text-charcoal-text font-title-md text-xl px-12 py-4 rounded-full hover:bg-white hover:-translate-y-1 hover:shadow-lg transition-all duration-300 w-full sm:w-auto border border-white text-center" href="#features">
@@ -310,11 +613,11 @@
 <div class="flex-1 relative w-full h-[600px] lg:h-[700px] flex justify-center items-center mt-12 lg:mt-0">
 <div class="relative w-full h-full flex items-center justify-center">
 <!-- Back Left: Image 6 (Stats) -->
-<img alt="统计页面" class="absolute z-10 w-[45%] max-w-[300px] rounded-[2.5rem] shadow-soft transform -rotate-12 -translate-x-32 -translate-y-12 transition-all duration-700 ease-out border-[6px] border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKfURu5qA7OrHnoa8aX5uBPfP4Ptjho_d15lDBgKOV5nT1Dc1eLpPKwnwx9T8ybY2_YPfMcN414oGxxu2f3L5i4_gipBginLuqkPmLx8Yr0sgJY5BrY8TQIR_mQirkI2FVKC1swHfZLSs17N3OQPtydwDoNjiG1cbvmOCX50qeuu35_4tzpNCTiC5joHoYkWiRNWkI5Lj1AF2hVdIPYkwkERB1x3smBy4mSzXtVMi7fUNhkVWP5FiCNK2WEkhNruJZ7IatCcDrnDM">
+<img alt="河南主题分享卡" class="absolute z-10 w-[45%] max-w-[300px] rounded-lg shadow-soft transform -rotate-12 -translate-x-20 md:-translate-x-32 -translate-y-12 transition-all duration-700 ease-out border-[6px] border-white" src="share-cards/share_card_province_henan.png">
 <!-- Back Right: Image 8 (Login) -->
-<img alt="登录页面" class="absolute z-10 w-[45%] max-w-[300px] rounded-[2.5rem] shadow-soft transform rotate-12 translate-x-32 -translate-y-16 transition-all duration-700 ease-out border-[6px] border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBn0JlRtCLMbQZ6Faj8koq7_958LP-0PAmHp5IUc7BC9SyqCKrbXe-EtbgF5E6zzlXm4D2w_HZVJUuWfUrYvuisvq_xqiRpTDgIfX5atfQ1PVRjko4yHcJVywwXmfLAQ1WZGI3eO51uD4cuj6lmtoD-OscGCTyuvOGcp5IgK8mqX8LFHkMio2MD0mvlC8PnOtWt_eOdPvreqJ1j4Q2CleN_zkqrR9F5iRtx469poSeBjjOaRdwq3DPdpS1BYzl1PoZ9TaU3zQE_Lpk">
+<img alt="江苏主题分享卡" class="absolute z-10 w-[45%] max-w-[300px] rounded-lg shadow-soft transform rotate-12 translate-x-20 md:translate-x-32 -translate-y-16 transition-all duration-700 ease-out border-[6px] border-white" src="share-cards/share_card_province_jiangsu.png">
 <!-- Front Center: Image 5 (Main) -->
-<img alt="主页面" class="absolute z-30 w-[55%] max-w-[360px] rounded-[3rem] shadow-float transform transition-all duration-700 ease-out scale-105 translate-y-16 border-[8px] border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5AJjRYatDq65APYwWlgKDAV8IJV1Ttt5UDz_PdU-KzygZWaACOf-cUj6Kj0YvSWH3WmNuiQPDg0J6YEA3YTlH3dLL_VjpDUSgQfha_BskJOQi_sxZFLpijAVs0eqzJAenttNb3-R1KQNe6MjChydL1TZ3u2wwsFAT50vuLNRKF7VX6iZsQiSjQ735WfdmjFkBcj1C0AsPmtBRldKeklSSSkzVZTj2mLUuHVXsaTsoqw_nErBzo6XCdasI_U_wgU5sXzwV5MT59SI">
+<img alt="绒绒记账主页面" class="absolute z-30 w-[55%] max-w-[360px] rounded-[3rem] shadow-float transform transition-all duration-700 ease-out scale-105 translate-y-16 border-[8px] border-white" src="assets/screen-home.png">
 </div>
 </div>
 </section>
@@ -376,12 +679,10 @@
 <!-- Interactive Expandable Stack Section -->
 <section id="healing" class="mb-section reveal reveal-delay-2 relative z-10">
 <div class="bg-white/40 backdrop-blur-xl rounded-[4rem] p-8 md:p-16 shadow-float group relative overflow-hidden border border-white/50 hover:bg-white/60 transition-colors duration-500">
-<div class="absolute -top-32 -right-32 w-[600px] h-[600px] bg-gradient-to-br from-primary-fixed/30 to-warm-yellow/30 rounded-blob animate-morph opacity-40 z-0"></div>
-<div class="absolute -bottom-32 -left-32 w-[500px] h-[500px] bg-gradient-to-tr from-soft-mint/30 to-secondary-container/30 rounded-blob2 animate-morph opacity-40 z-0" style="animation-delay: 3s;"></div>
 <div class="flex flex-col lg:flex-row gap-16 items-center relative z-10">
 <div class="flex-1 space-y-8 text-center lg:text-left">
 <h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-charcoal-text bg-white/50 inline-block px-6 py-3 rounded-full backdrop-blur-sm">清晰记录，温暖分享</h2>
-<p class="font-body-lg text-body-lg text-on-surface-variant text-lg">无论是详尽的账单明细，还是充满心意的日记卡片，每一次互动都能感受到治愈的力量。鼠标悬浮展开查看更多细节。</p>
+<p class="font-body-lg text-body-lg text-on-surface-variant text-lg">无论是详尽的账单明细，还是充满心意的日记卡片，每一次查看都保留清晰与治愈的质感。</p>
 <a class="text-primary font-title-md font-bold flex items-center gap-2 hover:gap-4 transition-all mx-auto lg:mx-0 bg-white/80 px-8 py-4 rounded-full shadow-sm hover:shadow-md hover:bg-white" href="#features">
                     探索更多功能 <span class="material-symbols-outlined">arrow_forward</span>
 </a>
@@ -398,6 +699,39 @@
 </div>
 </div>
 </section>
+<!-- Province Card Exhibition -->
+<section id="province-gallery" class="province-exhibit reveal">
+<div class="province-exhibit-inner">
+<div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+<div class="max-w-2xl">
+<p class="font-label-md text-sm font-bold text-[#4f8f70] mb-3">绒绒 · 在地生活收藏</p>
+<h2 class="font-headline-lg text-[34px] md:text-[44px] leading-tight text-charcoal-text mb-4">34 省级地区主题卡展</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant leading-relaxed">从山河、城市到日常烟火，每张卡片都保留一份地方气质。港澳使用一张联名卡，整套共 33 张作品。</p>
+</div>
+<div class="text-left lg:text-right">
+<strong id="provinceCount" class="block text-[32px] text-[#315b47]">33</strong>
+<span class="text-sm text-[#6d887a]">张原创分享卡</span>
+</div>
+</div>
+<div class="province-toolbar">
+<div id="regionTabs" class="region-tabs no-scrollbar" role="tablist" aria-label="按地区筛选省份卡"></div>
+<div class="gallery-controls">
+<button id="provincePrev" class="gallery-icon-button" type="button" aria-label="上一张" title="上一张"><span class="material-symbols-outlined">arrow_back</span></button>
+<button id="provinceAutoplay" class="gallery-icon-button" type="button" aria-label="暂停自动巡游" title="暂停自动巡游"><span class="material-symbols-outlined">pause</span></button>
+<button id="provinceNext" class="gallery-icon-button" type="button" aria-label="下一张" title="下一张"><span class="material-symbols-outlined">arrow_forward</span></button>
+</div>
+</div>
+<div id="provinceStage" class="province-stage" tabindex="0" aria-label="省份主题卡展览">
+<div id="provinceStack" class="province-stack"></div>
+<div class="province-caption" aria-live="polite">
+<strong id="provinceTitle">江苏</strong>
+<span id="provinceMeta">华东 · 1 / 33</span>
+<div class="province-progress" aria-hidden="true"><span id="provinceProgress"></span></div>
+</div>
+</div>
+<div id="provinceIndex" class="province-index no-scrollbar" aria-label="省份卡索引"></div>
+</div>
+</section>
 <!-- Download & Support Section -->
 <section id="download" class="bg-gradient-to-r from-primary-fixed/50 to-warm-yellow/40 backdrop-blur-md rounded-[4rem] p-10 md:p-16 shadow-float flex flex-col md:flex-row items-center justify-between gap-12 mb-section reveal relative overflow-hidden border border-white/60">
 <div class="absolute inset-0 bg-white/20 rounded-[4rem]"></div>
@@ -411,7 +745,7 @@
 </div>
 </div>
 <div class="relative z-10 flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-<a class="inline-flex items-center justify-center gap-2 bg-[#ffb347] text-white font-title-md text-lg px-8 py-4 rounded-full shadow-md hover:-translate-y-1 hover:scale-105 hover:bg-[#ffb95a] transition-all duration-300" href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.3.0.apk">
+<a class="inline-flex items-center justify-center gap-2 bg-[#ffb347] text-white font-title-md text-lg px-8 py-4 rounded-full shadow-md hover:-translate-y-1 hover:scale-105 hover:bg-[#ffb95a] transition-all duration-300" href="https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.4.0.apk">
 <span class="material-symbols-outlined">android</span>
 Android 下载
 </a>
@@ -424,6 +758,22 @@ Github下载
 </div>
 </section>
 </main>
+<dialog id="provinceDialog" class="province-dialog" aria-labelledby="provinceDialogTitle">
+<figure>
+<img id="provinceDialogImage" alt="">
+<footer>
+<div class="province-dialog-copy">
+<strong id="provinceDialogTitle"></strong>
+<span id="provinceDialogMeta"></span>
+</div>
+<div class="province-dialog-actions">
+<button id="provinceDialogPrev" class="gallery-icon-button" type="button" aria-label="上一张" title="上一张"><span class="material-symbols-outlined">arrow_back</span></button>
+<button id="provinceDialogNext" class="gallery-icon-button" type="button" aria-label="下一张" title="下一张"><span class="material-symbols-outlined">arrow_forward</span></button>
+<button id="provinceDialogClose" class="gallery-icon-button" type="button" aria-label="关闭大图" title="关闭"><span class="material-symbols-outlined">close</span></button>
+</div>
+</footer>
+</figure>
+</dialog>
 <!-- Footer -->
 <footer class="bg-surface-container/60 backdrop-blur-lg dark:bg-surface-container-high/60 full-width py-12 relative z-10 border-t border-white/50">
 <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop flex flex-col items-center gap-8">
@@ -439,6 +789,259 @@ Github下载
             </p>
 </div>
 </footer>
+
+<script>
+(() => {
+  const cards = [
+    ['anhui', '安徽', '华东'], ['beijing', '北京', '华北'], ['chongqing', '重庆', '西南'],
+    ['fujian', '福建', '华东'], ['gangao', '港澳联名', '港澳台'], ['gansu', '甘肃', '西北'],
+    ['guangdong', '广东', '华南'], ['guangxi', '广西', '华南'], ['guizhou', '贵州', '西南'],
+    ['hainan', '海南', '华南'], ['hebei', '河北', '华北'], ['heilongjiang', '黑龙江', '东北'],
+    ['henan', '河南', '华中'], ['hubei', '湖北', '华中'], ['hunan', '湖南', '华中'],
+    ['jiangsu', '江苏', '华东'], ['jiangxi', '江西', '华东'], ['jilin', '吉林', '东北'],
+    ['liaoning', '辽宁', '东北'], ['neimenggu', '内蒙古', '华北'], ['ningxia', '宁夏', '西北'],
+    ['qinghai', '青海', '西北'], ['shaanxi', '陕西', '西北'], ['shandong', '山东', '华东'],
+    ['shanghai', '上海', '华东'], ['shanxi', '山西', '华北'], ['sichuan', '四川', '西南'],
+    ['taiwan', '台湾', '港澳台'], ['tianjin', '天津', '华北'], ['xinjiang', '新疆', '西北'],
+    ['xizang', '西藏', '西南'], ['yunnan', '云南', '西南'], ['zhejiang', '浙江', '华东']
+  ].map(([slug, name, region]) => ({
+    slug,
+    name,
+    region,
+    src: `share-cards/share_card_province_${slug}.png`
+  }))
+
+  const regions = ['全部', '华东', '华北', '华中', '华南', '西南', '西北', '东北', '港澳台']
+  const tabs = document.getElementById('regionTabs')
+  const exhibit = document.getElementById('province-gallery')
+  const stack = document.getElementById('provinceStack')
+  const stage = document.getElementById('provinceStage')
+  const index = document.getElementById('provinceIndex')
+  const title = document.getElementById('provinceTitle')
+  const meta = document.getElementById('provinceMeta')
+  const count = document.getElementById('provinceCount')
+  const progress = document.getElementById('provinceProgress')
+  const autoplayButton = document.getElementById('provinceAutoplay')
+  const dialog = document.getElementById('provinceDialog')
+  const dialogImage = document.getElementById('provinceDialogImage')
+  const dialogTitle = document.getElementById('provinceDialogTitle')
+  const dialogMeta = document.getElementById('provinceDialogMeta')
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  let region = '全部'
+  let visible = cards
+  let active = Math.max(0, cards.findIndex(card => card.slug === 'jiangsu'))
+  let paused = reducedMotion
+  let timer = 0
+  let pointerStart = null
+  let sectionVisible = false
+
+  function wrapped(position) {
+    return (position + visible.length) % visible.length
+  }
+
+  function cardTransform(distance) {
+    const mobile = window.innerWidth < 760
+    const slot = mobile ? 126 : Math.min(238, window.innerWidth * 0.19)
+    const absolute = Math.abs(distance)
+    return {
+      x: `${distance * slot}px`,
+      y: `${absolute * 13}px`,
+      z: `${(2 - absolute) * 28}px`,
+      rotateY: `${distance * -24}deg`,
+      rotateZ: `${distance * 2.2}deg`,
+      scale: String(1 - absolute * (mobile ? 0.18 : 0.14)),
+      opacity: String(1 - absolute * 0.24),
+      order: String(10 - absolute)
+    }
+  }
+
+  function renderStack() {
+    stack.replaceChildren()
+    for (let distance = -2; distance <= 2; distance += 1) {
+      const position = wrapped(active + distance)
+      const card = visible[position]
+      const transform = cardTransform(distance)
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'province-card'
+      button.setAttribute('aria-label', `${card.name}主题分享卡`)
+      button.style.setProperty('--card-x', transform.x)
+      button.style.setProperty('--card-y', transform.y)
+      button.style.setProperty('--card-z', transform.z)
+      button.style.setProperty('--card-rotate-y', transform.rotateY)
+      button.style.setProperty('--card-rotate-z', transform.rotateZ)
+      button.style.setProperty('--card-scale', transform.scale)
+      button.style.setProperty('--card-opacity', transform.opacity)
+      button.style.setProperty('--card-order', transform.order)
+      const image = document.createElement('img')
+      image.src = card.src
+      image.alt = `${card.name}主题分享卡`
+      image.loading = distance === 0 ? 'eager' : 'lazy'
+      button.appendChild(image)
+      button.addEventListener('click', () => {
+        if (distance === 0) openDialog()
+        else {
+          active = position
+          render()
+          restartTimer()
+        }
+      })
+      stack.appendChild(button)
+    }
+  }
+
+  function renderIndex() {
+    index.replaceChildren()
+    visible.forEach((card, position) => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.textContent = card.name
+      button.setAttribute('aria-current', position === active ? 'true' : 'false')
+      button.addEventListener('click', () => {
+        active = position
+        render()
+        restartTimer()
+      })
+      index.appendChild(button)
+    })
+    const currentButton = index.querySelector('[aria-current="true"]')
+    if (currentButton) {
+      const left = currentButton.offsetLeft - (index.clientWidth - currentButton.offsetWidth) / 2
+      index.scrollTo({ left: Math.max(0, left), behavior: reducedMotion ? 'auto' : 'smooth' })
+    }
+  }
+
+  function render() {
+    const card = visible[active]
+    title.textContent = card.name
+    meta.textContent = `${card.region} · ${active + 1} / ${visible.length}`
+    count.textContent = visible.length
+    progress.style.width = `${((active + 1) / visible.length) * 100}%`
+    renderStack()
+    renderIndex()
+    if (dialog.open) renderDialog()
+  }
+
+  function renderTabs() {
+    tabs.replaceChildren()
+    regions.forEach(name => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'region-tab'
+      button.textContent = name
+      button.setAttribute('role', 'tab')
+      button.setAttribute('aria-selected', name === region ? 'true' : 'false')
+      button.addEventListener('click', () => {
+        region = name
+        visible = name === '全部' ? cards : cards.filter(card => card.region === name)
+        active = 0
+        renderTabs()
+        render()
+        restartTimer()
+      })
+      tabs.appendChild(button)
+    })
+  }
+
+  function move(step) {
+    active = wrapped(active + step)
+    render()
+  }
+
+  function restartTimer() {
+    window.clearInterval(timer)
+    if (!paused && sectionVisible && !document.hidden && visible.length > 1) timer = window.setInterval(() => move(1), 3600)
+  }
+
+  function setPaused(next) {
+    paused = next
+    const icon = autoplayButton.querySelector('.material-symbols-outlined')
+    icon.textContent = paused ? 'play_arrow' : 'pause'
+    autoplayButton.setAttribute('aria-label', paused ? '开始自动巡游' : '暂停自动巡游')
+    autoplayButton.title = paused ? '开始自动巡游' : '暂停自动巡游'
+    restartTimer()
+  }
+
+  function renderDialog() {
+    const card = visible[active]
+    dialogImage.src = card.src
+    dialogImage.alt = `${card.name}主题分享卡大图`
+    dialogTitle.textContent = card.name
+    dialogMeta.textContent = `${card.region} · ${active + 1} / ${visible.length}`
+  }
+
+  function openDialog() {
+    renderDialog()
+    setPaused(true)
+    if (dialog.showModal) dialog.showModal()
+    else dialog.setAttribute('open', '')
+  }
+
+  document.getElementById('provincePrev').addEventListener('click', () => { move(-1); restartTimer() })
+  document.getElementById('provinceNext').addEventListener('click', () => { move(1); restartTimer() })
+  autoplayButton.addEventListener('click', () => setPaused(!paused))
+  document.getElementById('provinceDialogPrev').addEventListener('click', () => move(-1))
+  document.getElementById('provinceDialogNext').addEventListener('click', () => move(1))
+  document.getElementById('provinceDialogClose').addEventListener('click', () => dialog.close())
+
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) dialog.close()
+  })
+
+  stage.addEventListener('keydown', event => {
+    if (event.key === 'ArrowLeft') { event.preventDefault(); move(-1); restartTimer() }
+    if (event.key === 'ArrowRight') { event.preventDefault(); move(1); restartTimer() }
+    if (event.key === 'Enter') openDialog()
+  })
+
+  stage.addEventListener('pointerdown', event => {
+    pointerStart = event.clientX
+    stage.classList.add('is-dragging')
+    stage.setPointerCapture?.(event.pointerId)
+  })
+
+  stage.addEventListener('pointermove', event => {
+    if (reducedMotion || event.pointerType === 'touch') return
+    const bounds = stage.getBoundingClientRect()
+    const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 2
+    const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 2
+    exhibit.style.setProperty('--stage-tilt-x', `${x * 2.8}deg`)
+    exhibit.style.setProperty('--stage-tilt-y', `${y * -1.8}deg`)
+  })
+
+  stage.addEventListener('pointerleave', () => {
+    exhibit.style.setProperty('--stage-tilt-x', '0deg')
+    exhibit.style.setProperty('--stage-tilt-y', '0deg')
+  })
+
+  stage.addEventListener('pointerup', event => {
+    stage.classList.remove('is-dragging')
+    if (pointerStart === null) return
+    const distance = event.clientX - pointerStart
+    pointerStart = null
+    if (Math.abs(distance) < 42) return
+    move(distance > 0 ? -1 : 1)
+    restartTimer()
+  })
+
+  stage.addEventListener('pointercancel', () => {
+    pointerStart = null
+    stage.classList.remove('is-dragging')
+  })
+
+  window.addEventListener('resize', renderStack)
+  document.addEventListener('visibilitychange', restartTimer)
+  new IntersectionObserver(entries => {
+    sectionVisible = entries.some(entry => entry.isIntersecting)
+    restartTimer()
+  }, { threshold: 0.2 }).observe(exhibit)
+
+  renderTabs()
+  render()
+  setPaused(paused)
+})()
+</script>
 
 
 

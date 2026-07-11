@@ -612,6 +612,10 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
     var agreementChecked by rememberSaveable { mutableStateOf(false) }
     val palette = LocalPlushPalette.current
 
+    LaunchedEffect(BuildConfig.PHONE_AUTH_ENABLED) {
+        if (!BuildConfig.PHONE_AUTH_ENABLED && mode == "phone") mode = "email"
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().navigationBarsPadding(),
         contentPadding = PaddingValues(horizontal = 28.dp, vertical = 18.dp),
@@ -659,7 +663,7 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
                 border = BorderStroke(1.dp, palette.border)
             ) {
                 Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
-                    AuthModeTabs(mode) { selected ->
+                    AuthModeTabs(mode, BuildConfig.PHONE_AUTH_ENABLED) { selected ->
                         mode = selected
                         viewModel.showAuthPage(AuthPage.LOGIN)
                     }
@@ -710,7 +714,6 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
                                     lineHeight = 18.sp
                                 )
                             }
-                            SocialLoginRow(viewModel, withDivider = true)
                         }
                         else -> when (state.authPage) {
                             AuthPage.LOGIN -> {
@@ -744,7 +747,6 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
                                     Spacer(Modifier.width(8.dp))
                                     Text("注册新账号", color = palette.rose, fontWeight = FontWeight.Bold)
                                 }
-                                SocialLoginRow(viewModel)
                             }
                             AuthPage.REGISTER, AuthPage.RESET -> {
                                 val isReset = state.authPage == AuthPage.RESET
@@ -790,10 +792,15 @@ private fun AuthScreen(state: com.plushledger.ui.UiState, viewModel: LedgerViewM
 }
 
 @Composable
-private fun AuthModeTabs(selected: String, onSelected: (String) -> Unit) {
+private fun AuthModeTabs(selected: String, phoneAuthEnabled: Boolean, onSelected: (String) -> Unit) {
     val palette = LocalPlushPalette.current
+    val modes = buildList {
+        add("email" to "邮箱")
+        if (phoneAuthEnabled) add("phone" to "手机")
+        add("local" to "本地")
+    }
     Row(Modifier.fillMaxWidth()) {
-        listOf("email" to "邮箱", "phone" to "手机", "local" to "本地").forEach { (key, label) ->
+        modes.forEach { (key, label) ->
             Column(
                 Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { onSelected(key) }.padding(vertical = 3.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -1004,23 +1011,6 @@ private val phoneCountryOptions = listOf(
     PhoneCountry("🇳🇿", "新西兰", "+64"),
     PhoneCountry("🇩🇪", "德国", "+49")
 )
-
-@Composable
-private fun SocialLoginRow(viewModel: LedgerViewModel, withDivider: Boolean = false) {
-    Spacer(Modifier.height(8.dp))
-    val palette = LocalPlushPalette.current
-    if (withDivider) {
-        Text("—  其他登录方式  —", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = palette.muted, fontSize = 12.sp)
-        Spacer(Modifier.height(8.dp))
-    }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedButton(onClick = { viewModel.socialLogin("微信") }, modifier = Modifier.fillMaxWidth().height(46.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, palette.border)) {
-            Image(painterResource(R.drawable.logo_wechat), contentDescription = null, modifier = Modifier.size(26.dp))
-            Spacer(Modifier.size(6.dp))
-            Text("微信", color = palette.ink, fontWeight = FontWeight.Bold)
-        }
-    }
-}
 
 @Composable
 private fun AgreementDialog(onDismiss: () -> Unit, onAccepted: () -> Unit) {

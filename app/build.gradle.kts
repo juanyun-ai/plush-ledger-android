@@ -13,6 +13,8 @@ android {
     val releaseStorePassword = providers.gradleProperty("RONGRONG_RELEASE_STORE_PASSWORD").orNull
     val releaseKeyAlias = providers.gradleProperty("RONGRONG_RELEASE_KEY_ALIAS").orNull
     val releaseKeyPassword = providers.gradleProperty("RONGRONG_RELEASE_KEY_PASSWORD").orNull
+    val useLegacyDebugSigning = providers.gradleProperty("RONGRONG_USE_LEGACY_DEBUG_SIGNING").orNull
+        ?.toBooleanStrictOrNull() ?: true
 
     signingConfigs {
         if (!releaseStorePath.isNullOrBlank() && !releaseStorePassword.isNullOrBlank() &&
@@ -36,15 +38,25 @@ android {
 
         val supabaseUrl = providers.gradleProperty("SUPABASE_URL").orNull ?: ""
         val supabaseAnonKey = providers.gradleProperty("SUPABASE_ANON_KEY").orNull ?: ""
+        val phoneAuthEnabled = providers.gradleProperty("PHONE_AUTH_ENABLED").orNull
+            ?.toBooleanStrictOrNull() ?: false
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+        buildConfigField("boolean", "PHONE_AUTH_ENABLED", phoneAuthEnabled.toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.findByName("release")
+            // Existing public installs use this certificate; changing it would break in-place updates.
+            signingConfig = if (useLegacyDebugSigning) {
+                signingConfigs.getByName("debug")
+            } else {
+                requireNotNull(signingConfigs.findByName("release")) {
+                    "Release signing properties are required when legacy debug signing is disabled."
+                }
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

@@ -77,8 +77,8 @@ class SystemDownloadManagerInstrumentedTest {
         const val APK_MIME = "application/vnd.android.package-archive"
         const val TEST_FILE_NAME = "system-download-qa.apk"
         const val PUBLISHED_APK_URL =
-            "https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.3.0.apk"
-        const val PUBLISHED_APK_SHA256 = "470a7f07c43a24aaee39d4df33b74022a489b22626fb0f61f4133b388733f9d9"
-        const val PUBLISHED_APK_SIZE = 34_557_236L
+            "https://raw.githubusercontent.com/juanyun-ai/plush-ledger-android/main/docs/downloads/rongrong-ledger-1.4.0.apk"
+        const val PUBLISHED_APK_SHA256 = "aa38ac03521596cb10f933a76857e58d68f8fdc72befc47d0f7a75ba3c4b649a"
+        const val PUBLISHED_APK_SIZE = 15_384_774L
     }
 }
