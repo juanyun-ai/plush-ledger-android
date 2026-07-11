@@ -253,15 +253,7 @@ class AuthRepository(
         }
     }
 
-    private fun normalizePhone(raw: String): String {
-        val compact = raw.filter { it.isDigit() || it == '+' }
-        if (compact.isBlank()) return ""
-        if (compact.startsWith("+")) return compact
-        if (compact.startsWith("00") && compact.length > 4) return "+${compact.drop(2)}"
-        if (compact.length == 11 && compact.startsWith("1")) return "+86$compact"
-        if (compact.startsWith("86") && compact.length == 13) return "+$compact"
-        return "+$compact"
-    }
+    private fun normalizePhone(raw: String): String = normalizePhoneNumber(raw)
 
     private fun Throwable.toFriendlyAuthMessage(fallback: String): String {
         val raw = message.orEmpty()
@@ -296,3 +288,13 @@ private fun String.isValidEmail(): Boolean =
 
 private fun String.isLikelyE164Phone(): Boolean =
     matches(Regex("^\\+[1-9]\\d{6,14}$"))
+
+internal fun normalizePhoneNumber(raw: String): String {
+    val compact = raw.filter { it.isDigit() || it == '+' }
+    if (compact.isBlank()) return ""
+    if (compact.startsWith("+")) return compact
+    if (compact.startsWith("00") && compact.length > 4) return "+${compact.drop(2)}"
+    if (compact.length == 11 && compact.startsWith("1")) return "+86$compact"
+    if (compact.startsWith("86") && compact.length == 13) return "+$compact"
+    return "+$compact"
+}

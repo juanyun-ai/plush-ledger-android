@@ -278,6 +278,8 @@ fun MyScreen(
             onBind = viewModel::socialLogin,
             onSendIdentityCode = viewModel::requestIdentityChange,
             onVerifyIdentity = viewModel::verifyIdentityChange,
+            onSendPhoneUpgradeCode = { viewModel.sendLoginOtp("phone", it) },
+            onVerifyPhoneUpgrade = { phone, code -> viewModel.verifyLoginOtp("phone", phone, code) },
             onChangePassword = viewModel::changePassword,
             onDeleteAccount = viewModel::deleteAccountPermanently
         )
@@ -701,6 +703,8 @@ private fun ProfileScreen(
     onBind: (String) -> Unit,
     onSendIdentityCode: (String, String) -> Unit,
     onVerifyIdentity: (String, String, String) -> Unit,
+    onSendPhoneUpgradeCode: (String) -> Unit,
+    onVerifyPhoneUpgrade: (String, String) -> Unit,
     onChangePassword: (String, String, String) -> Unit,
     onDeleteAccount: () -> Unit
 ) {
@@ -898,9 +902,16 @@ private fun ProfileScreen(
                     identityChannel = "email"
                 })
                 ProfileDivider()
-                ProfileListRow(Icons.Default.Phone, "手机号", (profile?.phone ?: state.session?.phone ?: "未绑定").maskIf(privacyOn), palette.blue, enabled = remoteMode, onClick = {
+                ProfileListRow(
+                    Icons.Default.Phone,
+                    "手机号",
+                    (profile?.phone ?: state.session?.phone ?: if (remoteMode) "未绑定" else "未绑定 · 可升级云账号").maskIf(privacyOn),
+                    palette.blue,
+                    enabled = true,
+                    onClick = {
                     identityChannel = "phone"
-                })
+                    }
+                )
             }
         }
         item {
@@ -1089,11 +1100,18 @@ private fun ProfileScreen(
     identityChannel?.let { channel ->
         IdentityChangeDialog(
             channel = channel,
+            isAccountUpgrade = !remoteMode && channel == "phone",
             cooldown = state.otpCooldown,
             busy = state.isBusy,
             onDismiss = { identityChannel = null },
-            onSend = { onSendIdentityCode(channel, it) },
-            onVerify = { value, code -> onVerifyIdentity(channel, value, code) }
+            onSend = {
+                if (!remoteMode && channel == "phone") onSendPhoneUpgradeCode(it)
+                else onSendIdentityCode(channel, it)
+            },
+            onVerify = { value, code ->
+                if (!remoteMode && channel == "phone") onVerifyPhoneUpgrade(value, code)
+                else onVerifyIdentity(channel, value, code)
+            }
         )
     }
 }
@@ -2570,6 +2588,7 @@ private fun IdentityRow(icon: ImageVector, label: String, value: String, enabled
 @Composable
 private fun IdentityChangeDialog(
     channel: String,
+    isAccountUpgrade: Boolean = false,
     cooldown: Int,
     busy: Boolean,
     onDismiss: () -> Unit,
@@ -2583,12 +2602,25 @@ private fun IdentityChangeDialog(
     val target = if (isEmail) value.trim() else "$countryCode${value.filter(Char::isDigit)}"
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEmail) "换绑邮箱" else "换绑手机号", fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                when {
+                    isEmail -> "换绑邮箱"
+                    isAccountUpgrade -> "绑定手机号并开启云同步"
+                    else -> "换绑手机号"
+                },
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     if (isEmail) "请输入新邮箱收到的验证码后完成换绑。若邮件仍显示确认链接，需要先把 Supabase 邮件模板改为验证码。"
-                    else "选择区号后输入日常手机号即可，默认中国大陆 +86。",
+                    else if (isAccountUpgrade) {
+                        "验证成功后会创建或进入对应的手机号云账号，并把当前本地账本安全合并过去。原本地数据仍会保留。"
+                    } else {
+                        "选择区号后输入日常手机号即可，默认中国大陆 +86。"
+                    },
                     color = LocalPlushPalette.current.muted,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
@@ -2635,7 +2667,7 @@ private fun IdentityChangeDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
         confirmButton = {
             TextButton(onClick = { onVerify(target, code) }, enabled = !busy && value.isNotBlank() && code.length >= 4) {
-                Text("确认换绑")
+                Text(if (isAccountUpgrade) "确认绑定" else "确认换绑")
             }
         }
     )
