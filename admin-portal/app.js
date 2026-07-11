@@ -632,8 +632,8 @@ function renderOps() {
     ["APK 存储桶", bytesLabel(ops.storage?.app_releases_bytes), `${Number(ops.storage?.app_releases_objects || 0)} 个对象`],
     ["最新版本", ops.release?.latest_version_name ? `v${ops.release.latest_version_name}` : "-", `${bytesLabel(ops.release?.latest_file_size_bytes)} · ${ops.release?.carrier || "未识别线路"}`],
     ["TOS 承载", ops.release?.uses_volc_tos ? "已接入" : "未承载", ops.release?.uses_volc_tos ? "可继续续小规格" : "当前主链路仍是 GitHub / Supabase"],
-    ["分享卡片", bytesLabel(ops.local_assets?.share_cards_bytes), `${Number(ops.local_assets?.share_cards_count || 0)} 张，App 按需缓存`],
-    ["下载目录", bytesLabel(ops.local_assets?.docs_downloads_bytes), `${Number(ops.local_assets?.docs_downloads_count || 0)} 个 APK`],
+    ["分享卡片", ops.client_cache?.share_cards_strategy || "按需下载", `单机上限 ${bytesLabel(ops.client_cache?.share_cards_limit_bytes || 64 * 1024 * 1024)}`],
+    ["安装包清理", ops.client_cache?.apk_cleanup || "安装后自动清理", "不删除账本、头像和导出文件"],
     ["备份策略", ops.backup?.status || "建议开启", ops.backup?.recommendation || "每月一次 Supabase 逻辑备份"],
   ];
   els.opsKpiGrid.innerHTML = cards.map(([label, value, desc]) => `

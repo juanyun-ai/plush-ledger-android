@@ -335,16 +335,15 @@ function buildOpsOverview(stats: Json, versions: Json[]) {
         ? "火山 TOS 已在下载链路中出现，可继续观察真实速度和流量。"
         : "当前主链路仍是 GitHub / Supabase；TOS 可以先作为 APK 镜像、分享卡片和备份仓库，不急着迁核心数据库。",
     },
-    local_assets: {
-      share_cards_count: 33,
-      share_cards_bytes: 86 * 1024 * 1024,
-      docs_downloads_count: 5,
-      docs_downloads_bytes: 485 * 1024 * 1024,
-      note: "本地数值来自 2026-07-09 仓库巡检；线上后台部署后可继续用脚本刷新。",
+    client_cache: {
+      share_cards_strategy: "按需下载",
+      share_cards_limit_bytes: 64 * 1024 * 1024,
+      apk_cleanup: "安装后自动清理",
+      note: "分享卡不再内置于 APK；实际手机占用以用户按需缓存为准。",
     },
     backup: {
-      status: "建议每月执行",
-      recommendation: "运行 scripts/supabase_monthly_backup.sh，生成 backups/supabase/*.sql。",
+      status: "每月 1 次",
+      recommendation: "本机计划为每月 1 日 09:30；备份需保留 SHA-256 校验文件。",
     },
     monthly: [
       "检查 Supabase 数据库、Storage、函数错误和最近一次逻辑备份。",

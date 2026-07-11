@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="$ROOT_DIR/backups/supabase"
@@ -12,25 +13,69 @@ cd "$ROOT_DIR"
 
 MODE="sql-dump"
 
+cleanup_partial() {
+  rm -rf "$WORK_DIR"
+}
+
+trap cleanup_partial ERR INT TERM
+
+query_json() {
+  local sql="$1"
+  local output="$2"
+  local temp="$output.tmp"
+  local attempt
+
+  for attempt in 1 2 3 4 5 6 7 8; do
+    rm -f "$temp"
+    if npx --offline supabase db query --linked "$sql" --output json > "$temp"; then
+      mv "$temp" "$output"
+      return 0
+    fi
+    # Supabase CLI may return a telemetry shutdown error after writing valid JSON.
+    if [[ -s "$temp" ]] && jq -e '.rows | type == "array"' "$temp" >/dev/null 2>&1; then
+      mv "$temp" "$output"
+      return 0
+    fi
+    sleep $((attempt * 2))
+  done
+
+  rm -f "$temp"
+  return 1
+}
+
+retry_command() {
+  local attempt
+  for attempt in 1 2 3 4 5 6 7 8; do
+    if "$@"; then
+      return 0
+    fi
+    sleep $((attempt * 2))
+  done
+  return 1
+}
+
 if docker info >/dev/null 2>&1; then
   echo "开始导出 Supabase schema..."
-  npx supabase db dump --linked --schema public,auth,storage --file "$WORK_DIR/schema.sql"
+  retry_command npx --offline supabase db dump --linked --schema public,auth,storage --file "$WORK_DIR/schema.sql"
 
   echo "开始导出 Supabase data..."
-  npx supabase db dump --linked --data-only --use-copy --file "$WORK_DIR/data.sql"
+  retry_command npx --offline supabase db dump --linked --data-only --use-copy --file "$WORK_DIR/data.sql"
 else
   MODE="json-snapshot"
   echo "Docker Desktop 未运行，切换为 Supabase Management API JSON 快照。"
-  npx supabase db query --linked "select public.admin_ops_stats() as stats;" --output json > "$WORK_DIR/admin_ops_stats.json"
+  query_json "select public.admin_ops_stats() as stats;" "$WORK_DIR/admin_ops_stats.json"
+
+  FAILED_TABLES=()
 
   dump_table() {
-    local table="$1"
-    local output="$WORK_DIR/public_${table}.json"
-    local sql="select coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) as rows from public.${table} t;"
-    if npx supabase db query --linked "$sql" --output json > "$output"; then
-      echo "已导出 public.${table}"
+    local schema="$1"
+    local table="$2"
+    local output="$WORK_DIR/${schema}_${table}.json"
+    local sql="select coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) as rows from ${schema}.${table} t;"
+    if query_json "$sql" "$output"; then
+      echo "已导出 ${schema}.${table}"
     else
-      echo "跳过 public.${table}: 导出失败或线上表不存在" > "$output"
+      FAILED_TABLES+=("${schema}.${table}")
     fi
   }
 
@@ -51,8 +96,18 @@ else
     mini_feedback \
     mini_profile_name_history
   do
-    dump_table "$table"
+    dump_table public "$table"
   done
+
+  dump_table auth users
+  dump_table auth identities
+  dump_table storage buckets
+  dump_table storage objects
+
+  if (( ${#FAILED_TABLES[@]} > 0 )); then
+    echo "备份失败，未导出：${FAILED_TABLES[*]}" >&2
+    exit 1
+  fi
 fi
 
 cat > "$WORK_DIR/MANIFEST.txt" <<EOF
@@ -61,7 +116,7 @@ Created at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 Mode: $MODE
 Files:
 - sql-dump mode: schema.sql + data.sql
-- json-snapshot mode: admin_ops_stats.json + public_*.json
+- json-snapshot mode: admin_ops_stats.json + public_*.json + auth_*.json + storage_*.json
 
 Notes:
 - This backup does not include Supabase project secrets.
@@ -70,6 +125,10 @@ Notes:
 EOF
 
 tar -czf "$ARCHIVE" -C "$BACKUP_DIR" "$STAMP"
+tar -tzf "$ARCHIVE" >/dev/null
+shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
 rm -rf "$WORK_DIR"
+trap - ERR INT TERM
 
 echo "备份完成：$ARCHIVE"
+echo "完整性校验：$ARCHIVE.sha256"

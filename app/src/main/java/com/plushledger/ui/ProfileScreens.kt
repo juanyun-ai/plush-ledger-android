@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -1641,6 +1643,18 @@ private data class FootprintMetricItem(
     val color: Color
 )
 
+internal enum class HeatmapPeriod(val label: String) {
+    THREE_MONTHS("近3月"),
+    SIX_MONTHS("近6月"),
+    YEAR("全年")
+}
+
+internal fun heatmapVisibleStart(today: LocalDate, period: HeatmapPeriod): LocalDate = when (period) {
+    HeatmapPeriod.THREE_MONTHS -> today.minusMonths(2).withDayOfMonth(1)
+    HeatmapPeriod.SIX_MONTHS -> today.minusMonths(5).withDayOfMonth(1)
+    HeatmapPeriod.YEAR -> today.withDayOfYear(1)
+}
+
 @Composable
 private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount: Int) {
     val palette = LocalPlushPalette.current
@@ -1649,6 +1663,10 @@ private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount
     val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amountMinor }
     val streaks = remember(transactions) { ledgerStreaks(transactions.map { it.localDateForProfile() }) }
     var showHeatmap by rememberSaveable { mutableStateOf(false) }
+    var heatmapPeriodName by rememberSaveable { mutableStateOf(HeatmapPeriod.THREE_MONTHS.name) }
+    var selectedHeatmapDate by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedHeatmapCount by rememberSaveable { mutableIntStateOf(0) }
+    val heatmapPeriod = HeatmapPeriod.valueOf(heatmapPeriodName)
     val metrics = listOf(
         FootprintMetricItem(Icons.Default.EditNote, "累计记账", "${transactions.size} 笔", palette.rose),
         FootprintMetricItem(Icons.Default.Paid, "累计支出", compactCny(totalExpense), palette.coral),
@@ -1691,26 +1709,85 @@ private fun LedgerFootprintCard(ledger: LedgerState, ledgerDays: Int, monthCount
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("记账热力图", color = palette.ink, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    Text(
-                        if (showHeatmap) "收起" else "展开",
-                        color = palette.rose,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable { showHeatmap = !showHeatmap }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    if (showHeatmap) {
+                        HeatmapPeriod.entries.forEach { period ->
+                            HeatmapPeriodButton(
+                                period = period,
+                                selected = period == heatmapPeriod,
+                                onClick = {
+                                    heatmapPeriodName = period.name
+                                    selectedHeatmapDate = null
+                                }
+                            )
+                            if (period != HeatmapPeriod.YEAR) Spacer(Modifier.width(4.dp))
+                        }
+                    } else {
+                        HeatmapToggle("展开") { showHeatmap = true }
+                    }
                 }
                 if (showHeatmap) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            selectedHeatmapDate?.let {
+                                val date = LocalDate.parse(it)
+                                "${date.format(DateTimeFormatter.ofPattern("M月d日"))} · $selectedHeatmapCount 笔"
+                            } ?: "点格子查看日期和记录笔数",
+                            color = palette.muted,
+                            fontSize = 10.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        HeatmapToggle("收起") { showHeatmap = false }
+                    }
                     Spacer(Modifier.height(12.dp))
-                    ActivityHeatmap(transactions)
+                    ActivityHeatmap(
+                        transactions = transactions,
+                        period = heatmapPeriod,
+                        selectedDate = selectedHeatmapDate?.let(LocalDate::parse),
+                        onCellClick = { date, count ->
+                            selectedHeatmapDate = date.toString()
+                            selectedHeatmapCount = count
+                        }
+                    )
                     Spacer(Modifier.height(9.dp))
-                    Text("近 3 个月记录分布，仅用于回看自己的生活节奏。", color = palette.muted, fontSize = 11.sp)
+                    Text("左右滑动查看更多日期，数据随账目实时变化。", color = palette.muted, fontSize = 11.sp)
                 }
             }
         }
     }
+}
+
+@Composable
+private fun HeatmapPeriodButton(period: HeatmapPeriod, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Surface(
+        modifier = Modifier.clip(RoundedCornerShape(999.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        color = if (selected) palette.rose.copy(alpha = 0.14f) else Color(0xFFF6F4F1),
+        border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, palette.rose.copy(alpha = 0.42f)) else null
+    ) {
+        Text(
+            period.label,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+            color = if (selected) palette.rose else palette.ink,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun HeatmapToggle(label: String, onClick: () -> Unit) {
+    val palette = LocalPlushPalette.current
+    Text(
+        label,
+        color = palette.rose,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    )
 }
 
 @Composable
@@ -1814,16 +1891,18 @@ private fun LocalDate.weekStart(): LocalDate =
     minusDays((dayOfWeek.value - 1).toLong())
 
 @Composable
-private fun ActivityHeatmap(transactions: List<com.plushledger.data.TransactionEntity>) {
+private fun ActivityHeatmap(
+    transactions: List<com.plushledger.data.TransactionEntity>,
+    period: HeatmapPeriod,
+    selectedDate: LocalDate?,
+    onCellClick: (LocalDate, Int) -> Unit
+) {
     val palette = LocalPlushPalette.current
     val today = LocalDate.now()
-    val visibleStart = today.minusDays(90)
+    val visibleStart = heatmapVisibleStart(today, period)
     val gridStart = visibleStart.weekStart()
-    val columns = 14
-    val firstVisibleMonthStart = visibleStart.withDayOfMonth(1).let { first ->
-        if (first.isBefore(visibleStart)) first.plusMonths(1) else first
-    }
-    val monthLabels = generateSequence(firstVisibleMonthStart) { it.plusMonths(1) }
+    val columns = ((ChronoUnit.DAYS.between(gridStart, today) + 1L + 6L) / 7L).toInt()
+    val monthLabels = generateSequence(visibleStart.withDayOfMonth(1)) { it.plusMonths(1) }
         .takeWhile { !it.isAfter(today) }
         .map { monthStart ->
             val column = (ChronoUnit.DAYS.between(gridStart, monthStart) / 7L).toInt().coerceIn(0, columns - 1)
@@ -1836,37 +1915,57 @@ private fun ActivityHeatmap(transactions: List<com.plushledger.data.TransactionE
         .groupingBy { it }
         .eachCount()
     val maxCount = counts.values.maxOrNull()?.coerceAtLeast(1) ?: 1
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        listOf("一", "二", "三", "四", "五", "六", "日").forEachIndexed { row, label ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(label, color = palette.muted, fontSize = 10.sp, modifier = Modifier.width(12.dp))
-                repeat(columns) { column ->
+    val scrollState = rememberScrollState()
+    LaunchedEffect(period, scrollState.maxValue) {
+        if (scrollState.maxValue > 0) scrollState.scrollTo(scrollState.maxValue)
+    }
+    Row(verticalAlignment = Alignment.Top) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            listOf("一", "二", "三", "四", "五", "六", "日").forEach { label ->
+                Text(label, color = palette.muted, fontSize = 10.sp, modifier = Modifier.width(18.dp).height(13.dp))
+            }
+            Spacer(Modifier.height(14.dp))
+        }
+        Column(
+            modifier = Modifier.horizontalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            repeat(7) { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    repeat(columns) { column ->
                     val date = gridStart.plusDays((column * 7 + row).toLong())
                     val count = counts[date] ?: 0
                     val inRange = !date.isBefore(visibleStart) && !date.isAfter(today)
                     val isMonthStart = inRange && date.dayOfMonth == 1
+                    val isSelected = inRange && date == selectedDate
                     Surface(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(11.dp),
+                            .size(13.dp)
+                            .then(if (inRange) Modifier.clickable { onCellClick(date, count) } else Modifier),
                         shape = RoundedCornerShape(3.dp),
                         color = heatmapActivityColor(palette.rose, count, maxCount, inRange),
-                        border = if (isMonthStart) androidx.compose.foundation.BorderStroke(0.7.dp, Color(0xFFB8BEC6)) else null
+                        border = when {
+                            isSelected -> androidx.compose.foundation.BorderStroke(1.4.dp, palette.rose)
+                            isMonthStart -> androidx.compose.foundation.BorderStroke(0.7.dp, Color(0xFFB8BEC6))
+                            else -> null
+                        }
                     ) {}
                 }
             }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Spacer(Modifier.width(12.dp))
-            repeat(columns) { column ->
-                Text(
-                    monthLabels[column].orEmpty(),
-                    color = palette.muted,
-                    fontSize = 10.sp,
-                    modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    maxLines = 1
-                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                repeat(columns) { column ->
+                    Text(
+                        monthLabels[column].orEmpty(),
+                        color = palette.muted,
+                        fontSize = 9.sp,
+                        modifier = Modifier.width(13.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Visible
+                    )
+                }
             }
         }
     }

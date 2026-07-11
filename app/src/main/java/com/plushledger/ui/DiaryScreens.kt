@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -103,6 +105,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
     val context = LocalContext.current
     val palette = LocalPlushPalette.current
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     val store = remember(userId) { DiaryStore(context.applicationContext, userId) }
     var entries by remember(userId) { mutableStateOf(store.load()) }
     val today = LocalDate.now()
@@ -128,6 +131,7 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
     BackHandler(onBack = onBack)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(start = 18.dp, top = 10.dp, end = 18.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -145,34 +149,28 @@ fun DiaryScreen(userId: String, quotes: List<String>, locationHint: String = "",
             }
         }
         item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                color = Color(0xFFFFF5E9),
-                border = BorderStroke(1.dp, Color(0xFFFFDEC0)),
-                shadowElevation = 7.dp
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1456f / 1086f)
             ) {
-                Box(Modifier.fillMaxWidth().height(224.dp)) {
-                    Image(
-                        painter = painterResource(R.drawable.diary_hero_reference),
-                        contentDescription = "绒绒日记",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                    Surface(
-                        modifier = Modifier.align(Alignment.TopStart).padding(start = 44.dp, top = 55.dp),
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color(0xFFFDE7B8).copy(alpha = 0.98f)
-                    ) {
-                        Text(
-                            selectedDate.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-                            color = palette.ink,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
+                Image(
+                    painter = painterResource(R.drawable.diary_today_hero),
+                    contentDescription = "今日日记",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+                Box(
+                    modifier = Modifier
+                        .offset(x = maxWidth * 0.145f, y = maxHeight * 0.73f)
+                        .width(maxWidth * 0.30f)
+                        .height(maxHeight * 0.17f)
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable {
+                            editingDate = today.toString()
+                            scope.launch { listState.animateScrollToItem(2) }
+                        }
+                )
             }
         }
         item {
